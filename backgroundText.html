@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Title + Room (Upload BG)</title>
+
+  <style>
+    @font-face{
+      font-family:'Sprintura';
+      src:url('./Sprintura.otf') format('opentype');
+      font-weight:normal;
+      font-style:normal;
+    }
+
+    html, body { height: 100%; margin: 0; }
+    body{
+      background:#000;
+      overflow:hidden;
+      touch-action:none;
+      font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,Arial;
+    }
+
+    canvas{
+      position:fixed;
+      inset:0;
+      width:100vw !important;
+      height:100dvh !important;
+      display:block;
+      z-index:0;
+    }
+
+    /* Bottom UI */
+    .ui {
+      position:fixed;
+      left:0; right:0; bottom:0;
+      z-index:10;
+      padding:12px;
+      padding-bottom:calc(12px + env(safe-area-inset-bottom));
+      display:flex;
+      justify-content:center;
+      pointer-events:none;
+    }
+
+    .ui-inner{
+      pointer-events:auto;
+      width:min(1100px, calc(100vw - 24px));
+      background:rgba(8,10,16,0.72);
+      border:1px solid rgba(140,170,255,0.20);
+      border-radius:14px;
+      box-shadow:0 14px 40px rgba(0,0,0,0.55);
+      padding:10px;
+      color:#eaf0ff;
+      backdrop-filter: blur(10px);
+    }
+
+    .row{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex-wrap:wrap;
+      margin:6px 0;
+    }
+
+    .row .grow{ flex:1 1 280px; }
+
+    .titleInput{
+      width:100%;
+      font-family:'Sprintura', system-ui, sans-serif;
+      font-size:16px; /* prevents iOS zoom */
+      letter-spacing:.02em;
+      color:#eaf0ff;
+      background:rgba(18,22,34,0.75);
+      border:1px solid rgba(140,170,255,0.25);
+      border-radius:12px;
+      padding:10px 12px;
+      outline:none;
+    }
+
+    .btn{
+      border:1px solid rgba(140,170,255,0.25);
+      background:rgba(18,22,34,0.75);
+      color:#eaf0ff;
+      border-radius:12px;
+      padding:10px 12px;
+      font:600 12px/1 system-ui;
+      cursor:pointer;
+      user-select:none;
+      white-space:nowrap;
+    }
+    .btn:active{ transform: translateY(1px); }
+
+    .controls{
+      display:grid;
+      grid-template-columns: repeat(2, minmax(0,1fr));
+      gap:8px 10px;
+      margin-top:8px;
+    }
+    @media (min-width: 900px){
+      .controls{ grid-template-columns: repeat(4, minmax(0,1fr)); }
+    }
+
+    .section-title{
+      margin-top:10px;
+      font-size:12px;
+      opacity:.85;
+      letter-spacing:.08em;
+      text-transform:uppercase;
+      user-select:none;
+    }
+
+    .ctl{
+      display:grid;
+      grid-template-columns: 1fr 74px;
+      align-items:center;
+      gap:8px;
+      background:rgba(18,22,34,0.35);
+      border:1px solid rgba(140,170,255,0.12);
+      border-radius:12px;
+      padding:8px 10px;
+    }
+    .ctl label{
+      font-size:12px;
+      opacity:.92;
+      user-select:none;
+      white-space:nowrap;
+      overflow:hidden;
+      text-overflow:ellipsis;
+    }
+    .ctl input[type="range"]{
+      grid-column:1 / -1;
+      width:100%;
+    }
+    .ctl input[type="number"]{
+      width:74px;
+      background:rgba(18,22,34,0.75);
+      border:1px solid rgba(140,170,255,0.20);
+      border-radius:10px;
+      padding:6px 8px;
+      color:#eaf0ff;
+      font-size:12px;
+      outline:none;
+    }
+
+    .hint{
+      position:fixed;
+      left:12px;
+      bottom:calc(12px + env(safe-area-inset-bottom));
+      z-index:11;
+      font-size:12px;
+      color:rgba(210,225,255,0.75);
+      user-select:none;
+      pointer-events:none;
+      text-shadow:0 2px 10px rgba(0,0,0,0.6);
+    }
+
+    .file{
+      display:flex;
+      gap:10px;
+      align-items:center;
+      flex:1 1 420px;
+      min-width: 260px;
+    }
+    .file input[type="file"]{
+      width:100%;
+      font-size:12px;
+      color:rgba(234,240,255,0.9);
+    }
+  </style>
+</head>
+
+<body>
+  <div class="hint">Tip: type \\n for a new line. Press “U” to hide/show UI. Press “R” to reset background.</div>
+
+  <div class="ui" id="uiWrap">
+    <div class="ui-inner">
+      <div class="row">
+        <div class="grow">
+          <input id="titleInput" class="titleInput" type="text" spellcheck="false" autocomplete="off"
+                 value="Biome .•.•.•:::Plain." />
+        </div>
+
+        <div class="file">
+          <input id="bgUpload" type="file" accept="image/*" />
+          <button class="btn" id="resetBgBtn" title="Reset to default background">Reset</button>
+        </div>
+      </div>
+
+      <div class="section-title">Room</div>
+      <div class="controls">
+        <!-- Lighting -->
+        <div class="ctl">
+          <label>Exposure</label>
+          <input id="expNum" type="number" step="0.01" />
+          <input id="exp" type="range" min="0.2" max="3.5" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Ambient</label>
+          <input id="ambNum" type="number" step="0.01" />
+          <input id="amb" type="range" min="0" max="3.5" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Hemisphere</label>
+          <input id="hemNum" type="number" step="0.01" />
+          <input id="hem" type="range" min="0" max="3.5" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Rim</label>
+          <input id="rimNum" type="number" step="0.01" />
+          <input id="rim" type="range" min="0" max="5" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Key</label>
+          <input id="keyNum" type="number" step="0.01" />
+          <input id="key" type="range" min="0" max="5" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Image Zoom</label>
+          <input id="zoomNum" type="number" step="0.01" />
+          <input id="zoom" type="range" min="0.5" max="3.2" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Pixelation</label>
+          <input id="pixNum" type="number" step="1" />
+          <input id="pix" type="range" min="1" max="24" step="1" />
+        </div>
+
+        <div class="ctl">
+          <label>Dither</label>
+          <input id="dithNum" type="number" step="0.01" />
+          <input id="dith" type="range" min="0" max="1" step="0.01" />
+        </div>
+      </div>
+
+      <div class="section-title">Title Material</div>
+      <div class="controls">
+        <div class="ctl">
+          <label>Opacity</label>
+          <input id="tOpNum" type="number" step="0.01" />
+          <input id="tOp" type="range" min="0.05" max="1" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Metalness</label>
+          <input id="tMetNum" type="number" step="0.01" />
+          <input id="tMet" type="range" min="0" max="1" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Roughness</label>
+          <input id="tRghNum" type="number" step="0.01" />
+          <input id="tRgh" type="range" min="0" max="1" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Env Intensity</label>
+          <input id="tEnvNum" type="number" step="0.01" />
+          <input id="tEnv" type="range" min="0" max="4" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Transmission</label>
+          <input id="tTrNum" type="number" step="0.01" />
+          <input id="tTr" type="range" min="0" max="1" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Thickness</label>
+          <input id="tThkNum" type="number" step="0.01" />
+          <input id="tThk" type="range" min="0" max="5" step="0.01" />
+        </div>
+
+        <div class="ctl">
+          <label>Emissive</label>
+          <input id="tEmNum" type="number" step="0.01" />
+          <input id="tEm" type="range" min="0" max="2" step="0.01" />
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.164.1/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.164.1/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module">
+    import * as THREE from "three";
+    import { TTFLoader } from "three/addons/loaders/TTFLoader.js";
+    import { Font } from "three/addons/loaders/FontLoader.js";
+    import { TextGeometry } from "three/addons/geometries/TextGeometry.js";
+
+    /* ---------- helpers ---------- */
+    const vw = () => (window.visualViewport?.width  || window.innerWidth);
+    const vh = () => (window.visualViewport?.height || window.innerHeight);
+    const isTouch = () => ("ontouchstart" in window) || (navigator.maxTouchPoints > 0);
+    const isPhone = () => isTouch() && (Math.min(vw(), vh()) < 820);
+    const $ = (id) => document.getElementById(id);
+
+    /* ---------- config ---------- */
+    const DEFAULT_BG = "./reilly-album-cvr.jpeg"; // <- set your default image path
+    const CONFIG = {
+      room: {
+        depth: 14.5,
+        positionZ: -10.8,
+        imageZoom: 0.96,
+        borderOpacity: 0.0,
+        wallEmissive: 0.38,
+        wallDispAmp: 0.006,
+        wallDispSpeed: 2.39
+      },
+      lights: {
+        exposure: 0.95,
+        ambient: 1.6,
+        hemisphere: 2.6,
+        rim: 1.8,
+        key: 1.6
+      },
+      post: {
+        pixelSize: 5,
+        ditherStrength: 0.35
+      },
+      header: {
+        sizeMul: isPhone() ? 2.2 : 0.9,
+
+        // defaults chosen so the room affects the title strongly:
+        opacity: 0.55,
+        metalness: 0.85,
+        roughness: 0.12,
+        envIntensity: 1.4,
+        transmission: 0.18,
+        thickness: 1.2,
+        emissiveIntensity: 0.06
+      },
+      _internal: {
+        TILT_MARGIN: 1.12
+      }
+    };
+
+    /* ---------- renderer / scene / camera ---------- */
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false, powerPreference: "high-performance" });
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhone() ? 1.5 : 1.8));
+    renderer.setSize(vw(), vh(), false);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = CONFIG.lights.exposure;
+    renderer.setClearColor(0x000000, 1);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x0d1220, 18, 40);
+
+    const camera = new THREE.PerspectiveCamera(55, vw() / vh(), 0.05, 250);
+    camera.position.set(0, 0, 7.5);
+
+    /* ---------- lights ---------- */
+    const amb = new THREE.AmbientLight(0xffffff, CONFIG.lights.ambient);
+    scene.add(amb);
+
+    const hemi = new THREE.HemisphereLight(0x9fbfff, 0x202a44, CONFIG.lights.hemisphere);
+    scene.add(hemi);
+
+    const rim = new THREE.DirectionalLight(0xeef3ff, CONFIG.lights.rim);
+    rim.position.set(-1.4, 2.2, 1.6);
+    scene.add(rim);
+
+    const key = new THREE.PointLight(0xffffff, CONFIG.lights.key, 18, 2.0);
+    scene.add(key);
+
+    /* ---------- envmap capture so the title "inherits" the room image ---------- */
+    const cubeRT = new THREE.WebGLCubeRenderTarget(256, {
+      generateMipmaps: true,
+      minFilter: THREE.LinearMipmapLinearFilter,
+      magFilter: THREE.LinearFilter
+    });
+    cubeRT.texture.colorSpace = THREE.SRGBColorSpace;
+
+    const cubeCam = new THREE.CubeCamera(0.1, 200, cubeRT);
+    scene.add(cubeCam);
+
+    /* ---------- wall texture + zoom ---------- */
+    const tLoader = new THREE.TextureLoader();
+    tLoader.setCrossOrigin("anonymous");
+
+    function applyTextureZoom(texture, z) {
+      if (!texture) return;
+      const r = 1 / Math.max(z, 0.0001);
+      texture.center.set(0.5, 0.5);
+      texture.repeat.set(r, r);
+      texture.offset.set((1 - r) * 0.5, (1 - r) * 0.5);
+      texture.needsUpdate = true;
+    }
+
+    let currentWallTex = null;
+    let currentObjectUrl = null;
+
+    // IMPORTANT: wallMat must exist before any texture load callbacks fire
+    const wallMat = new THREE.MeshStandardMaterial({
+      map: null,
+      side: THREE.BackSide,
+      roughness: 0.8,
+      metalness: 0.0,
+      emissive: new THREE.Color(0x2a365c),
+      emissiveIntensity: CONFIG.room.wallEmissive,
+      envMapIntensity: 0.18
+    });
+
+    function setWallTextureFromUrl(url) {
+      return new Promise((resolve) => {
+        tLoader.load(
+          url,
+          (t) => {
+            t.colorSpace = THREE.SRGBColorSpace;
+            t.wrapS = t.wrapT = THREE.ClampToEdgeWrapping;
+            t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+            applyTextureZoom(t, CONFIG.room.imageZoom);
+
+            if (currentWallTex && currentWallTex !== t) {
+              try { currentWallTex.dispose(); } catch {}
+            }
+
+            currentWallTex = t;
+            wallMat.map = t;
+            wallMat.needsUpdate = true;
+            resolve(true);
+          },
+          undefined,
+          () => resolve(false)
+        );
+      });
+    }
+
+    /* ---------- room geometry ---------- */
+    let ROOM_W = 18, ROOM_H = 10, ROOM_D = CONFIG.room.depth;
+    const BASE_VFOV_DEG = 55;
+    let TILT_MARGIN = CONFIG._internal.TILT_MARGIN;
+
+    function buildRoomGeometry(w, h, d) {
+      const geo = new THREE.BoxGeometry(w, h, d, 1, 1, 1);
+
+      // UV atlas layout (4x3). Non-atlas images still look cool (sliced across faces).
+      const uv = geo.getAttribute("uv");
+      const A = uv.array;
+      const tileW = 1 / 4, tileH = 1 / 3;
+
+      const faces = [
+        { u0: 0.5,  v0: 1 / 3 }, // right
+        { u0: 0.0,  v0: 1 / 3 }, // left
+        { u0: 0.25, v0: 2 / 3 }, // top
+        { u0: 0.25, v0: 0.0 },   // bottom
+        { u0: 0.25, v0: 1 / 3 }, // front
+        { u0: 0.75, v0: 1 / 3 }  // back
+      ];
+
+      const put = (off, u0, v0, u1, v1) => {
+        const uvs = [u0, v0, u1, v0, u0, v1,  u1, v0, u1, v1, u0, v1];
+        for (let i = 0; i < 12; i++) A[off + i] = uvs[i];
+      };
+
+      for (let f = 0; f < 6; f++) {
+        const r = faces[f];
+        put(f * 12, r.u0, r.v0, r.u0 + tileW, r.v0 + tileH);
+      }
+
+      uv.needsUpdate = true;
+      return geo;
+    }
+
+    // Warp shader (room “cool effects”)
+    let wallShader = null;
+    wallMat.onBeforeCompile = (s) => {
+      s.fragmentShader = s.fragmentShader
+        .replace("#include <common>", `#include <common>
+          uniform float uTime; uniform float uDispAmp; uniform float uDispSpeed;`)
+        .replace("#include <map_fragment>", `#ifdef USE_MAP
+          vec2 uv2 = vMapUv;
+          float g = 120.0;
+          vec2 grid = floor(uv2 * g) / g;
+          float t = uTime * uDispSpeed;
+          vec2 warp = vec2(
+            sin(grid.y * 40.0 + t * 2.2),
+            cos(grid.x * 40.0 - t * 1.7)
+          ) * uDispAmp;
+          vec4 sampledDiffuseColor = texture2D(map, uv2 + warp);
+          diffuseColor *= sampledDiffuseColor;
+        #endif`);
+
+      s.uniforms.uTime = { value: 0 };
+      s.uniforms.uDispAmp = { value: CONFIG.room.wallDispAmp };
+      s.uniforms.uDispSpeed = { value: CONFIG.room.wallDispSpeed };
+      wallShader = s;
+    };
+
+    const roomGeo = buildRoomGeometry(ROOM_W, ROOM_H, ROOM_D);
+    const room = new THREE.Mesh(roomGeo, wallMat);
+    room.position.set(0, 0, CONFIG.room.positionZ);
+    scene.add(room);
+
+    const edges = new THREE.LineSegments(
+      new THREE.EdgesGeometry(roomGeo),
+      new THREE.LineBasicMaterial({ color: 0xF0F6FF, transparent: true, opacity: CONFIG.room.borderOpacity })
+    );
+    edges.position.copy(room.position);
+    scene.add(edges);
+
+    function computeTargetDistance(depth) {
+      return THREE.MathUtils.clamp(depth * 0.6, 6.0, 22.0);
+    }
+
+    function adjustRoomToViewport() {
+      const aspect = vw() / vh();
+      const openingZ = room.position.z + ROOM_D * 0.5;
+      const dTarget = computeTargetDistance(ROOM_D);
+
+      camera.fov = BASE_VFOV_DEG;
+      camera.aspect = aspect;
+      camera.position.set(0, 0, openingZ + dTarget);
+
+      const halfH = Math.tan(THREE.MathUtils.degToRad(BASE_VFOV_DEG) * 0.5) * dTarget;
+      const targetH = 2 * halfH * TILT_MARGIN;
+      const targetW = targetH * aspect;
+
+      ROOM_H = targetH;
+      ROOM_W = targetW;
+
+      const newGeo = buildRoomGeometry(ROOM_W, ROOM_H, ROOM_D);
+      room.geometry.dispose();
+      room.geometry = newGeo;
+
+      edges.geometry.dispose();
+      edges.geometry = new THREE.EdgesGeometry(newGeo);
+
+      camera.near = 0.05;
+      camera.far = 250;
+      camera.updateProjectionMatrix();
+
+      // keep key in a stable place relative to room
+      key.position.set(1.5, -ROOM_H * 0.1, room.position.z + ROOM_D * 0.05);
+
+      fitTitleToView();
+    }
+
+    /* ---------- post (pixelation + dither) ---------- */
+    const rt = new THREE.WebGLRenderTarget(vw(), vh(), {
+      minFilter: THREE.LinearFilter,
+      magFilter: THREE.LinearFilter,
+      depthBuffer: true
+    });
+
+    const screenScene = new THREE.Scene();
+    const screenCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+
+    const fsMat = new THREE.ShaderMaterial({
+      uniforms: {
+        tDiffuse: { value: rt.texture },
+        resolution: { value: new THREE.Vector2(vw(), vh()) },
+        pixelSize: { value: CONFIG.post.pixelSize },
+        ditherStrength: { value: CONFIG.post.ditherStrength }
+      },
+      vertexShader: `
+        varying vec2 vUv;
+        void main(){
+          vUv = uv;
+          gl_Position = vec4(position, 1.0);
+        }`,
+      fragmentShader: `
+        precision highp float;
+        uniform sampler2D tDiffuse;
+        uniform vec2 resolution;
+        uniform float pixelSize;
+        uniform float ditherStrength;
+        varying vec2 vUv;
+
+        float bayer(vec2 p){
+          int x = int(mod(p.x, 4.0));
+          int y = int(mod(p.y, 4.0));
+          int m[16];
+          m[0]=0; m[1]=8; m[2]=2; m[3]=10;
+          m[4]=12; m[5]=4; m[6]=14; m[7]=6;
+          m[8]=3; m[9]=11; m[10]=1; m[11]=9;
+          m[12]=15; m[13]=7; m[14]=13; m[15]=5;
+          int idx = y*4 + x;
+          return float(m[idx]) / 16.0;
+        }
+
+        void main(){
+          vec2 px = vec2(max(1.0, pixelSize));
+          vec2 uv = floor(vUv * resolution / px) * px / resolution;
+          vec3 col = texture2D(tDiffuse, uv).rgb;
+
+          float luma = dot(col, vec3(0.2126, 0.7152, 0.0722));
+          vec2 grid = floor(vUv * resolution / px);
+          float thresh = bayer(grid);
+          float d = smoothstep(0.0, 1.0, luma + (thresh - 0.5) * ditherStrength);
+
+          col = mix(col * 0.9, col * 1.1, d);
+          gl_FragColor = vec4(col, 1.0);
+        }`
+    });
+
+    const fsQuad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fsMat);
+    screenScene.add(fsQuad);
+
+    function resizePostTarget() {
+      rt.setSize(vw(), vh());
+      fsMat.uniforms.resolution.value.set(vw(), vh());
+    }
+
+    /* ---------- header (3D text + room-reflection material) ---------- */
+    const headerGroup = new THREE.Group();
+    scene.add(headerGroup);
+
+    let headerFont = null;
+    let headerMesh = null;
+
+    // MeshPhysicalMaterial so transmission/room env reflections work
+    const headerMat = new THREE.MeshPhysicalMaterial({
+      color: new THREE.Color(0xCFE0FF),
+      metalness: CONFIG.header.metalness,
+      roughness: CONFIG.header.roughness,
+      transmission: CONFIG.header.transmission,
+      thickness: CONFIG.header.thickness,
+      ior: 1.45,
+      clearcoat: 1.0,
+      clearcoatRoughness: 0.15,
+      envMap: cubeRT.texture,
+      envMapIntensity: CONFIG.header.envIntensity,
+      emissive: new THREE.Color(0x1a2a62),
+      emissiveIntensity: CONFIG.header.emissiveIntensity,
+      transparent: true,
+      opacity: CONFIG.header.opacity,
+      depthWrite: false
+    });
+
+    function applyHeaderMaterialFromConfig() {
+      headerMat.metalness = CONFIG.header.metalness;
+      headerMat.roughness = CONFIG.header.roughness;
+      headerMat.transmission = CONFIG.header.transmission;
+      headerMat.thickness = CONFIG.header.thickness;
+      headerMat.envMapIntensity = CONFIG.header.envIntensity;
+      headerMat.opacity = CONFIG.header.opacity;
+      headerMat.emissiveIntensity = CONFIG.header.emissiveIntensity;
+      headerMat.needsUpdate = true;
+    }
+
+    function headerBaseSize() { return Math.min(ROOM_W, ROOM_H) * 0.12; }
+    function headerBaseHeight(){ return Math.min(ROOM_W, ROOM_H) * 0.03; }
+
+    function rebuildHeaderGeometry() {
+      if (!headerFont) return;
+
+      const raw = $("titleInput").value || "";
+      const text = raw.replace(/\\n/g, "\n");
+
+      if (headerMesh) {
+        headerGroup.remove(headerMesh);
+        headerMesh.geometry.dispose();
+        headerMesh = null;
+      }
+
+      const geo = new TextGeometry(text, {
+        font: headerFont,
+        size: headerBaseSize() * CONFIG.header.sizeMul,
+        height: headerBaseHeight() * CONFIG.header.sizeMul * Math.max(0.6, CONFIG.header.thickness),
+        curveSegments: 10,
+        bevelEnabled: true,
+        bevelThickness: Math.min(ROOM_W, ROOM_H) * 0.003 * CONFIG.header.sizeMul,
+        bevelSize: Math.min(ROOM_W, ROOM_H) * 0.002 * CONFIG.header.sizeMul,
+        bevelSegments: 4
+      });
+
+      geo.computeBoundingBox();
+      geo.center();
+
+      headerMesh = new THREE.Mesh(geo, headerMat);
+      headerMesh.renderOrder = 999;
+      headerGroup.add(headerMesh);
+
+      fitTitleToView();
+    }
+
+    const FONT_URL = "./Sprintura.otf";
+    new TTFLoader().load(FONT_URL, (json) => {
+      headerFont = new Font(json);
+      rebuildHeaderGeometry();
+    });
+
+    function fitTitleToView() {
+      if (!headerMesh) return;
+
+      const dist = Math.abs(camera.position.z - headerGroup.position.z);
+      const vFov = THREE.MathUtils.degToRad(camera.fov);
+      const visH = 2 * Math.tan(vFov * 0.5) * dist;
+      const visW = visH * camera.aspect;
+
+      const uiHpx = $("uiWrap")?.offsetHeight || 0;
+      const reservedFrac = THREE.MathUtils.clamp(uiHpx / Math.max(1, vh()), 0, 0.8);
+      const reservedWorld = visH * reservedFrac;
+
+      headerGroup.updateMatrixWorld(true);
+      const box = new THREE.Box3().setFromObject(headerGroup);
+      const size = new THREE.Vector3();
+      box.getSize(size);
+
+      size.x = Math.max(size.x, 0.0001);
+      size.y = Math.max(size.y, 0.0001);
+
+      const allowH = Math.max(0.2, visH - reservedWorld * 1.05);
+      const scale = Math.min((visW * 0.90) / size.x, (allowH * 0.88) / size.y);
+
+      headerGroup.scale.setScalar(scale);
+      headerGroup.position.set(0, reservedWorld * 0.34, 0);
+      headerGroup.updateMatrixWorld(true);
+    }
+
+    /* ---------- subtle tilt ---------- */
+    let targetRX = 0, targetRY = 0;
+    let dragging = false, lastX = 0, lastY = 0;
+
+    function pointerNorm(clientX, clientY) {
+      const x = (clientX / vw()) * 2 - 1;
+      const y = (clientY / vh()) * 2 - 1;
+      return { x, y };
+    }
+
+    function onDown(e) {
+      dragging = true;
+      const p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+      lastX = p.clientX;
+      lastY = p.clientY;
+    }
+
+    function onMove(e) {
+      const p = (e.touches && e.touches[0]) ? e.touches[0] : e;
+
+      if (!dragging) {
+        const n = pointerNorm(p.clientX, p.clientY);
+        targetRY = n.x * 0.085;
+        targetRX = -n.y * 0.085 * 0.6;
+        return;
+      }
+
+      const dx = p.clientX - lastX;
+      const dy = p.clientY - lastY;
+      lastX = p.clientX;
+      lastY = p.clientY;
+
+      targetRY += dx * 0.0006;
+      targetRX += -dy * 0.0004;
+      targetRY = THREE.MathUtils.clamp(targetRY, -0.18, 0.18);
+      targetRX = THREE.MathUtils.clamp(targetRX, -0.12, 0.12);
+    }
+
+    function onUp() { dragging = false; }
+
+    window.addEventListener("mousedown", onDown, { passive: true });
+    window.addEventListener("mousemove", onMove, { passive: true });
+    window.addEventListener("mouseup", onUp, { passive: true });
+
+    window.addEventListener("touchstart", onDown, { passive: true });
+    window.addEventListener("touchmove", onMove, { passive: true });
+    window.addEventListener("touchend", onUp, { passive: true });
+
+    /* ---------- background upload + reset ---------- */
+    $("bgUpload").addEventListener("change", async (e) => {
+      const f = e.target.files && e.target.files[0];
+      if (!f) return;
+
+      if (currentObjectUrl) {
+        try { URL.revokeObjectURL(currentObjectUrl); } catch {}
+        currentObjectUrl = null;
+      }
+
+      const url = URL.createObjectURL(f);
+      currentObjectUrl = url;
+
+      await setWallTextureFromUrl(url);
+      applyTextureZoom(currentWallTex, CONFIG.room.imageZoom);
+    });
+
+    async function resetBackground() {
+      if (currentObjectUrl) {
+        try { URL.revokeObjectURL(currentObjectUrl); } catch {}
+        currentObjectUrl = null;
+      }
+      $("bgUpload").value = "";
+      await setWallTextureFromUrl(DEFAULT_BG);
+      applyTextureZoom(currentWallTex, CONFIG.room.imageZoom);
+    }
+
+    $("resetBgBtn").addEventListener("click", resetBackground);
+
+    /* ---------- UI bindings ---------- */
+    function bindRange(numId, rangeId, getVal, setValFn) {
+      const num = $(numId), range = $(rangeId);
+      const init = getVal();
+      num.value = init;
+      range.value = init;
+
+      const sync = (v) => {
+        const val = +v;
+        num.value = val;
+        range.value = val;
+        setValFn(val);
+      };
+
+      num.addEventListener("change", (e) => sync(e.target.value));
+      range.addEventListener("input", (e) => sync(e.target.value));
+    }
+
+    $("titleInput").addEventListener("input", () => rebuildHeaderGeometry());
+
+    // Room
+    bindRange("expNum", "exp", () => CONFIG.lights.exposure, (v) => {
+      CONFIG.lights.exposure = v;
+      renderer.toneMappingExposure = v;
+    });
+
+    bindRange("ambNum", "amb", () => CONFIG.lights.ambient, (v) => {
+      CONFIG.lights.ambient = v;
+      amb.intensity = v;
+    });
+
+    bindRange("hemNum", "hem", () => CONFIG.lights.hemisphere, (v) => {
+      CONFIG.lights.hemisphere = v;
+      hemi.intensity = v;
+    });
+
+    bindRange("rimNum", "rim", () => CONFIG.lights.rim, (v) => {
+      CONFIG.lights.rim = v;
+      rim.intensity = v;
+    });
+
+    bindRange("keyNum", "key", () => CONFIG.lights.key, (v) => {
+      CONFIG.lights.key = v;
+      key.intensity = v;
+    });
+
+    bindRange("zoomNum", "zoom", () => CONFIG.room.imageZoom, (v) => {
+      CONFIG.room.imageZoom = v;
+      applyTextureZoom(currentWallTex, v);
+    });
+
+    bindRange("pixNum", "pix", () => CONFIG.post.pixelSize, (v) => {
+      CONFIG.post.pixelSize = Math.max(1, v | 0);
+      fsMat.uniforms.pixelSize.value = CONFIG.post.pixelSize;
+    });
+
+    bindRange("dithNum", "dith", () => CONFIG.post.ditherStrength, (v) => {
+      CONFIG.post.ditherStrength = Math.max(0, Math.min(1, v));
+      fsMat.uniforms.ditherStrength.value = CONFIG.post.ditherStrength;
+    });
+
+    // Title material
+    bindRange("tOpNum", "tOp", () => CONFIG.header.opacity, (v) => {
+      CONFIG.header.opacity = THREE.MathUtils.clamp(v, 0.05, 1);
+      applyHeaderMaterialFromConfig();
+    });
+
+    bindRange("tMetNum", "tMet", () => CONFIG.header.metalness, (v) => {
+      CONFIG.header.metalness = THREE.MathUtils.clamp(v, 0, 1);
+      applyHeaderMaterialFromConfig();
+    });
+
+    bindRange("tRghNum", "tRgh", () => CONFIG.header.roughness, (v) => {
+      CONFIG.header.roughness = THREE.MathUtils.clamp(v, 0, 1);
+      applyHeaderMaterialFromConfig();
+    });
+
+    bindRange("tEnvNum", "tEnv", () => CONFIG.header.envIntensity, (v) => {
+      CONFIG.header.envIntensity = THREE.MathUtils.clamp(v, 0, 4);
+      applyHeaderMaterialFromConfig();
+    });
+
+    bindRange("tTrNum", "tTr", () => CONFIG.header.transmission, (v) => {
+      CONFIG.header.transmission = THREE.MathUtils.clamp(v, 0, 1);
+      applyHeaderMaterialFromConfig();
+    });
+
+    bindRange("tThkNum", "tThk", () => CONFIG.header.thickness, (v) => {
+      CONFIG.header.thickness = THREE.MathUtils.clamp(v, 0, 5);
+      applyHeaderMaterialFromConfig();
+      // thickness also changes text depth a bit for feel
+      rebuildHeaderGeometry();
+    });
+
+    bindRange("tEmNum", "tEm", () => CONFIG.header.emissiveIntensity, (v) => {
+      CONFIG.header.emissiveIntensity = THREE.MathUtils.clamp(v, 0, 2);
+      applyHeaderMaterialFromConfig();
+    });
+
+    /* ---------- hotkeys ---------- */
+    let uiVisible = true;
+    window.addEventListener("keydown", async (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "u") {
+        uiVisible = !uiVisible;
+        $("uiWrap").style.display = uiVisible ? "flex" : "none";
+        fitTitleToView();
+      }
+      if (k === "r") {
+        await resetBackground();
+      }
+    });
+
+    /* ---------- layout / resize ---------- */
+    function updateLayout() {
+      renderer.setSize(vw(), vh(), false);
+      renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, isPhone() ? 1.5 : 1.8));
+      camera.aspect = vw() / vh();
+      camera.updateProjectionMatrix();
+
+      resizePostTarget();
+      adjustRoomToViewport();
+      applyTextureZoom(currentWallTex, CONFIG.room.imageZoom);
+      fitTitleToView();
+    }
+
+    window.addEventListener("resize", updateLayout, { passive: true });
+    window.addEventListener("orientationchange", updateLayout, { passive: true });
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", updateLayout, { passive: true });
+
+    renderer.domElement.addEventListener("touchmove", (e) => e.preventDefault(), { passive: false });
+    renderer.domElement.addEventListener("wheel", (e) => e.preventDefault(), { passive: false });
+
+    /* ---------- main loop ---------- */
+    const clock = new THREE.Clock();
+    const tmpV3 = new THREE.Vector3();
+
+    function animate() {
+      requestAnimationFrame(animate);
+      const dt = Math.min(clock.getDelta(), 0.033);
+
+      if (wallShader) wallShader.uniforms.uTime.value += dt;
+
+      room.rotation.x += (targetRX - room.rotation.x) * 0.06;
+      room.rotation.y += (targetRY - room.rotation.y) * 0.06;
+      edges.rotation.copy(room.rotation);
+
+      if (headerMesh) headerGroup.lookAt(camera.position);
+
+      // Capture the room into envMap so title reflects the room texture + lighting
+      const prevRT = renderer.getRenderTarget();
+      cubeCam.position.copy(headerGroup.getWorldPosition(tmpV3));
+      const headerWasVisible = headerGroup.visible;
+      headerGroup.visible = false;
+      renderer.setRenderTarget(null);
+      cubeCam.update(renderer, scene);
+      headerGroup.visible = headerWasVisible;
+      renderer.setRenderTarget(prevRT);
+
+      const usePost = (CONFIG.post.pixelSize > 1) || (CONFIG.post.ditherStrength > 0.0001);
+      if (usePost) {
+        renderer.setRenderTarget(rt);
+        renderer.render(scene, camera);
+        renderer.setRenderTarget(null);
+        renderer.render(screenScene, screenCam);
+      } else {
+        renderer.render(scene, camera);
+      }
+    }
+
+    /* ---------- init ---------- */
+    await setWallTextureFromUrl(DEFAULT_BG);
+
+    adjustRoomToViewport();
+    updateLayout();
+    animate();
+  </script>
+</body>
+</html>
