@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Rains Like Clockwork</title>
+<style>
+body{
+    margin:0;
+    background:black;
+    overflow:hidden;
+}
+canvas{
+    display:block;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+
+<script>
+
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = window.innerWidth;
+canvas.height = window.innerHeight;
+
+
+/* ---------- USER CONTROLS ---------- */
+
+const SETTINGS = {
+
+    fontSize: 8,          // size of letters
+    baseColor: [167,140,80], // base RGB color
+    speed: 7,             // typing speed (ms per character)
+    lineSpacing: 2
+
+};
+
+/* ----------------------------------- */
+
+const words = ["rains","like","clockwork"];
+
+let x = 40;
+let y = SETTINGS.fontSize + 40;
+
+let currentText = "";
+let charIndex = 0;
+
+function generateLine(){
+
+    let length = Math.floor(Math.random()*10)+1;
+
+    let arr = [];
+
+    for(let i=0;i<length;i++){
+
+        arr.push(words[Math.floor(Math.random()*words.length)]);
+
+    }
+
+    return arr.join(" ");
+}
+
+
+function colorFromLength(len){
+
+    let variation = len * 8;
+
+    let r = SETTINGS.baseColor[0] + Math.random()*variation - variation/2;
+    let g = SETTINGS.baseColor[1] + Math.random()*variation - variation/2;
+    let b = SETTINGS.baseColor[2] + Math.random()*variation - variation/2;
+
+    return `rgb(${r},${g},${b})`;
+
+}
+
+
+function newLine(){
+
+    let line = generateLine();
+    currentText = line;
+
+    charIndex = 0;
+
+    ctx.fillStyle = colorFromLength(line.split(" ").length);
+
+}
+
+
+function draw(){
+
+    ctx.font = SETTINGS.fontSize + "px monospace";
+
+    let char = currentText[charIndex];
+
+    ctx.fillText(char, x, y);
+
+    x += ctx.measureText(char).width;
+
+    charIndex++;
+
+    if(charIndex >= currentText.length){
+
+        let pause = (Math.random()*600)+10;
+
+        setTimeout(()=>{
+
+            x = 40;
+            y += SETTINGS.fontSize + SETTINGS.lineSpacing;
+
+            if(y > canvas.height - SETTINGS.fontSize){
+
+                ctx.clearRect(0,0,canvas.width,canvas.height);
+                y = SETTINGS.fontSize + 40;
+
+            }
+
+            newLine();
+            loop();
+
+        }, pause);
+
+        return;
+
+    }
+
+    setTimeout(loop, SETTINGS.speed);
+
+}
+
+
+function loop(){
+    draw();
+}
+
+
+newLine();
+loop();
+
+
+</script>
+
+</body>
+</html>

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0a0806">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>Wasapok Castle</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=MedievalSharp&family=VT323&display=swap');
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
+  html, body {
+    width: 100%; height: 100%; overflow: hidden;
+    background: #0a0806;
+    color: #d8c896;
+    font-family: 'VT323', monospace;
+    overscroll-behavior: none;
+    touch-action: none;
+  }
+  #game { position: fixed; inset: 0; }
+  canvas { display: block; image-rendering: pixelated; image-rendering: crisp-edges; }
+
+  #vignette {
+    position: fixed; inset: 0; pointer-events: none; z-index: 5;
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.55) 100%);
+  }
+
+  /* ========== TITLE BAR ========== */
+  #title {
+    position: fixed; top: env(safe-area-inset-top, 0); left: 0; right: 0; z-index: 10;
+    text-align: center; padding: 12px 16px 8px;
+    font-family: 'Cinzel', serif; font-weight: 700;
+    font-size: 14px; letter-spacing: 0.35em; text-transform: uppercase;
+    color: #d4a64c;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+    pointer-events: none;
+  }
+  #title small {
+    display: block; margin-top: 2px;
+    font-family: 'MedievalSharp', cursive;
+    font-size: 11px; letter-spacing: 0.15em; color: #b8945a; text-transform: none;
+  }
+
+  /* ========== MINIMAP ========== */
+  #minimap-wrap {
+    position: fixed; top: calc(env(safe-area-inset-top, 0) + 8px); right: 12px; z-index: 10;
+    padding: 6px;
+    background: rgba(10,8,6,0.85);
+    border: 2px solid #4a3a28;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.6), inset 0 0 8px rgba(0,0,0,0.4);
+    image-rendering: pixelated;
+  }
+  #minimap { image-rendering: pixelated; display: block; }
+
+  /* ========== ROOM DISCOVERY ========== */
+  #discover {
+    position: fixed; left: 50%; top: 32%;
+    transform: translate(-50%, -50%);
+    z-index: 30; pointer-events: none;
+    text-align: center; opacity: 0;
+  }
+  #discover.show { animation: discover-fade 3600ms ease-out forwards; }
+  @keyframes discover-fade {
+    0%   { opacity: 0; letter-spacing: 0.55em; transform: translate(-50%, -55%); }
+    18%  { opacity: 1; letter-spacing: 0.40em; transform: translate(-50%, -50%); }
+    78%  { opacity: 1; letter-spacing: 0.40em; }
+    100% { opacity: 0; letter-spacing: 0.48em; transform: translate(-50%, -48%); }
+  }
+  #discover .rule {
+    height: 2px; width: 220px; margin: 0 auto;
+    background: linear-gradient(90deg, transparent, #d4a64c, transparent);
+    image-rendering: pixelated;
+  }
+  #discover .pre {
+    font-family: 'Cinzel', serif; font-weight: 500;
+    font-size: 11px; letter-spacing: 0.5em; color: #d4a64c; opacity: 0.85;
+    margin: 10px 0 6px; text-transform: uppercase;
+  }
+  #discover .name {
+    font-family: 'MedievalSharp', cursive; font-weight: 700;
+    font-size: 38px; letter-spacing: 0.10em;
+    color: #f0e0b0;
+    text-shadow: 0 0 12px rgba(0,0,0,1), 0 2px 0 #2a1808, 0 0 30px rgba(212,166,76,0.35);
+    margin: 6px 0;
+  }
+  #discover .sub {
+    font-family: 'Cinzel', serif; font-size: 12px; font-weight: 500;
+    letter-spacing: 0.28em; color: #d4a64c; opacity: 0.9;
+    text-transform: uppercase; margin-top: 8px;
+  }
+
+  /* ========== PIXELATED D-PAD ========== */
+  #controls {
+    position: fixed; left: 0; right: 0; bottom: env(safe-area-inset-bottom, 0); z-index: 15;
+    padding: 14px 18px 18px;
+    display: flex; justify-content: space-between; align-items: flex-end;
+    pointer-events: none;
+  }
+  #dpad {
+    position: relative;
+    width: 168px; height: 168px;
+    pointer-events: auto;
+  }
+  .dpad-btn {
+    position: absolute;
+    width: 56px; height: 56px;
+    background: rgba(20,16,12,0.85);
+    border: 3px solid #d4a64c;
+    image-rendering: pixelated;
+    color: #f0c878;
+    font-family: 'Cinzel', serif; font-size: 28px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer;
+    box-shadow:
+      inset -2px -2px 0 rgba(0,0,0,0.45),
+      inset  2px  2px 0 rgba(255,210,140,0.18),
+      0 4px 0 #2a1808;
+    transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+  }
+  .dpad-btn:active, .dpad-btn.active {
+    transform: translateY(3px);
+    box-shadow:
+      inset -2px -2px 0 rgba(0,0,0,0.45),
+      inset  2px  2px 0 rgba(255,210,140,0.10),
+      0 1px 0 #2a1808;
+    background: rgba(40,28,16,0.9);
+  }
+  #dpad-up    { top: 0;     left: 56px; }
+  #dpad-down  { bottom: 0;  left: 56px; }
+  #dpad-left  { top: 56px;  left: 0; }
+  #dpad-right { top: 56px;  right: 0; }
+  /* center decoration */
+  #dpad::before {
+    content: ''; position: absolute;
+    top: 56px; left: 56px; width: 56px; height: 56px;
+    background: rgba(20,16,12,0.65);
+    border: 3px solid #4a3a28;
+    box-shadow: inset 0 0 8px rgba(0,0,0,0.6);
+  }
+  #dpad::after {
+    content: '◆';
+    position: absolute;
+    top: 56px; left: 56px; width: 56px; height: 56px;
+    display: flex; align-items: center; justify-content: center;
+    color: #4a3a28; font-size: 22px;
+    pointer-events: none;
+  }
+
+  #right-controls {
+    pointer-events: auto;
+    display: flex; flex-direction: column; gap: 12px; align-items: center;
+  }
+  .action-btn {
+    width: 72px; height: 72px; border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(80,40,16,0.95), rgba(20,12,8,0.95));
+    border: 3px solid #d4a64c;
+    color: #f0c878;
+    font-family: 'Cinzel', serif; font-weight: 700; font-size: 12px; letter-spacing: 0.15em;
+    display: flex; align-items: center; justify-content: center;
+    text-transform: uppercase;
+    box-shadow:
+      inset -2px -2px 0 rgba(0,0,0,0.45),
+      inset  2px  2px 0 rgba(255,210,140,0.15),
+      0 4px 0 #2a1808;
+    cursor: pointer;
+    transition: transform 60ms ease-out, box-shadow 60ms ease-out;
+  }
+  .action-btn:active, .action-btn.active {
+    transform: translateY(3px);
+    box-shadow:
+      inset -2px -2px 0 rgba(0,0,0,0.45),
+      inset  2px  2px 0 rgba(255,210,140,0.10),
+      0 1px 0 #2a1808;
+  }
+  .action-btn.active { background: radial-gradient(circle at 30% 30%, rgba(150,80,30,1), rgba(60,30,15,1)); color: #fff5b0; }
+
+  /* ========== WASAPOK PORTAL LAYER ========== */
+  #portal-layer {
+    position: fixed; inset: 0; z-index: 25;
+    background: #000;
+    opacity: 0; pointer-events: none;
+    transition: opacity 260ms ease-out;
+  }
+  #portal-layer.fullscreen { z-index: 60; opacity: 1; }
+  #portal-layer iframe {
+    width: 100%; height: 100%; border: 0; display: block;
+  }
+  #portal-exit {
+    position: fixed; top: env(safe-area-inset-top, 0); right: 12px; z-index: 65;
+    padding: 10px 14px;
+    background: rgba(20,16,12,0.92);
+    color: #f0c878;
+    font-family: 'Cinzel', serif; font-weight: 700; font-size: 13px; letter-spacing: 0.2em;
+    border: 2px solid #d4a64c;
+    cursor: pointer;
+    text-transform: uppercase;
+    display: none;
+    box-shadow: 0 4px 0 #2a1808;
+  }
+  #portal-layer.fullscreen ~ #portal-exit { display: block; }
+
+  /* ========== LOADING ========== */
+  #loading {
+    position: fixed; inset: 0; z-index: 50; background: #0a0806;
+    display: flex; align-items: center; justify-content: center; flex-direction: column;
+    gap: 20px;
+  }
+  #loading .crest {
+    width: 84px; height: 84px;
+    border: 4px solid #d4a64c;
+    border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #d4a64c;
+    font-family: 'MedievalSharp', cursive; font-weight: 700; font-size: 44px;
+    animation: pulse 1.6s ease-in-out infinite;
+    box-shadow: inset 0 0 12px rgba(0,0,0,0.6);
+  }
+  @keyframes pulse {
+    0%,100% { box-shadow: inset 0 0 12px rgba(0,0,0,0.6), 0 0 0 0 rgba(212,166,76,0.4); }
+    50%     { box-shadow: inset 0 0 12px rgba(0,0,0,0.6), 0 0 0 16px rgba(212,166,76,0); }
+  }
+  #loading .label {
+    font-family: 'Cinzel', serif; letter-spacing: 0.3em;
+    font-size: 12px; color: #d4a64c; text-transform: uppercase;
+  }
+
+  /* Desktop: a hint line */
+  @media (min-width: 800px) {
+    #title { font-size: 18px; }
+    #help-desk {
+      position: fixed; bottom: 18px; left: 18px; z-index: 11;
+      padding: 8px 12px; font-family: 'Cinzel', serif; font-size: 11px;
+      letter-spacing: 0.15em; color: #b8945a;
+      background: rgba(10,8,6,0.7); border: 1px solid #4a3a28;
+    }
+    /* Move dpad to corner so desktop users can still use it */
+    #controls { pointer-events: none; }
+  }
+  @media (max-width: 799px) {
+    #help-desk { display: none; }
+  }
+</style>
+</head>
+<template id="__bundler_thumbnail" data-bg-color="#0a0806">
+  <svg viewBox="0 0 1200 800" xmlns="http://www.w3.org/2000/svg">
+    <rect width="1200" height="800" fill="#0a0806"/>
+    <!-- castle silhouette -->
+    <path d="M200 700 L200 380 L260 380 L260 320 L320 320 L320 380 L420 380 L420 280 L520 280 L520 380 L620 380 L620 320 L680 320 L680 380 L740 380 L740 280 L840 280 L840 380 L1000 380 L1000 700 Z" fill="#2a2520"/>
+    <!-- crenellations -->
+    <g fill="#3a3530">
+      <rect x="220" y="370" width="20" height="20"/>
+      <rect x="260" y="370" width="20" height="20"/>
+      <rect x="940" y="370" width="20" height="20"/>
+      <rect x="980" y="370" width="20" height="20"/>
+    </g>
+    <!-- big door arch -->
+    <path d="M540 700 L540 540 Q540 460 600 460 Q660 460 660 540 L660 700 Z" fill="#1a0e08"/>
+    <!-- portal glow inside arch -->
+    <circle cx="600" cy="570" r="50" fill="#6090ff" opacity="0.7"/>
+    <circle cx="600" cy="570" r="22" fill="#cce0ff" opacity="0.85"/>
+    <!-- torches -->
+    <g fill="#ff9a40">
+      <ellipse cx="510" cy="600" rx="10" ry="22"/>
+      <ellipse cx="690" cy="600" rx="10" ry="22"/>
+    </g>
+    <!-- title -->
+    <text x="600" y="180" text-anchor="middle" fill="#d4a64c" font-family="Cinzel, serif" font-weight="700" font-size="64" letter-spacing="20">WASAPOK</text>
+    <text x="600" y="240" text-anchor="middle" fill="#b8945a" font-family="Cinzel, serif" font-size="28" letter-spacing="14">CASTLE</text>
+  </svg>
+</template>
+<body>
+  <div id="game"></div>
+  <div id="vignette"></div>
+
+  <div id="title">
+    Wasapok Castle
+    <small>A medieval crawl</small>
+  </div>
+
+  <div id="minimap-wrap"><canvas id="minimap" width="140" height="120"></canvas></div>
+
+  <div id="discover">
+    <div class="rule"></div>
+    <div class="pre">Area Discovered</div>
+    <div class="name" id="discover-name">—</div>
+    <div class="sub" id="discover-sub"></div>
+    <div class="rule"></div>
+  </div>
+
+  <div id="help-desk">
+    W/S walk · A/D turn · Q/E strafe · SHIFT sprint
+  </div>
+
+  <div id="controls">
+    <div id="dpad">
+      <button class="dpad-btn" id="dpad-up">▲</button>
+      <button class="dpad-btn" id="dpad-left">◀</button>
+      <button class="dpad-btn" id="dpad-right">▶</button>
+      <button class="dpad-btn" id="dpad-down">▼</button>
+    </div>
+    <div id="right-controls">
+      <button class="action-btn" id="dpad-sprint">RUN</button>
+    </div>
+  </div>
+
+  <!-- Wasapok portal overlay -->
+  <div id="portal-layer">
+    <iframe id="wasapok-frame"
+      title="Wasapok"
+      allow="autoplay; fullscreen; gyroscope; xr-spatial-tracking; accelerometer; camera; microphone"
+      referrerpolicy="no-referrer-when-downgrade"
+      loading="lazy"
+      sandbox="allow-scripts allow-same-origin allow-forms allow-popups allow-pointer-lock"
+    ></iframe>
+  </div>
+  <button id="portal-exit">✕ Exit Portal</button>
+
+  <div id="loading">
+    <div class="crest">W</div>
+    <div class="label">Entering the castle…</div>
+  </div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js"
+  }
+}
+</script>
+
+<script type="module" src="museum/main.js?v=10"></script>
+</body>
+</html>

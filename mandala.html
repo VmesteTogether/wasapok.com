@@ -1,0 +1,412 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Mandala Playground</title>
+  <style>
+    :root{
+      --bg:#05000e;
+      --ui:rgba(255,255,255,.78);
+      --ui2:rgba(255,255,255,.12);
+      --accent:#00fefa;
+    }
+    html,body{height:100%;margin:0;background:var(--bg);overflow:hidden;}
+    canvas{display:block;width:100vw;height:100vh;touch-action:none;}
+    .hud{
+      position:fixed; left:12px; top:12px; z-index:10;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      color:var(--ui);
+      background:linear-gradient(180deg, rgba(0,0,0,.38), rgba(0,0,0,.14));
+      border:1px solid var(--ui2);
+      border-radius:14px;
+      padding:10px 12px;
+      backdrop-filter: blur(8px);
+      max-width:min(520px, calc(100vw - 24px));
+      user-select:none;
+    }
+    .hud b{color:#fff;}
+    .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;}
+    .pill{
+      border:1px solid var(--ui2);
+      border-radius:999px;
+      padding:6px 10px;
+      display:inline-flex; gap:8px; align-items:center;
+      background:rgba(255,255,255,.04);
+    }
+    .kbd{
+      font-weight:700;
+      color:#fff;
+      background:rgba(255,255,255,.09);
+      border:1px solid var(--ui2);
+      border-bottom-color:rgba(255,255,255,.22);
+      padding:1px 7px;
+      border-radius:8px;
+    }
+    input[type="range"]{
+      width:160px;
+      accent-color: var(--accent);
+    }
+    .small{opacity:.85; font-size:12px; line-height:1.25;}
+    .title{font-weight:800; letter-spacing:.2px; margin-bottom:6px;}
+  </style>
+</head>
+<body>
+  <canvas id="c"></canvas>
+
+  <div class="hud">
+    <div class="title">🌀 Mandala Playground</div>
+    <div class="row" style="margin-bottom:8px">
+      <span class="pill"><span class="kbd">Drag</span> rotate</span>
+      <span class="pill"><span class="kbd">Wheel</span> zoom</span>
+      <span class="pill"><span class="kbd">R</span> remix</span>
+      <span class="pill"><span class="kbd">Space</span> pause</span>
+      <span class="pill"><span class="kbd">S</span> save</span>
+    </div>
+    <div class="row">
+      <span class="pill">Symmetry
+        <input id="sym" type="range" min="6" max="32" value="16" />
+        <b id="symv">16</b>
+      </span>
+      <span class="pill">Chaos
+        <input id="chaos" type="range" min="0" max="100" value="38" />
+        <b id="chv">38</b>
+      </span>
+      <span class="pill">Glow
+        <input id="glow" type="range" min="0" max="100" value="75" />
+        <b id="glv">75</b>
+      </span>
+    </div>
+    <div class="small" style="margin-top:8px">
+      Tip: Hold <b>Shift</b> while dragging for “micro-rotation”.
+    </div>
+  </div>
+
+<script>
+(() => {
+  const canvas = document.getElementById("c");
+  const ctx = canvas.getContext("2d", { alpha: false });
+
+  const ui = {
+    sym: document.getElementById("sym"),
+    symv: document.getElementById("symv"),
+    chaos: document.getElementById("chaos"),
+    chv: document.getElementById("chv"),
+    glow: document.getElementById("glow"),
+    glv: document.getElementById("glv")
+  };
+
+  const DPR = () => Math.min(2.5, window.devicePixelRatio || 1);
+  let W = 0, H = 0, dpr = DPR();
+  function resize(){
+    dpr = DPR();
+    W = Math.floor(innerWidth * dpr);
+    H = Math.floor(innerHeight * dpr);
+    canvas.width = W;
+    canvas.height = H;
+  }
+  addEventListener("resize", resize, { passive:true });
+  resize();
+
+  // Random-ish palette generator (pleasant but punchy)
+  function hsl(h,s,l){ return `hsl(${h} ${s}% ${l}%)`; }
+  function rand(a,b){ return a + Math.random()*(b-a); }
+  function randi(a,b){ return Math.floor(rand(a,b+1)); }
+  function pick(arr){ return arr[(Math.random()*arr.length)|0]; }
+
+  let palette = null;
+  let seed = Math.random()*1e9;
+
+  function remix(){
+    seed = Math.random()*1e9;
+    const base = randi(0, 359);
+    const scheme = pick(["triad","split","tetrad","mono"]);
+    const hues = [];
+    if(scheme==="triad"){
+      hues.push(base, (base+120)%360, (base+240)%360);
+    } else if(scheme==="split"){
+      hues.push(base, (base+150)%360, (base+210)%360);
+    } else if(scheme==="tetrad"){
+      hues.push(base, (base+90)%360, (base+180)%360, (base+270)%360);
+    } else {
+      hues.push(base, (base+18)%360, (base+36)%360);
+    }
+    palette = hues.map((h,i)=>({
+      fill: hsl(h, randi(70,95), randi(52,66)),
+      stroke: hsl((h+8)%360, randi(80,100), randi(62,78)),
+      spark: hsl((h+180)%360, randi(70,100), randi(55,75))
+    }));
+    // change background tint subtly
+    const bgHue = (base + randi(150,230)) % 360;
+    document.documentElement.style.setProperty("--bg", `hsl(${bgHue} 65% 6%)`);
+    document.documentElement.style.setProperty("--accent", hsl(hues[0], 95, 58));
+  }
+  remix();
+
+  // Controls
+  function syncUI(){
+    ui.symv.textContent = ui.sym.value;
+    ui.chv.textContent = ui.chaos.value;
+    ui.glv.textContent = ui.glow.value;
+  }
+  ["input","change"].forEach(ev=>{
+    ui.sym.addEventListener(ev, syncUI);
+    ui.chaos.addEventListener(ev, syncUI);
+    ui.glow.addEventListener(ev, syncUI);
+  });
+  syncUI();
+
+  // Interaction state
+  let rot = 0;
+  let zoom = 1.0;
+  let paused = false;
+
+  let dragging = false;
+  let lastX = 0;
+
+  canvas.addEventListener("pointerdown", (e)=>{
+    dragging = true;
+    canvas.setPointerCapture(e.pointerId);
+    lastX = e.clientX;
+  });
+  canvas.addEventListener("pointermove", (e)=>{
+    if(!dragging) return;
+    const dx = e.clientX - lastX;
+    lastX = e.clientX;
+    const fine = e.shiftKey ? 0.003 : 0.01;
+    rot += dx * fine;
+  });
+  canvas.addEventListener("pointerup", ()=> dragging=false);
+  canvas.addEventListener("pointercancel", ()=> dragging=false);
+
+  canvas.addEventListener("wheel", (e)=>{
+    e.preventDefault();
+    const k = Math.exp(-e.deltaY * 0.001);
+    zoom = Math.max(0.45, Math.min(2.8, zoom * k));
+  }, { passive:false });
+
+  addEventListener("keydown", (e)=>{
+    if(e.key === " "){
+      e.preventDefault();
+      paused = !paused;
+    } else if(e.key.toLowerCase() === "r"){
+      remix();
+    } else if(e.key.toLowerCase() === "s"){
+      // Save PNG
+      const a = document.createElement("a");
+      a.download = `mandala_${Date.now()}.png`;
+      a.href = canvas.toDataURL("image/png");
+      a.click();
+    }
+  });
+
+  // Deterministic noise-ish function from seed
+  function hash(n){
+    // small float hash
+    const x = Math.sin(n) * 43758.5453123;
+    return x - Math.floor(x);
+  }
+  function noise1(t){
+    const i = Math.floor(t);
+    const f = t - i;
+    const a = hash(i + seed);
+    const b = hash(i + 1 + seed);
+    const u = f*f*(3-2*f);
+    return a*(1-u) + b*u;
+  }
+
+  // Mandala draw helpers
+  function setGlow(glowPct){
+    const g = glowPct/100;
+    ctx.shadowBlur = Math.floor(40 * g) * dpr;
+    ctx.shadowColor = "rgba(255,255,255,0.55)";
+  }
+
+  function drawPetal(r0, r1, w, twist){
+    // A curvy petal shape using quadratic Beziers
+    ctx.beginPath();
+    const a = -w*0.5;
+    const b =  w*0.5;
+    ctx.moveTo(r0*Math.cos(a), r0*Math.sin(a));
+    ctx.quadraticCurveTo(
+      (r0+r1)*0.5*Math.cos(0), (r0+r1)*0.5*Math.sin(0),
+      r1*Math.cos(b + twist), r1*Math.sin(b + twist)
+    );
+    ctx.quadraticCurveTo(
+      (r0+r1)*0.48*Math.cos(0), (r0+r1)*0.48*Math.sin(0),
+      r0*Math.cos(a), r0*Math.sin(a)
+    );
+    ctx.closePath();
+  }
+
+  function drawSparkles(t, radius, count){
+    for(let i=0;i<count;i++){
+      const p = palette[i % palette.length];
+      const a = (i/count)*Math.PI*2 + rot*0.4 + (noise1(t*0.6+i*3.1)-0.5)*0.6;
+      const rr = radius * (0.72 + 0.28*noise1(t*0.9+i*9.7));
+      const x = rr*Math.cos(a);
+      const y = rr*Math.sin(a);
+      const s = (0.8 + 2.2*noise1(t*1.2+i*1.7)) * dpr;
+
+      ctx.globalAlpha = 0.25 + 0.55*noise1(t*1.4+i*6.3);
+      ctx.fillStyle = p.spark;
+      ctx.beginPath();
+      ctx.arc(x,y,s,0,Math.PI*2);
+      ctx.fill();
+
+      // tiny cross
+      ctx.globalAlpha *= 0.55;
+      ctx.strokeStyle = p.spark;
+      ctx.lineWidth = 1.2*dpr;
+      ctx.beginPath();
+      ctx.moveTo(x-3.5*dpr, y);
+      ctx.lineTo(x+3.5*dpr, y);
+      ctx.moveTo(x, y-3.5*dpr);
+      ctx.lineTo(x, y+3.5*dpr);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  function drawMandala(t){
+    const symmetry = +ui.sym.value;
+    const chaos = +ui.chaos.value / 100;
+    const glowPct = +ui.glow.value;
+
+    // background
+    ctx.save();
+    ctx.clearRect(0,0,W,H);
+    ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue("--bg").trim() || "#05000e";
+    ctx.fillRect(0,0,W,H);
+
+    // subtle vignette
+    const gx = W*0.5, gy = H*0.5;
+    const vign = ctx.createRadialGradient(gx,gy,Math.min(W,H)*0.05, gx,gy,Math.min(W,H)*0.58);
+    vign.addColorStop(0, "rgba(0,0,0,0)");
+    vign.addColorStop(1, "rgba(0,0,0,0.55)");
+    ctx.fillStyle = vign;
+    ctx.fillRect(0,0,W,H);
+
+    // center transform
+    ctx.translate(W/2, H/2);
+    const baseR = Math.min(W,H) * 0.38 * zoom;
+    ctx.rotate(rot);
+
+    // glow setup
+    setGlow(glowPct);
+
+    // Kaleidoscope wedges
+    const wedge = (Math.PI*2)/symmetry;
+    const layers = 9;
+    const rings = 5;
+
+    for(let k=0;k<symmetry;k++){
+      ctx.save();
+
+      // mirror every other wedge for kaleidoscope
+      const mirror = (k % 2) === 1;
+      ctx.rotate(k*wedge);
+      if(mirror) ctx.scale(1,-1);
+
+      // Clip to wedge
+      ctx.beginPath();
+      ctx.moveTo(0,0);
+      ctx.arc(0,0, baseR*1.25, -wedge/2, wedge/2);
+      ctx.closePath();
+      ctx.clip();
+
+      // Draw layers inside wedge
+      for(let l=0;l<layers;l++){
+        const p = palette[l % palette.length];
+        const tt = t*0.8 + l*0.9 + k*0.17;
+
+        const ring = l % rings;
+        const r0 = baseR*(0.18 + ring*0.14) * (0.98 + 0.06*Math.sin(tt*0.7));
+        const r1 = r0 + baseR*(0.10 + 0.05*noise1(tt*0.8));
+        const w = wedge*(0.62 + 0.30*Math.sin(tt*0.6 + 1.2));
+        const tw = (noise1(tt*0.9)-0.5) * chaos * 1.2;
+
+        // Fill petal
+        ctx.save();
+        ctx.rotate((noise1(tt*0.5)-0.5)*chaos*0.6);
+        drawPetal(r0, r1, w, tw);
+
+        const grad = ctx.createLinearGradient(0, -r0, 0, r1);
+        grad.addColorStop(0, p.fill);
+        grad.addColorStop(1, "rgba(255,255,255,0.12)");
+        ctx.fillStyle = grad;
+        ctx.globalAlpha = 0.60 + 0.30*Math.sin(tt*0.9);
+        ctx.fill();
+
+        // Outline
+        ctx.globalAlpha = 0.35 + 0.30*noise1(tt*1.1);
+        ctx.strokeStyle = p.stroke;
+        ctx.lineWidth = (1.1 + 1.8*noise1(tt*1.7)) * dpr;
+        ctx.stroke();
+        ctx.restore();
+      }
+
+      // Glitter band
+      ctx.save();
+      ctx.rotate((noise1(t*0.4+k)-0.5)*chaos*0.7);
+      drawSparkles(t + k*0.02, baseR*0.95, 6);
+      ctx.restore();
+
+      ctx.restore();
+    }
+
+    // Central rosette + core
+    ctx.save();
+    ctx.rotate(-rot*0.35);
+    const coreR = baseR*0.14;
+    for(let i=0;i<symmetry;i++){
+      const a = i*wedge;
+      const p = palette[i % palette.length];
+      ctx.save();
+      ctx.rotate(a);
+      ctx.globalAlpha = 0.65;
+      ctx.fillStyle = p.fill;
+      ctx.beginPath();
+      ctx.ellipse(coreR*0.95, 0, coreR*0.70, coreR*0.28, 0, 0, Math.PI*2);
+      ctx.fill();
+      ctx.restore();
+    }
+
+    // center disk
+    const cg = ctx.createRadialGradient(0,0, coreR*0.1, 0,0, coreR*1.1);
+    cg.addColorStop(0, "rgba(255,255,255,0.95)");
+    cg.addColorStop(0.35, palette[0].fill);
+    cg.addColorStop(1, "rgba(0,0,0,0.2)");
+    ctx.globalAlpha = 0.95;
+    ctx.fillStyle = cg;
+    ctx.beginPath();
+    ctx.arc(0,0, coreR*1.05, 0, Math.PI*2);
+    ctx.fill();
+
+    // tiny highlight
+    ctx.shadowBlur = 0;
+    ctx.globalAlpha = 0.35;
+    ctx.fillStyle = "#fff";
+    ctx.beginPath();
+    ctx.arc(-coreR*0.22, -coreR*0.22, coreR*0.18, 0, Math.PI*2);
+    ctx.fill();
+    ctx.restore();
+
+    ctx.restore();
+  }
+
+  let t0 = performance.now();
+  function frame(now){
+    if(!paused){
+      const t = (now - t0) / 1000;
+      // gentle auto spin
+      rot += 0.0035 + 0.006 * (noise1(t*0.4)-0.5);
+      drawMandala(t);
+    }
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>
