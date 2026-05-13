@@ -520,8 +520,8 @@ export function buildScene(layout, opts) {
     inner.position.set(wx, anemY - 0.10, wz);
     group.add(inner);
 
-    // Soft downward area wash
-    const area = new THREE.RectAreaLight(HL_ORANGE, 14.0, 3.0, 3.0);
+    // Soft downward area wash — 6000 K cool daylight
+    const area = new THREE.RectAreaLight(0xcce8ff, 14.0, 3.0, 3.0);
     area.position.set(wx, anemY - 0.50, wz);
     area.lookAt(wx, 0, wz);
     group.add(area);
@@ -614,25 +614,12 @@ export function buildScene(layout, opts) {
     return { leftLeaf, rightLeaf, doorCX, doorCZ, doorYaw, leftAngle: 0, rightAngle: 0, swingDir: 1 };
   }
 
-  // ===== DOOR SIGNS =====
+  // ===== DOORS =====
   for (const s of layout.signs || []) {
     const wx = s.x * CELL, wz = s.y * CELL;
     const ox = [0,1,0,-1][s.wall] * (CELL/2 - 0.02);
     const oz = [-1,0,1,0][s.wall] * (CELL/2 - 0.02);
-    const yaw = [0, -Math.PI/2, Math.PI, Math.PI/2][s.wall];
-    const tex = makeSignTexture(s.label);
-    // Portal sign gets a stronger emissive + magical blue rim glow
     const isPortalSign = s.toRoom === 'portal';
-    const mat = new THREE.MeshStandardMaterial({
-      map: tex, roughness: 0.7, metalness: 0.2, side: THREE.DoubleSide,
-      emissive: isPortalSign ? 0x3060c0 : 0x1a0e08,
-      emissiveIntensity: isPortalSign ? 0.6 : 0.2,
-    });
-    const w2 = 1.6, h2 = 0.5;
-    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(w2, h2), mat);
-    mesh.position.set(wx + ox, 2.6, wz + oz);
-    mesh.rotation.y = yaw;
-    group.add(mesh);
 
     // Saloon doors at every passage opening
     {
@@ -929,8 +916,8 @@ export function buildScene(layout, opts) {
   // ===== DECORATIVE WALL PIPES =====
   {
     const pipeMat = new THREE.MeshStandardMaterial({
-      color: 0xdde6ee, emissive: 0x334455, emissiveIntensity: 0.14,
-      roughness: 0.50, metalness: 0.28,
+      color: 0xb8d8f8, emissive: 0x5a8ec0, emissiveIntensity: 0.22,
+      roughness: 0.45, metalness: 0.55,
     });
 
     function pipeSeg(p1, p2, r) {
@@ -1198,6 +1185,88 @@ export function buildScene(layout, opts) {
         pipe([[E - 0.35,  0.55, nz], [E - 0.35, 2.80, nz]], R1);
         pipe([[cx + 1.35, 2.80, nz], [E - 0.35, 2.80, nz]], R1);
       }
+    }
+
+    // ── Corridor pipes + extra hub density ──────────────────────────────────
+    const hubR    = layout.rooms.find(r => r.kind === 'hub');
+    const throneR = layout.rooms.find(r => r.kind === 'throne');
+    const libR    = layout.rooms.find(r => r.kind === 'library');
+    const portalR = layout.rooms.find(r => r.kind === 'portal');
+    const armoryR = layout.rooms.find(r => r.kind === 'armory');
+
+    if (hubR) {
+      const hcx = hubR.cx * CELL, hcz = hubR.cy * CELL;
+      const hN  = hubR.y0 * CELL - CELL / 2;
+      const hS  = (hubR.y0 + hubR.h - 1) * CELL + CELL / 2;
+      const hW  = hubR.x0 * CELL - CELL / 2;
+      const hE  = (hubR.x0 + hubR.w - 1) * CELL + CELL / 2;
+      const HCH = hubR.ceilH;
+      const DH  = 1.35;
+
+      // North corridor (hub ↔ throne) — west & east passage walls
+      if (throneR) {
+        const tS  = (throneR.y0 + throneR.h - 1) * CELL + CELL / 2;
+        const wpx = hcx - CELL / 2 + G, epx = hcx + CELL / 2 - G;
+        pipe([[wpx, 0.44, tS], [wpx, 0.44, hN]], R1);
+        pipe([[wpx, 0.66, tS], [wpx, 0.66, hN]], R2);
+        pipe([[wpx, 1.05, tS + 0.2], [wpx, 1.05, hN - 0.2]], R3);
+        pipe([[epx, 0.44, tS], [epx, 0.44, hN]], R2);
+        pipe([[epx, 0.72, tS], [epx, 0.72, hN]], R1);
+        pipe([[epx, 0.44, tS + 0.4], [epx, throneR.ceilH, tS + 0.4]], R2);
+        pipe([[wpx, 0.44, hN - 0.5], [wpx, HCH, hN - 0.5]], R1);
+      }
+
+      // South corridor (hub ↔ portal)
+      if (portalR) {
+        const pN  = portalR.y0 * CELL - CELL / 2;
+        const wpx = hcx - CELL / 2 + G, epx = hcx + CELL / 2 - G;
+        pipe([[wpx, 0.52, hS], [wpx, 0.52, pN]], R2);
+        pipe([[wpx, 0.88, hS], [wpx, 0.88, pN]], R3);
+        pipe([[epx, 0.44, hS], [epx, 0.44, pN]], R1);
+        pipe([[epx, 0.70, hS], [epx, 0.70, pN]], R2);
+        pipe([[epx, 0.44, hS + 0.4], [epx, HCH, hS + 0.4]], R1);
+        pipe([[wpx, 0.88, pN - 0.4], [wpx, portalR.ceilH, pN - 0.4]], R2);
+      }
+
+      // East corridor (hub ↔ library) — north & south passage walls
+      if (libR) {
+        const lW  = libR.x0 * CELL - CELL / 2;
+        const npz = hcz - CELL / 2 + G, spz = hcz + CELL / 2 - G;
+        pipe([[hE, 0.48, npz], [lW, 0.48, npz]], R1);
+        pipe([[hE, 0.74, npz], [lW, 0.74, npz]], R2);
+        pipe([[hE, 0.44, spz], [lW, 0.44, spz]], R2);
+        pipe([[hE, 0.82, spz], [lW, 0.82, spz]], R3);
+        pipe([[lW - 0.5, 0.44, spz], [lW - 0.5, libR.ceilH, spz]], R1);
+        pipe([[hE + 0.5, 0.74, npz], [hE + 0.5, HCH, npz]], R2);
+      }
+
+      // West corridor (hub ↔ armory)
+      if (armoryR) {
+        const aE  = (armoryR.x0 + armoryR.w - 1) * CELL + CELL / 2;
+        const npz = hcz - CELL / 2 + G, spz = hcz + CELL / 2 - G;
+        pipe([[aE, 0.44, npz], [hW, 0.44, npz]], R2);
+        pipe([[aE, 0.78, npz], [hW, 0.78, npz]], R3);
+        pipe([[aE, 0.44, spz], [hW, 0.44, spz]], R1);
+        pipe([[aE, 0.64, spz], [hW, 0.64, spz]], R2);
+        pipe([[aE, 0.95, spz], [hW + 0.6, 0.95, spz]], R3);
+        pipe([[aE + 0.4, 0.44, npz], [aE + 0.4, armoryR.ceilH, npz]], R1);
+        pipe([[hW - 0.4, 0.78, spz], [hW - 0.4, HCH, spz]], R2);
+      }
+
+      // Extra hub wall density — fills mid-height gaps left by the main loop
+      const hnz = hN + G, hsz = hS - G, hwx = hW + G, hex = hE - G;
+      pipe([[hW - 0.2, 1.50, hnz], [hcx - DH, 1.50, hnz]], R3);        // N wall mid-left
+      pipe([[hcx + DH, 2.80, hnz], [hE + 0.2, 2.80, hnz]], R2);        // N wall mid-right
+      pipe([[hW - 0.2, 2.00, hsz], [hcx - DH, 2.00, hsz]], R3);        // S wall mid-left
+      pipe([[hex, 3.80, hN], [hex, 3.80, hS]], R2);                     // E wall cross at 3.8 m
+      pipe([[hwx, HCH - 0.40, hcz + DH], [hwx, HCH - 0.40, hS]], R3); // W wall near-ceiling S
+
+      // Hub ceiling pipes — horizontal conduits suspended just below ceiling face
+      const cy1 = HCH - G, cy2 = HCH - G - 0.22;
+      pipe([[hW, cy1, hN + 1.0], [hE, cy1, hN + 1.0]], R2);
+      pipe([[hW, cy2, hN + 2.0], [hE, cy2, hN + 2.0]], R3);
+      pipe([[hE - 1.1, cy1, hN], [hE - 1.1, cy1, hS]], R2);
+      pipe([[hE, cy2, hcz + 0.7], [hcx, cy2, hcz + 0.7], [hcx, cy2, hS]], R3);
     }
   }
 

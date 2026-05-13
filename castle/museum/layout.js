@@ -88,7 +88,7 @@ export function buildLayout() {
       const gy = ey + DY[dir] * i;
       if (gx >= 0 && gy >= 0 && gx < width && gy < height) {
         grid[gy][gx] = 0;
-        ceilH[gy][gx] = STD_CEIL;
+        ceilH[gy][gx] = fromR.ceilH;
         roomId[gy][gx] = 'corridor';
       }
     }
