@@ -46,11 +46,11 @@ function nearestTex(canvas, repeat = [1,1]) {
   return tex;
 }
 
-// ===== WALL: irregular stone blocks =====
+// ===== WALL: irregular stone blocks — semi-matte chrome =====
 function drawStoneBlocks(ctx, seed = 1, accent = null) {
   const r = rng(seed);
-  // mortar base
-  ctx.fillStyle = CAST.mortar;
+  // cool dark mortar
+  ctx.fillStyle = '#0e1012';
   ctx.fillRect(0, 0, TILE, TILE);
   // staggered courses of blocks
   const courseH = 22;
@@ -61,37 +61,42 @@ function drawStoneBlocks(ctx, seed = 1, accent = null) {
       const by = y + r() * 2 - 1;
       const bw = 32 + r() * 4;
       const bh = courseH - 2 - r() * 2;
-      // base block color (varied per block)
-      const shade = 60 + Math.floor(r() * 35);
+      // chrome: cool blue-grey, varied per block
+      const base = 88 + Math.floor(r() * 42);
       const tint = accent && r() < 0.05;
-      ctx.fillStyle = tint ? accent : `rgb(${shade + 10}, ${shade}, ${shade - 8})`;
+      ctx.fillStyle = tint ? accent : `rgb(${base}, ${base + 5}, ${base + 12})`;
       ctx.fillRect(bx, by, bw, bh);
-      // highlight top
-      ctx.fillStyle = `rgba(255,230,200,0.10)`;
-      ctx.fillRect(bx, by, bw, 1);
-      // shadow bottom
-      ctx.fillStyle = `rgba(0,0,0,0.45)`;
-      ctx.fillRect(bx, by + bh - 1, bw, 1);
-      // pebbly texture inside
-      for (let k = 0; k < 6; k++) {
+      // sharp chrome highlight on top edge (overhead light catch)
+      ctx.fillStyle = `rgba(215,230,255,0.38)`;
+      ctx.fillRect(bx, by, bw, 2);
+      // subtle mid-band reflection
+      ctx.fillStyle = `rgba(170,195,220,0.10)`;
+      ctx.fillRect(bx, by + Math.floor(bh * 0.35), bw, 1);
+      // shadow bottom (matte absorption)
+      ctx.fillStyle = `rgba(0,0,0,0.55)`;
+      ctx.fillRect(bx, by + bh - 2, bw, 2);
+      // left-edge directional glint
+      ctx.fillStyle = `rgba(200,220,245,0.13)`;
+      ctx.fillRect(bx, by, 1, bh);
+      // surface micro-variation for matte quality
+      for (let k = 0; k < 8; k++) {
         const px = bx + r() * bw;
         const py = by + r() * bh;
-        ctx.fillStyle = `rgba(0,0,0,${0.15 + r()*0.15})`;
-        ctx.fillRect(px, py, 1, 1);
+        ctx.fillStyle = r() > 0.5 ? `rgba(255,255,255,0.07)` : `rgba(0,0,0,0.07)`;
+        ctx.fillRect(px, py, 1 + Math.floor(r() * 2), 1);
       }
-      // moss patch
+      // oxidation streak (dark blue-grey run, replaces moss)
       if (r() < 0.18) {
-        const mx = bx + r() * (bw - 6);
-        const my = by + r() * (bh - 4);
-        ctx.fillStyle = `rgba(72, 86, 58, 0.65)`;
-        ctx.fillRect(mx, my, 4 + r()*4, 2 + r()*3);
+        const sx = bx + r() * (bw - 3);
+        ctx.fillStyle = `rgba(70,85,105,0.38)`;
+        ctx.fillRect(sx, by + 2, 2, bh - 3);
       }
     }
   }
-  // overall darken vignette
+  // cool vignette
   const grad = ctx.createLinearGradient(0, 0, 0, TILE);
-  grad.addColorStop(0, 'rgba(0,0,0,0.08)');
-  grad.addColorStop(1, 'rgba(0,0,0,0.30)');
+  grad.addColorStop(0, 'rgba(0,0,0,0.06)');
+  grad.addColorStop(1, 'rgba(0,0,0,0.36)');
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, TILE, TILE);
 }

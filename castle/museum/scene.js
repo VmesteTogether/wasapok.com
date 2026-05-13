@@ -12,15 +12,15 @@ const STD_CEIL = 3.6;
 
 export function buildScene(layout, opts) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x0a0806);
-  scene.fog = new THREE.Fog(0x0a0806, 4, opts.fogDistance ?? 22);
+  scene.background = new THREE.Color(0x040e08);
+  scene.fog = new THREE.Fog(0x040e08, 4, opts.fogDistance ?? 22);
 
-  // Dim ambient — torches do the work
-  scene.add(new THREE.AmbientLight(0x4a3a2a, 0.55));
-  scene.add(new THREE.HemisphereLight(0x6a5a40, 0x0a0806, 0.25));
+  // Dim ambient — orbs do the work
+  scene.add(new THREE.AmbientLight(0x0a1e0e, 0.55));
+  scene.add(new THREE.HemisphereLight(0x1a4a22, 0x040e08, 0.25));
 
-  // Player-follow warm light (held torch)
-  const playerLight = new THREE.PointLight(0xff9a40, 1.6, 8, 2);
+  // Player-follow green light
+  const playerLight = new THREE.PointLight(0x40ff80, 1.6, 8, 2);
   playerLight.position.set(0, 1.6, 0);
   scene.add(playerLight);
 
@@ -28,7 +28,7 @@ export function buildScene(layout, opts) {
   const wallTex = getWallTexture('stone');
   const floorTex = getFloorTexture('cobble');
   const ceilTex = getCeilingTexture();
-  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.92, metalness: 0 });
+  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.62, metalness: 0.35 });
   const ceilMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.95, metalness: 0 });
   const floorMat = new THREE.MeshStandardMaterial({
     map: floorTex.clone(), roughness: 0.85, metalness: 0.05,
@@ -120,37 +120,42 @@ export function buildScene(layout, opts) {
     grp.position.set(wx + ox, 1.95, wz + oz);
     grp.rotation.y = [0, -Math.PI/2, Math.PI, Math.PI/2][t.wall];
 
-    // Iron bracket (small box on the wall)
-    const bracket = new THREE.Mesh(
-      new THREE.BoxGeometry(0.08, 0.5, 0.16), ironMat
+    // Iron ring sconce (wall mount)
+    const ring = new THREE.Mesh(
+      new THREE.TorusGeometry(0.13, 0.022, 8, 16), ironMat
     );
-    bracket.position.set(0, -0.05, 0.04);
-    grp.add(bracket);
-    // Wooden handle
-    const handle = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.04, 0.04, 0.4, 8), woodMat
+    ring.rotation.x = Math.PI / 2;
+    ring.position.set(0, 0, 0.06);
+    grp.add(ring);
+    const arm = new THREE.Mesh(
+      new THREE.BoxGeometry(0.035, 0.035, 0.14), ironMat
     );
-    handle.rotation.x = -Math.PI / 8;
-    handle.position.set(0, 0.05, 0.15);
-    grp.add(handle);
+    arm.position.set(0, 0, 0.03);
+    grp.add(arm);
 
-    // Animated flame sprite (slight scale flicker)
-    const flameMat = new THREE.SpriteMaterial({
-      map: torchTex, transparent: true, depthWrite: false,
-      color: 0xffe0b0,
+    // Glowing orb core
+    const orbMat = new THREE.MeshStandardMaterial({
+      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 2.2,
+      roughness: 0.08, metalness: 0.0,
     });
-    const flame = new THREE.Sprite(flameMat);
-    flame.scale.set(0.4, 0.8, 1);
-    flame.position.set(0, 0.35, 0.2);
-    grp.add(flame);
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), orbMat);
+    orb.position.set(0, 0, 0.17);
+    grp.add(orb);
+    // Outer glow halo
+    const haloMat = new THREE.MeshBasicMaterial({
+      color: 0x40ff80, transparent: true, opacity: 0.13, depthWrite: false,
+    });
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), haloMat);
+    halo.position.set(0, 0, 0.17);
+    grp.add(halo);
 
     group.add(grp);
 
-    // Point light
-    const pl = new THREE.PointLight(0xff8a30, 1.8, 7, 1.7);
+    // Point light — neon green
+    const pl = new THREE.PointLight(0x40ff80, 1.8, 7, 1.7);
     pl.position.set(wx + nx * 0.45, 2.2, wz + nz * 0.45);
     group.add(pl);
-    torchLights.push({ light: pl, baseIntensity: 1.8, flame, kind: 'torch' });
+    torchLights.push({ light: pl, baseIntensity: 1.8, orb, halo, kind: 'torch' });
   }
 
   function addChandelier(wx, wz, ceilH) {
@@ -170,35 +175,108 @@ export function buildScene(layout, opts) {
     ring.rotation.x = Math.PI / 2;
     ring.position.y = -chainLen - 0.05;
     ch.add(ring);
-    // candle stubs around the ring (cylinders) + flame sprites
-    const candleCount = 8;
-    for (let i = 0; i < candleCount; i++) {
-      const a = (i / candleCount) * Math.PI * 2;
+    // Floating orbs around the ring
+    const orbCount = 8;
+    const smallOrbMat = new THREE.MeshStandardMaterial({
+      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 2.0,
+      roughness: 0.1, metalness: 0,
+    });
+    for (let i = 0; i < orbCount; i++) {
+      const a = (i / orbCount) * Math.PI * 2;
       const cx = Math.cos(a) * 0.42, cz = Math.sin(a) * 0.42;
-      const candle = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.025, 0.025, 0.12, 6),
-        new THREE.MeshStandardMaterial({ color: 0xeed8a8, roughness: 0.7 })
+      const smallOrb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.055, 10, 8), smallOrbMat
       );
-      candle.position.set(cx, -chainLen + 0.05, cz);
-      ch.add(candle);
-      // flame
-      const fm = new THREE.SpriteMaterial({
-        map: torchTex, transparent: true, depthWrite: false,
-        color: 0xfff0b0,
-      });
-      const sp = new THREE.Sprite(fm);
-      sp.scale.set(0.14, 0.22, 1);
-      sp.position.set(cx, -chainLen + 0.18, cz);
-      ch.add(sp);
+      smallOrb.position.set(cx, -chainLen + 0.08, cz);
+      ch.add(smallOrb);
+      const sh = new THREE.Mesh(
+        new THREE.SphereGeometry(0.09, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0x40ff80, transparent: true, opacity: 0.10, depthWrite: false })
+      );
+      sh.position.set(cx, -chainLen + 0.08, cz);
+      ch.add(sh);
     }
-    // bulb light (warm)
+    // central point light — neon green
     const intensity = ceilH > 4.5 ? 2.0 : 1.4;
     const range = ceilH > 4.5 ? 11 : 8;
-    const pl = new THREE.PointLight(0xffb060, intensity, range, 1.7);
+    const pl = new THREE.PointLight(0x40ff80, intensity, range, 1.7);
     pl.position.y = -chainLen + 0.05;
     ch.add(pl);
     group.add(ch);
     torchLights.push({ light: pl, baseIntensity: intensity, kind: 'chandelier' });
+  }
+
+  // ===== UMBRELLA GLASS CHANDELIER — ceiling-mounted dome, faint Half-Life orange =====
+  function addUmbrellaChandelier(wx, wz, ceilH) {
+    const grp = new THREE.Group();
+    grp.position.set(wx, ceilH, wz);
+    const domeR = 0.72;
+
+    // Ceiling mount disc
+    const mountMesh = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), ironMat
+    );
+    mountMesh.position.y = -0.03;
+    grp.add(mountMesh);
+
+    // Glass dome — top hemisphere, pole touches ceiling, rim hangs below
+    // SphereGeometry top half: pole at y=+r, equator at y=0; position.y=-domeR puts pole at ceiling
+    const glassMat = new THREE.MeshStandardMaterial({
+      color: 0xFFAA60, emissive: 0xFF6820, emissiveIntensity: 0.38,
+      transparent: true, opacity: 0.44,
+      roughness: 0.04, metalness: 0.0,
+      side: THREE.DoubleSide, depthWrite: false,
+    });
+    const dome = new THREE.Mesh(
+      new THREE.SphereGeometry(domeR, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2),
+      glassMat
+    );
+    dome.position.y = -domeR;
+    grp.add(dome);
+
+    // Inner glow shell — renders BackSide for a filled-glass look
+    const innerMat = new THREE.MeshBasicMaterial({
+      color: 0xFF7828, transparent: true, opacity: 0.14,
+      side: THREE.BackSide, depthWrite: false,
+    });
+    const innerDome = new THREE.Mesh(
+      new THREE.SphereGeometry(domeR * 0.91, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2),
+      innerMat
+    );
+    innerDome.position.y = -domeR;
+    grp.add(innerDome);
+
+    // Iron rim ring at the equator
+    const rimRing = new THREE.Mesh(
+      new THREE.TorusGeometry(domeR, 0.022, 8, 40), ironMat
+    );
+    rimRing.rotation.x = Math.PI / 2;
+    rimRing.position.y = -domeR;
+    grp.add(rimRing);
+
+    // 8 iron ribs from pole (0,0,0) to rim points
+    const ribCount = 8;
+    const ribLen = domeR * Math.SQRT2;
+    const upVec = new THREE.Vector3(0, 1, 0);
+    for (let i = 0; i < ribCount; i++) {
+      const a = (i / ribCount) * Math.PI * 2;
+      const rimX = Math.cos(a) * domeR, rimZ = Math.sin(a) * domeR;
+      const rib = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.009, 0.009, ribLen, 5), ironMat
+      );
+      rib.position.set(rimX * 0.5, -domeR * 0.5, rimZ * 0.5);
+      const dir = new THREE.Vector3(rimX, -domeR, rimZ).normalize();
+      rib.quaternion.setFromUnitVectors(upVec, dir);
+      grp.add(rib);
+    }
+
+    group.add(grp);
+
+    // Faint orange area light — below the dome opening, low intensity so green orbs dominate
+    const pl = new THREE.PointLight(0xFF6820, 0.52, 14, 1.8);
+    pl.position.set(wx, ceilH - domeR - 0.35, wz);
+    group.add(pl);
+    torchLights.push({ light: pl, baseIntensity: 0.52, kind: 'umbrella' });
   }
 
   for (const l of layout.lights || []) {
@@ -241,6 +319,8 @@ export function buildScene(layout, opts) {
   for (const room of layout.rooms || []) {
     const rx0 = room.x0 * CELL, rz0 = room.y0 * CELL;
     const rcx = room.cx * CELL, rcz = room.cy * CELL;
+
+    addUmbrellaChandelier(rcx, rcz, room.ceilH || STD_CEIL);
 
     if (room.kind === 'throne') {
       // Throne against the NORTH wall (room.y0 + ~0.5 cell from wall, facing south)

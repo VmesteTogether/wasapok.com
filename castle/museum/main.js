@@ -285,10 +285,12 @@ function animate() {
     if (tl.kind === 'torch') {
       const f = 0.82 + Math.sin(t * 9 + i * 1.3) * 0.10 + Math.random() * 0.08;
       tl.light.intensity = tl.baseIntensity * f;
-      if (tl.flame) {
-        const s = 0.95 + Math.sin(t * 12 + i) * 0.05 + Math.random() * 0.06;
-        tl.flame.scale.set(0.4 * s, 0.8 * (0.95 + Math.sin(t * 14 + i) * 0.05), 1);
-      }
+      if (tl.orb) tl.orb.material.emissiveIntensity = 1.8 + Math.sin(t * 7 + i * 1.1) * 0.5 + Math.random() * 0.25;
+      if (tl.halo) tl.halo.material.opacity = 0.08 + Math.sin(t * 5 + i * 0.9) * 0.05 + Math.random() * 0.04;
+    } else if (tl.kind === 'umbrella') {
+      // Very gentle warm breathe — stable main light, barely moves
+      const f = 0.93 + Math.sin(t * 0.9 + i * 0.6) * 0.07;
+      tl.light.intensity = tl.baseIntensity * f;
     } else if (tl.kind === 'portalBeacon') {
       // Slow magical pulse
       const f = 0.7 + Math.sin(t * 2.1) * 0.25 + Math.sin(t * 5.3) * 0.05;
