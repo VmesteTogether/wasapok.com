@@ -101,6 +101,15 @@
     z-index: 15;
     pointer-events: none;
   }
+  #nav-glow {
+    position: absolute;
+    width: 220px; height: 220px;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%) rotateX(35deg);
+    background: radial-gradient(ellipse at center, rgba(255,120,8,0.28) 0%, rgba(255,80,5,0.10) 48%, transparent 72%);
+    border-radius: 50%;
+    pointer-events: none;
+  }
   #nav-cross {
     display: grid;
     grid-template-columns: 68px 68px 68px;
@@ -284,14 +293,23 @@
     W/S walk · A/D turn · Q/E strafe · SHIFT sprint
   </div>
 
+  <svg style="display:none"><defs>
+    <radialGradient id="ag" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffb020" stop-opacity="0.36"/>
+      <stop offset="100%" stop-color="#ffb020" stop-opacity="0"/>
+    </radialGradient>
+  </defs></svg>
+
   <!-- 3D perspective nav cross — bottom center -->
   <div id="nav-wrapper">
+    <div id="nav-glow"></div>
     <div id="nav-cross">
 
       <!-- row 1: up arrow -->
       <div></div>
       <button class="nav-arrow" id="dpad-up" aria-label="Forward">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="18" fill="url(#ag)"/>
           <path d="M32,5 L59,36 L44,36 L44,59 L20,59 L20,36 L5,36 Z"
             fill="rgba(6,3,0,0.18)" stroke="#bf4800" stroke-width="2" stroke-linejoin="miter"/>
           <path d="M32,5 L32,59 M20,36 L44,36"
@@ -303,6 +321,7 @@
       <!-- row 2: left · center · right -->
       <button class="nav-arrow" id="dpad-left" aria-label="Turn left">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="18" fill="url(#ag)"/>
           <path d="M5,32 L36,5 L36,20 L59,20 L59,44 L36,44 L36,59 Z"
             fill="rgba(6,3,0,0.18)" stroke="#bf4800" stroke-width="2" stroke-linejoin="miter"/>
           <path d="M5,32 L59,32 M36,20 L36,44"
@@ -312,6 +331,7 @@
       <div id="nav-center"></div>
       <button class="nav-arrow" id="dpad-right" aria-label="Turn right">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="18" fill="url(#ag)"/>
           <path d="M59,32 L28,5 L28,20 L5,20 L5,44 L28,44 L28,59 Z"
             fill="rgba(6,3,0,0.18)" stroke="#bf4800" stroke-width="2" stroke-linejoin="miter"/>
           <path d="M59,32 L5,32 M28,20 L28,44"
@@ -323,6 +343,7 @@
       <div></div>
       <button class="nav-arrow" id="dpad-down" aria-label="Back">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
+          <circle cx="32" cy="32" r="18" fill="url(#ag)"/>
           <path d="M32,59 L5,28 L20,28 L20,5 L44,5 L44,28 L59,28 Z"
             fill="rgba(6,3,0,0.18)" stroke="#bf4800" stroke-width="2" stroke-linejoin="miter"/>
           <path d="M32,59 L32,5 M20,28 L44,28"
