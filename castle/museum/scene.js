@@ -6,7 +6,7 @@ import {
   getWallTexture, getFloorTexture, getCeilingTexture,
   makeTorchTexture, makeSignTexture, makeBannerTexture,
   makePortalTexture, makeStainedGlass, CAST,
-} from './textures.js?v=21';
+} from './textures.js?v=33';
 
 RectAreaLightUniformsLib.init();
 
@@ -56,7 +56,7 @@ export function buildScene(layout, opts) {
     map: glassMap,
     color: 0x9ab8d0,
     transparent: true,
-    opacity: 0.38,
+    opacity: 0.18,
     roughness: 0.04,
     metalness: 0.05,
     depthWrite: false,
@@ -136,7 +136,7 @@ export function buildScene(layout, opts) {
   });
   const waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), waterMat);
   waterMesh.rotation.x = -Math.PI / 2;
-  waterMesh.position.set(W/2 - CELL/2, -0.9, H/2 - CELL/2);
+  waterMesh.position.set(W/2 - CELL/2, -0.35, H/2 - CELL/2);
   waterMesh.renderOrder = -1;
   group.add(waterMesh);
 
@@ -196,7 +196,7 @@ export function buildScene(layout, opts) {
       for (let n = 0; n < PER_CELL; n++) {
         const rx = (rand() - 0.5) * (CELL - 0.18);
         const rz = (rand() - 0.5) * (CELL - 0.18);
-        const len = 0.18 + rand() * 0.42;       // 0.18 – 0.60 m
+        const len = 0.43 + rand() * 1.02;       // 0.43 – 1.45 m  (−80%)
         const thick = 0.55 + rand() * 0.85;
         const tiltX = (rand() - 0.5) * 0.32;
         const tiltZ = (rand() - 0.5) * 0.32;
@@ -366,6 +366,7 @@ export function buildScene(layout, opts) {
     // Anemone group — origin at the bottom of the stem (top of the body)
     const anem = new THREE.Group();
     anem.position.y = -stemLen;
+    anem.scale.set(2, 2, 2); // 100% larger diameter (uniform scale)
     grp.add(anem);
 
     // ---- Half-Life iconic HEV-orange palette ----
@@ -537,6 +538,82 @@ export function buildScene(layout, opts) {
     else addTorch(l);
   }
 
+  // ===== SALOON DOORS =====
+  const saloonDoors = [];
+
+  const doorWoodMat = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.88, metalness: 0.02 });
+  const doorIronMat = new THREE.MeshStandardMaterial({ color: 0x252018, roughness: 0.55, metalness: 0.90 });
+
+  function addSaloonDoor(doorCX, doorCZ, doorYaw) {
+    // Classic western batwing: mid-height panel, hinge edge taller than inner,
+    // concave curve across the top that dips toward the inner edge.
+    const THICK      = 0.09;
+    const PANEL_BASE = 0.60;   // bottom of panel off the floor (leave foot gap)
+    const OUTER_H    = 1.18;   // panel height at the hinge edge
+    const INNER_H    = 0.80;   // panel height at the inner (centre) edge
+    const DIP        = 0.28;   // how far the top curve dips below INNER_H
+    const leafW      = CELL / 2 - 0.04;
+
+    const doorGrp = new THREE.Group();
+    doorGrp.position.set(doorCX, 0, doorCZ);
+    doorGrp.rotation.y = doorYaw;
+
+    function makeLeaf(side) {
+      const leaf = new THREE.Group();
+      leaf.position.x = side * (CELL / 2);   // hinge pivot at outer edge
+
+      // sx: direction the panel extends from the hinge (+1 left leaf, −1 right leaf)
+      const sx = -side;
+
+      // Batwing silhouette — 2-D shape in the XY plane, extruded in Z for thickness.
+      // Hinge is at x=0; inner edge is at x = sx*leafW.
+      // Top edge: straight inner corner, then a deep concave bezier arc up to the
+      // tall hinge corner — that concave dip is the "batwing" detail.
+      const shape = new THREE.Shape();
+      shape.moveTo(0, PANEL_BASE);                         // hinge bottom
+      shape.lineTo(sx * leafW, PANEL_BASE);                // inner bottom
+      shape.lineTo(sx * leafW, PANEL_BASE + INNER_H);      // inner top corner
+      shape.bezierCurveTo(
+        sx * leafW * 0.72, PANEL_BASE + INNER_H - DIP * 0.6,   // ctrl 1: near inner, dipping
+        sx * leafW * 0.28, PANEL_BASE + INNER_H - DIP,          // ctrl 2: toward hinge, max dip
+        0, PANEL_BASE + OUTER_H                                   // hinge top corner
+      );
+      shape.closePath();
+
+      const panelGeom = new THREE.ExtrudeGeometry(shape, { depth: THICK, bevelEnabled: false });
+      panelGeom.translate(0, 0, -THICK / 2);   // centre panel around z=0
+      leaf.add(new THREE.Mesh(panelGeom, doorWoodMat));
+
+      // Two horizontal iron cross-braces at safe heights inside the panel
+      for (const by of [PANEL_BASE + 0.13, PANEL_BASE + INNER_H * 0.52]) {
+        const brace = new THREE.Mesh(
+          new THREE.BoxGeometry(leafW * 0.88, 0.048, THICK + 0.014), doorIronMat
+        );
+        brace.position.set(sx * leafW * 0.44, by, 0);
+        leaf.add(brace);
+      }
+
+      // Hinge plates (top and bottom, on the hinge side)
+      for (const hy of [PANEL_BASE + 0.10, PANEL_BASE + OUTER_H - 0.10]) {
+        const hinge = new THREE.Mesh(
+          new THREE.BoxGeometry(leafW * 0.36, 0.11, 0.032), doorIronMat
+        );
+        hinge.position.set(sx * leafW * 0.18, hy, THICK / 2 + 0.016);
+        leaf.add(hinge);
+      }
+
+      return leaf;
+    }
+
+    const leftLeaf  = makeLeaf(-1);
+    const rightLeaf = makeLeaf(1);
+    doorGrp.add(leftLeaf);
+    doorGrp.add(rightLeaf);
+    group.add(doorGrp);
+
+    return { leftLeaf, rightLeaf, doorCX, doorCZ, doorYaw, leftAngle: 0, rightAngle: 0, swingDir: 1 };
+  }
+
   // ===== DOOR SIGNS =====
   for (const s of layout.signs || []) {
     const wx = s.x * CELL, wz = s.y * CELL;
@@ -556,6 +633,14 @@ export function buildScene(layout, opts) {
     mesh.position.set(wx + ox, 2.6, wz + oz);
     mesh.rotation.y = yaw;
     group.add(mesh);
+
+    // Saloon doors at every passage opening
+    {
+      const doorDX = [0, CELL/2, 0, -CELL/2][s.wall];
+      const doorDZ = [-CELL/2, 0, CELL/2, 0][s.wall];
+      const doorYaw = [0, Math.PI/2, 0, Math.PI/2][s.wall];
+      saloonDoors.push(addSaloonDoor(wx + doorDX, wz + doorDZ, doorYaw));
+    }
 
     // Beacon glow for the portal door — visible from across the hall
     if (isPortalSign) {
@@ -841,6 +926,281 @@ export function buildScene(layout, opts) {
     }
   }
 
+  // ===== DECORATIVE WALL PIPES =====
+  {
+    const pipeMat = new THREE.MeshStandardMaterial({
+      color: 0xdde6ee, emissive: 0x334455, emissiveIntensity: 0.14,
+      roughness: 0.50, metalness: 0.28,
+    });
+
+    function pipeSeg(p1, p2, r) {
+      const d = p2.clone().sub(p1);
+      const len = d.length();
+      if (len < 0.01) return;
+      d.normalize();
+      const geom = new THREE.CylinderGeometry(r, r, len, 8, 1);
+      const mesh = new THREE.Mesh(geom, pipeMat);
+      mesh.position.lerpVectors(p1, p2, 0.5);
+      const cross = new THREE.Vector3(0, 1, 0).cross(d);
+      if (cross.length() > 1e-5) {
+        mesh.quaternion.setFromAxisAngle(cross.normalize(),
+          Math.acos(Math.max(-1, Math.min(1, d.y))));
+      } else if (d.y < 0) {
+        mesh.rotation.z = Math.PI;
+      }
+      group.add(mesh);
+    }
+
+    function pJoint(p, r) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(r * 1.22, 8, 5), pipeMat);
+      m.position.copy(p);
+      group.add(m);
+    }
+
+    function pipe(pts, r) {
+      for (let i = 0; i < pts.length - 1; i++) {
+        pipeSeg(new THREE.Vector3(...pts[i]), new THREE.Vector3(...pts[i + 1]), r);
+      }
+      for (let i = 1; i < pts.length - 1; i++) {
+        pJoint(new THREE.Vector3(...pts[i]), r);
+      }
+    }
+
+    const G  = 0.072;
+    const R1 = 0.054;
+    const R2 = 0.037;
+    const R3 = 0.024;
+
+    for (const room of layout.rooms) {
+      const N  = room.y0 * CELL - CELL / 2;
+      const S  = (room.y0 + room.h - 1) * CELL + CELL / 2;
+      const W  = room.x0 * CELL - CELL / 2;
+      const E  = (room.x0 + room.w - 1) * CELL + CELL / 2;
+      const cx = room.cx * CELL;
+      const cz = room.cy * CELL;
+      const CH = room.ceilH;
+      const CT = CH - 0.05; // just inside ceiling
+
+      if (room.kind === 'hub') {
+        const DH = 1.35; // half-gap clearance for 1-tile corridors
+
+        // ── North wall (throne door at cx) ──
+        // Left: 3-pipe low cluster + a single tall riser + mid branch
+        const nz = N + G;
+        pipe([[W - 0.25, 0.38, nz], [cx - DH, 0.38, nz]], R1);
+        pipe([[W - 0.25, 0.56, nz], [cx - DH, 0.56, nz]], R2);
+        pipe([[W - 0.25, 0.74, nz], [W + 2.8,  0.74, nz]], R3);
+        pipe([[W + 0.30, 0.38, nz], [W + 0.30, CT,   nz]], R1);         // tall riser
+        pipe([[W + 0.30, CT,   nz], [cx - DH,  CT,   nz]], R1);         // ceiling run
+        pipe([[W + 0.60, 0.56, nz], [W + 0.60, 2.20, nz]], R2);         // mid riser
+        pipe([[W + 0.60, 2.20, nz], [cx - DH,  2.20, nz]], R2);
+        // Right: asymmetric — only 1 low pipe + tall riser on far side + mid-height branch
+        pipe([[cx + DH,  0.38, nz], [E + 0.25, 0.38, nz]], R1);
+        pipe([[E - 2.2,  0.66, nz], [E + 0.25, 0.66, nz]], R2);
+        pipe([[E - 0.30, 0.38, nz], [E - 0.30, CT,   nz]], R1);
+        pipe([[cx + DH,  CT,   nz], [E - 0.30, CT,   nz]], R1);
+        pipe([[cx + DH,  3.00, nz], [E - 0.30, 3.00, nz]], R2);
+        // NW corner wrap: one pipe sweeps from north wall around to west wall
+        pipe([[cx - DH - 0.5, 0.56, nz], [W + G, 0.56, nz], [W + G, 0.56, N + 1.4]], R2);
+        // NE corner wrap: a thinner pipe hooks around the east corner
+        pipe([[cx + DH + 0.4, 0.74, nz], [E - G, 0.74, nz], [E - G, 0.74, N + 0.9]], R3);
+
+        // ── South wall (portal door at cx) ──
+        // Left: single main + tall riser offset from corner + small detail pipe
+        const sz = S - G;
+        pipe([[W - 0.25, 0.50, sz], [cx - DH, 0.50, sz]], R2);
+        pipe([[W - 0.25, 1.40, sz], [W + 3.50, 1.40, sz]], R3);
+        pipe([[W + 0.45, 0.50, sz], [W + 0.45, CT,   sz]], R1);
+        pipe([[W + 0.45, CT,   sz], [cx - DH,  CT,   sz]], R1);
+        pipe([[cx - DH - 0.6, 0.50, sz], [cx - DH - 0.6, CT, sz]], R2);
+        // Right: two low parallels + riser at far end only + mid-level cross
+        pipe([[cx + DH,  0.50, sz], [E + 0.25, 0.50, sz]], R1);
+        pipe([[cx + DH,  0.80, sz], [E + 0.25, 0.80, sz]], R3);
+        pipe([[E - 1.80, 1.80, sz], [E + 0.25, 1.80, sz]], R2);
+        pipe([[E - 0.30, 0.50, sz], [E - 0.30, CT,   sz]], R1);
+        pipe([[E - 0.65, 0.80, sz], [E - 0.65, 3.60, sz]], R2);
+        pipe([[cx + DH,  3.60, sz], [E - 0.65, 3.60, sz]], R2);
+        pipe([[cx + DH,  CT,   sz], [E - 0.30, CT,   sz]], R1);
+
+        // ── West wall (armory door at cz) ──
+        // North half: two low runs + tall riser near north end + ceiling arm
+        const wx = W + G;
+        pipe([[wx, 0.44, N + 0.2], [wx, 0.44, cz - DH]], R1);
+        pipe([[wx, 0.70, N + 0.5], [wx, 0.70, cz - DH]], R2);
+        pipe([[wx, 0.44, N + 0.8], [wx, CT,   N + 0.8]], R1);
+        pipe([[wx, CT,   N + 0.8], [wx, CT,   cz - DH]], R1);
+        // South half: lower single run + L-riser stopping at 2.8 + different ceiling connection
+        pipe([[wx, 0.60, cz + DH], [wx, 0.60, S - 0.2]], R2);
+        pipe([[wx, 1.10, cz + DH], [wx, 1.10, S - 1.2]], R3);
+        pipe([[wx, 0.60, S - 0.9], [wx, 2.80, S - 0.9]], R2);
+        pipe([[wx, 2.80, cz + DH], [wx, 2.80, S - 0.9]], R2);
+        pipe([[wx, 0.60, cz + DH + 0.4], [wx, CT, cz + DH + 0.4]], R1);
+        pipe([[wx, CT,   cz + DH + 0.4], [wx, CT, S - 0.3]], R1);
+
+        // ── East wall (library door at cz) ──
+        // North half: thin run + riser close to north end + horizontal at 1.6
+        const ex = E - G;
+        pipe([[ex, 0.55, N + 0.2], [ex, 0.55, cz - DH]], R2);
+        pipe([[ex, 0.90, N + 0.2], [ex, 0.90, N + 2.5]], R3);
+        pipe([[ex, 0.55, N + 0.4], [ex, CT,   N + 0.4]], R1);
+        pipe([[ex, CT,   N + 0.4], [ex, CT,   cz - DH]], R1);
+        pipe([[ex, 1.60, N + 0.4], [ex, 1.60, cz - DH]], R2);
+        // South half: main conduit + riser at far south end + ceiling stretch
+        pipe([[ex, 0.44, cz + DH], [ex, 0.44, S - 0.2]], R1);
+        pipe([[ex, 1.30, cz + DH + 0.5], [ex, 1.30, S - 0.2]], R2);
+        pipe([[ex, 0.44, S - 0.35], [ex, CT,   S - 0.35]], R1);
+        pipe([[ex, CT,   cz + DH], [ex, CT,   S - 0.35]], R1);
+        pipe([[ex, 2.10, cz + DH], [ex, 2.10, S - 1.5]], R3);
+
+      } else if (room.kind === 'throne') {
+        // Door is on south wall (parentDir=0 → doorWall=2). Throne room is 7×7, CH=3.6.
+
+        // ── North wall (opposite throne, no door) ──
+        const nz = N + G;
+        pipe([[W - 0.2, 0.42, nz], [E + 0.2, 0.42, nz]], R1);         // full-width low main
+        pipe([[W - 0.2, 0.62, nz], [W + 4.5, 0.62, nz]], R2);         // left 3/4
+        pipe([[W + 0.35, 0.42, nz], [W + 0.35, CT,  nz]], R1);        // tall riser near W
+        pipe([[W + 0.35, CT,   nz], [E - 0.35, CT,  nz]], R1);        // ceiling span
+        pipe([[E - 0.35, 0.42, nz], [E - 0.35, CT,  nz]], R1);        // tall riser near E
+        pipe([[W + 0.35, 1.50, nz], [cx - 1.5, 1.50, nz]], R2);       // offset mid branch
+
+        // ── East wall (no door) ──
+        const ex = E - G;
+        pipe([[ex, 0.44, N - 0.2], [ex, 0.44, S + 0.2]], R1);         // floor-level full run
+        pipe([[ex, 0.75, N + 0.5], [ex, 0.75, S - 0.5]], R2);
+        pipe([[ex, 0.44, N + 0.8], [ex, CT,   N + 0.8]], R2);         // riser near north
+        pipe([[ex, CT,   N + 0.8], [ex, CT,   S - 0.8]], R1);         // ceiling arm
+        pipe([[ex, 0.44, S - 0.8], [ex, CT,   S - 0.8]], R1);         // tall riser near south
+        pipe([[ex, 1.80, N + 0.8], [ex, 1.80, S - 0.8]], R3);         // mid cross
+
+        // ── West wall (no door) ──
+        const wx = W + G;
+        pipe([[wx, 0.55, N - 0.2], [wx, 0.55, S + 0.2]], R2);         // full run at different height
+        pipe([[wx, 0.85, N + 1.0], [wx, 0.85, cz],       ], R3);      // partial, stops at centre
+        pipe([[wx, 0.55, cz],      [wx, CT,   cz]],          R1);      // riser from centre up
+        pipe([[wx, CT,   N + 0.5], [wx, CT,   cz]], R1);               // ceiling arm (north side)
+        pipe([[wx, 2.20, cz],      [wx, 2.20, S - 0.5]], R2);         // south mid horizontal
+
+        // ── South wall (door wall — flanking only) ──
+        const sz = S - G;
+        pipe([[W - 0.2, 0.50, sz], [cx - 1.35, 0.50, sz]], R2);
+        pipe([[W - 0.2, 0.75, sz], [W + 1.50,  0.75, sz]], R3);
+        pipe([[W + 0.4, 0.50, sz], [W + 0.4,   2.40, sz]], R2);       // riser left flank
+        pipe([[cx + 1.35, 0.50, sz], [E + 0.2, 0.50, sz]], R2);
+        pipe([[E - 0.4,   0.50, sz], [E - 0.4, CT,   sz]], R1);       // tall riser right flank
+        pipe([[cx + 1.35, CT,   sz], [E - 0.4, CT,   sz]], R1);
+
+      } else if (room.kind === 'library') {
+        // Door is on west wall (parentDir=1 → doorWall=3). Library is 7×7, CH=3.6.
+
+        // ── North wall (no door) ──
+        const nz = N + G;
+        pipe([[W - 0.2, 0.46, nz], [E + 0.2, 0.46, nz]], R1);
+        pipe([[E - 3.5, 0.72, nz], [E + 0.2, 0.72, nz]], R2);        // right-half secondary
+        pipe([[W + 0.3, 0.46, nz], [W + 0.3, CT,   nz]], R2);
+        pipe([[E - 0.3, 0.46, nz], [E - 0.3, CT,   nz]], R1);
+        pipe([[W + 0.3, CT,   nz], [E - 0.3, CT,   nz]], R1);
+        pipe([[W + 0.3, 2.00, nz], [cx + 0.5, 2.00, nz]], R2);       // mid arm (left-biased)
+
+        // ── East wall (no door) ──
+        const ex = E - G;
+        pipe([[ex, 0.50, N - 0.2], [ex, 0.50, S + 0.2]], R2);
+        pipe([[ex, 0.80, N + 0.6], [ex, 0.80, cz]], R3);
+        pipe([[ex, 0.50, N + 0.5], [ex, CT,   N + 0.5]], R1);
+        pipe([[ex, CT,   N + 0.5], [ex, CT,   cz + 1.5]], R1);        // ceiling arm (partial)
+        pipe([[ex, 0.50, S - 0.5], [ex, 3.00, S - 0.5]], R2);        // south riser stops short
+
+        // ── South wall (no door) ──
+        const sz = S - G;
+        pipe([[W - 0.2,  0.48, sz], [E + 0.2, 0.48, sz]], R1);
+        pipe([[W + 1.0,  0.70, sz], [W + 4.0, 0.70, sz]], R2);       // centre section only
+        pipe([[W + 0.3,  0.48, sz], [W + 0.3, CT,   sz]], R2);
+        pipe([[W + 1.0,  0.70, sz], [W + 1.0, CT,   sz]], R1);
+        pipe([[W + 0.3,  CT,   sz], [E - 0.3, CT,   sz]], R1);
+        pipe([[E - 0.3,  0.48, sz], [E - 0.3, CT,   sz]], R1);
+
+        // ── West wall (door wall — flanking only) ──
+        const wx = W + G;
+        pipe([[wx, 0.55, N + 0.2], [wx, 0.55, cz - 1.35]], R2);
+        pipe([[wx, 0.55, N + 1.2], [wx, CT,   N + 1.2]], R1);         // riser near north
+        pipe([[wx, CT,   N + 1.2], [wx, CT,   cz - 1.35]], R1);
+        pipe([[wx, 0.55, cz + 1.35], [wx, 0.55, S - 0.2]], R2);
+
+      } else if (room.kind === 'armory') {
+        // Door is on east wall (parentDir=3 → doorWall=1). Armory is 7×7, CH=3.6.
+
+        // ── North wall (no door) — asymmetric treatment ──
+        const nz = N + G;
+        pipe([[W - 0.2, 0.44, nz], [E + 0.2, 0.44, nz]], R1);
+        pipe([[cx - 1.0, 0.64, nz], [E + 0.2, 0.64, nz]], R2);       // right-biased secondary
+        pipe([[W + 0.4,  0.44, nz], [W + 0.4, 1.80, nz]], R2);       // short riser (left)
+        pipe([[W + 0.4,  1.80, nz], [cx,      1.80, nz]], R2);        // mid arm going right
+        pipe([[E - 0.35, 0.44, nz], [E - 0.35, CT,  nz]], R1);       // single tall riser (right)
+        pipe([[cx,       CT,   nz], [E - 0.35, CT,  nz]], R1);        // ceiling arm (right half)
+
+        // ── South wall (no door) — centre-riser motif ──
+        const sz = S - G;
+        pipe([[W - 0.2, 0.56, sz], [E + 0.2, 0.56, sz]], R2);
+        pipe([[W - 0.2, 0.80, sz], [W + 2.0, 0.80, sz]], R3);
+        pipe([[cx,      0.56, sz], [cx,      CT,   sz]], R1);         // centre riser
+        pipe([[cx,      CT,   sz], [W + 0.5, CT,   sz]], R1);         // ceiling arm (left)
+        pipe([[cx - 2.0, 2.2, sz], [cx,      2.2,  sz]], R2);
+
+        // ── West wall (no door) — riser at south, ceiling spans to north ──
+        const wx = W + G;
+        pipe([[wx, 0.46, N - 0.2], [wx, 0.46, S + 0.2]], R1);
+        pipe([[wx, 1.00, N + 0.8], [wx, 1.00, cz + 1.0]], R2);
+        pipe([[wx, 0.46, N + 0.5], [wx, CT,   N + 0.5]], R1);
+        pipe([[wx, CT,   N + 0.5], [wx, CT,   S - 0.5]], R1);
+        pipe([[wx, 0.46, S - 0.5], [wx, CT,   S - 0.5]], R2);
+
+        // ── East wall (door wall — flanking only) ──
+        const ex = E - G;
+        pipe([[ex, 0.52, N + 0.2], [ex, 0.52, cz - 1.35]], R2);
+        pipe([[ex, 0.52, N + 0.7], [ex, 2.60, N + 0.7]], R1);        // L-riser north flank
+        pipe([[ex, 2.60, N + 0.7], [ex, 2.60, cz - 1.35]], R1);
+        pipe([[ex, 0.52, cz + 1.35], [ex, 0.52, S - 0.2]], R3);
+
+      } else if (room.kind === 'portal') {
+        // Door is on north wall (parentDir=2 → doorWall=0). Portal room is 5×5, CH=4.4.
+
+        // ── South wall (flanks portal arch at cx ± ~1.3 m) ──
+        const sz = S - G;
+        pipe([[W - 0.2,  0.46, sz], [cx - 1.6, 0.46, sz]], R2);
+        pipe([[W + 0.3,  0.46, sz], [W + 0.3,  CT,   sz]], R1);
+        pipe([[W + 0.3,  CT,   sz], [cx - 1.6, CT,   sz]], R1);
+        pipe([[cx + 1.6, 0.46, sz], [E + 0.2,  0.46, sz]], R2);
+        pipe([[E - 0.3,  0.46, sz], [E - 0.3,  CT,   sz]], R1);
+        pipe([[cx + 1.6, CT,   sz], [E - 0.3,  CT,   sz]], R1);
+
+        // ── East wall (no door) ──
+        const ex = E - G;
+        pipe([[ex, 0.50, N - 0.2], [ex, 0.50, S + 0.2]], R1);
+        pipe([[ex, 0.80, N + 0.5], [ex, 0.80, cz]], R2);
+        pipe([[ex, 0.50, N + 0.8], [ex, CT,   N + 0.8]], R1);
+        pipe([[ex, CT,   N + 0.8], [ex, CT,   S - 0.8]], R1);
+        pipe([[ex, 0.50, S - 0.8], [ex, 3.20, S - 0.8]], R2);        // south riser stops at 3.2
+
+        // ── West wall (no door) — different riser positions from east ──
+        const wx = W + G;
+        pipe([[wx, 0.60, N + 0.3], [wx, 0.60, S - 0.3]], R2);
+        pipe([[wx, 0.90, cz - 1.5], [wx, 0.90, S - 0.3]], R3);
+        pipe([[wx, 0.60, S - 0.6], [wx, CT,   S - 0.6]], R1);
+        pipe([[wx, CT,   N + 0.6], [wx, CT,   S - 0.6]], R1);
+        pipe([[wx, 0.60, N + 0.6], [wx, 2.80, N + 0.6]], R2);
+        pipe([[wx, 2.80, N + 0.6], [wx, 2.80, cz]], R2);
+
+        // ── North wall (door wall — flanking only) ──
+        const nz = N + G;
+        pipe([[W - 0.2,  0.55, nz], [cx - 1.35, 0.55, nz]], R2);
+        pipe([[W - 0.2,  0.90, nz], [W + 0.8,   0.90, nz]], R3);
+        pipe([[cx + 1.35, 0.55, nz], [E + 0.2,  0.55, nz]], R2);
+        pipe([[E - 0.35,  0.55, nz], [E - 0.35, 2.80, nz]], R1);
+        pipe([[cx + 1.35, 2.80, nz], [E - 0.35, 2.80, nz]], R1);
+      }
+    }
+  }
+
   return {
     scene, group,
     walls, floorMesh: floor, ceilMesh: ceilInst,
@@ -849,6 +1209,7 @@ export function buildScene(layout, opts) {
     floorMat, ceilMat: ceilMatI, wallMat,
     playerLight,
     waterMat,
+    saloonDoors,
     portal: portalInfo,
     CELL, WALL_H: STD_CEIL,
   };

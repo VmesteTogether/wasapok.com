@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=10';
-import { buildScene } from './scene.js?v=26';
+import { buildScene } from './scene.js?v=38';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
@@ -300,6 +300,26 @@ function animate() {
       const f = 0.96 + Math.sin(t * 1.8 + i * 0.4) * 0.04;
       tl.light.intensity = tl.baseIntensity * f;
     }
+  }
+
+  // Saloon doors — swing open when player approaches, close after they pass
+  const DOOR_OPEN_DIST = built.CELL * 2.0;
+  const DOOR_MAX_ANGLE = Math.PI * 0.47;
+  for (const sd of built.saloonDoors || []) {
+    const dx = camera.position.x - sd.doorCX;
+    const dz = camera.position.z - sd.doorCZ;
+    const open = (dx * dx + dz * dz) < DOOR_OPEN_DIST * DOOR_OPEN_DIST;
+    if (open) {
+      const side = Math.sin(sd.doorYaw) * dx + Math.cos(sd.doorYaw) * dz;
+      if (Math.abs(side) > 0.15) sd.swingDir = side > 0 ? 1 : -1;
+      sd.leftAngle  = THREE.MathUtils.lerp(sd.leftAngle,  sd.swingDir * DOOR_MAX_ANGLE,  0.10);
+      sd.rightAngle = THREE.MathUtils.lerp(sd.rightAngle, -sd.swingDir * DOOR_MAX_ANGLE, 0.10);
+    } else {
+      sd.leftAngle  = THREE.MathUtils.lerp(sd.leftAngle,  0, 0.07);
+      sd.rightAngle = THREE.MathUtils.lerp(sd.rightAngle, 0, 0.07);
+    }
+    sd.leftLeaf.rotation.y  = sd.leftAngle;
+    sd.rightLeaf.rotation.y = sd.rightAngle;
   }
 
   // Portal fade logic
