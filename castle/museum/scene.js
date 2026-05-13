@@ -1270,6 +1270,31 @@ export function buildScene(layout, opts) {
     }
   }
 
+  // Floating corridor number labels: N=1, E=2, S=3, W=4
+  {
+    const hubR = layout.rooms.find(r => r.kind === 'hub');
+    const labels = [
+      [1, hubR.cx * CELL,                        (hubR.y0 - 1.5) * CELL          ], // N → throne
+      [2, (hubR.x0 + hubR.w + 0.5) * CELL,      hubR.cy * CELL                   ], // E → library
+      [3, hubR.cx * CELL,                        (hubR.y0 + hubR.h + 0.5) * CELL ], // S → portal
+      [4, (hubR.x0 - 1.5) * CELL,               hubR.cy * CELL                   ], // W → armory
+    ];
+    for (const [n, wx, wz] of labels) {
+      const cv = document.createElement('canvas');
+      cv.width = cv.height = 64;
+      const ctx = cv.getContext('2d');
+      ctx.font = 'bold 50px monospace';
+      ctx.fillStyle = '#ff2800';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(String(n), 32, 34);
+      const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: new THREE.CanvasTexture(cv), transparent: true }));
+      sp.position.set(wx, 2.6, wz);
+      sp.scale.set(0.75, 0.75, 0.75);
+      scene.add(sp);
+    }
+  }
+
   return {
     scene, group,
     walls, floorMesh: floor, ceilMesh: ceilInst,

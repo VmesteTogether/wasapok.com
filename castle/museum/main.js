@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=12';
-import { buildScene } from './scene.js?v=46';
+import { buildScene } from './scene.js?v=47';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
