@@ -127,6 +127,18 @@ export function buildLayout() {
     }
   }
 
+  // Torches on the outer (N/S) walls of the E-W corridors (hub↔library, hub↔armory)
+  for (const corrDir of [1, 3]) {
+    const hw = (hub.w - 1) / 2;
+    const ex = hub.cx + DX[corrDir] * hw + offX;
+    const ey = hub.cy + offY;
+    for (let i = 1; i <= CORR; i++) {
+      const gx = ex + DX[corrDir] * i;
+      torchAt(gx, ey, 0); // north outer wall
+      torchAt(gx, ey, 2); // south outer wall
+    }
+  }
+
   // ====== Door signs (carved wood above each hub corridor mouth) ======
   const signs = [
     { x: hub.cx + offX, y: hub.y0,            wall: 0, label: 'THRONE',  toRoom: 'throne'  },
