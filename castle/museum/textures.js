@@ -160,26 +160,219 @@ function drawWoodCeiling(ctx, seed = 20) {
   }
 }
 
+// ===== PORTAL-STYLE WALL PANEL — beveled white chrome panels with thin dark seams =====
+function drawPortalPanels(ctx, seed = 30) {
+  const r = rng(seed);
+  // Dark seam base showing through the gaps
+  ctx.fillStyle = '#15171b';
+  ctx.fillRect(0, 0, TILE, TILE);
+
+  const cells = 2;            // 2x2 panels per tile
+  const cell  = TILE / cells; // 64
+  const gap   = 2;            // pixels of dark seam around each panel
+
+  for (let cy = 0; cy < cells; cy++) {
+    for (let cx = 0; cx < cells; cx++) {
+      const px = cx * cell + gap;
+      const py = cy * cell + gap;
+      const w  = cell - gap * 2;
+
+      // Vertical gradient — slightly brighter top, dimmer bottom (matte chrome)
+      const grd = ctx.createLinearGradient(0, py, 0, py + w);
+      grd.addColorStop(0,   '#eef0f4');
+      grd.addColorStop(0.5, '#dde1e6');
+      grd.addColorStop(1,   '#c4c8d0');
+      ctx.fillStyle = grd;
+      ctx.fillRect(px, py, w, w);
+
+      // Top + left bevel highlight (sharp white edge, then softer secondary)
+      ctx.fillStyle = 'rgba(255,255,255,0.65)';
+      ctx.fillRect(px, py, w, 1);
+      ctx.fillRect(px, py, 1, w);
+      ctx.fillStyle = 'rgba(255,255,255,0.30)';
+      ctx.fillRect(px, py + 1, w - 1, 1);
+      ctx.fillRect(px + 1, py, 1, w - 1);
+
+      // Bottom + right bevel shadow
+      ctx.fillStyle = 'rgba(0,0,0,0.50)';
+      ctx.fillRect(px, py + w - 1, w, 1);
+      ctx.fillRect(px + w - 1, py, 1, w);
+      ctx.fillStyle = 'rgba(0,0,0,0.20)';
+      ctx.fillRect(px + 1, py + w - 2, w - 2, 1);
+      ctx.fillRect(px + w - 2, py + 1, 1, w - 2);
+
+      // Faint chrome reflection band near the top
+      ctx.fillStyle = 'rgba(255,255,255,0.18)';
+      ctx.fillRect(px + 2, py + 14, w - 4, 1);
+
+      // Small surface scuffs
+      for (let k = 0; k < 4; k++) {
+        const sx = px + 3 + r() * (w - 6);
+        const sy = py + 3 + r() * (w - 6);
+        const sw = 1 + Math.floor(r() * 3);
+        ctx.fillStyle = `rgba(180,185,195,${0.08 + r() * 0.10})`;
+        ctx.fillRect(sx, sy, sw, 1);
+      }
+
+      // Corner screws/markers
+      const cps = [[4, 4], [w - 6, 4], [4, w - 6], [w - 6, w - 6]];
+      for (const [dx, dy] of cps) {
+        ctx.fillStyle = 'rgba(75, 80, 90, 0.7)';
+        ctx.fillRect(px + dx, py + dy, 2, 2);
+        ctx.fillStyle = 'rgba(255,255,255,0.5)';
+        ctx.fillRect(px + dx + 1, py + dy + 1, 1, 1);
+      }
+    }
+  }
+}
+
+// ===== GLOWING FLOOR PANEL — single bright LED-blue square per tile, dark seams =====
+function drawGlowPanel(ctx, seed = 50) {
+  const r = rng(seed);
+  // Dark seam base (the gaps between tiles)
+  ctx.fillStyle = '#080a0e';
+  ctx.fillRect(0, 0, TILE, TILE);
+
+  const gap   = 4;
+  const inner = TILE - gap * 2;
+
+  // Panel base — dim cool blue (the unlit substrate)
+  ctx.fillStyle = '#3a5878';
+  ctx.fillRect(gap, gap, inner, inner);
+
+  // Radial bright centre — the LED illumination falls off toward the edges
+  const cx = TILE / 2, cy = TILE / 2;
+  const grd = ctx.createRadialGradient(cx, cy, 0, cx, cy, inner * 0.55);
+  grd.addColorStop(0,    'rgba(230, 245, 255, 0.85)');
+  grd.addColorStop(0.45, 'rgba(170, 215, 250, 0.55)');
+  grd.addColorStop(1.0,  'rgba(80, 130, 180, 0.0)');
+  ctx.fillStyle = grd;
+  ctx.fillRect(gap, gap, inner, inner);
+
+  // Inner shimmer band (slight overall lift in the middle)
+  ctx.fillStyle = 'rgba(200, 230, 255, 0.20)';
+  ctx.fillRect(gap + 12, gap + 12, inner - 24, inner - 24);
+
+  // Bevel — top/left highlight, bottom/right shadow
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.30)';
+  ctx.fillRect(gap, gap, inner, 1);
+  ctx.fillRect(gap, gap, 1, inner);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.55)';
+  ctx.fillRect(gap, gap + inner - 1, inner, 1);
+  ctx.fillRect(gap + inner - 1, gap, 1, inner);
+
+  // Slight surface noise (panels aren't perfectly uniform)
+  for (let k = 0; k < 12; k++) {
+    const sx = gap + 4 + r() * (inner - 8);
+    const sy = gap + 4 + r() * (inner - 8);
+    ctx.fillStyle = `rgba(70, 100, 140, ${0.10 + r() * 0.12})`;
+    ctx.fillRect(sx, sy, 1 + Math.floor(r() * 2), 1);
+  }
+
+  // Bright pinpoint LEDs at corners
+  const corners = [
+    [gap + 6,         gap + 6],
+    [TILE - gap - 8,  gap + 6],
+    [gap + 6,         TILE - gap - 8],
+    [TILE - gap - 8,  TILE - gap - 8],
+  ];
+  for (const [dx, dy] of corners) {
+    ctx.fillStyle = 'rgba(230, 245, 255, 0.40)';
+    ctx.fillRect(dx - 1, dy - 1, 4, 4);
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.95)';
+    ctx.fillRect(dx, dy, 2, 2);
+  }
+}
+
+// ===== GLASS FLOOR PANEL — clear glass with grey/blue rivets and panel borders =====
+function drawGlassPanel(ctx) {
+  const S = TILE;
+  ctx.clearRect(0, 0, S, S);
+
+  const cells = 2, cell = S / cells, gap = 3;
+
+  for (let cy = 0; cy < cells; cy++) {
+    for (let cx = 0; cx < cells; cx++) {
+      const px = cx * cell + gap, py = cy * cell + gap, w = cell - gap * 2;
+
+      // Very faint glass tint
+      ctx.fillStyle = 'rgba(140, 175, 210, 0.08)';
+      ctx.fillRect(px, py, w, w);
+
+      // Panel border — grey-blue
+      const bw = 2;
+      ctx.fillStyle = 'rgba(85, 120, 160, 0.88)';
+      ctx.fillRect(px, py, w, bw);
+      ctx.fillRect(px, py + w - bw, w, bw);
+      ctx.fillRect(px, py, bw, w);
+      ctx.fillRect(px + w - bw, py, bw, w);
+
+      // Inner bevel glint
+      ctx.fillStyle = 'rgba(160, 200, 235, 0.40)';
+      ctx.fillRect(px + bw, py + bw, w - bw * 2, 1);
+      ctx.fillRect(px + bw, py + bw, 1, w - bw * 2);
+
+      // Rivets at corners
+      const rivetPts = [
+        [px + 6, py + 6], [px + w - 7, py + 6],
+        [px + 6, py + w - 7], [px + w - 7, py + w - 7],
+      ];
+      for (const [rx, ry] of rivetPts) {
+        ctx.fillStyle = 'rgba(65, 100, 145, 0.95)';
+        ctx.beginPath(); ctx.arc(rx, ry, 3, 0, Math.PI * 2); ctx.fill();
+        ctx.fillStyle = 'rgba(155, 195, 230, 0.70)';
+        ctx.beginPath(); ctx.arc(rx - 0.5, ry - 0.5, 1.2, 0, Math.PI * 2); ctx.fill();
+      }
+    }
+  }
+
+  // Seam cross at tile centre
+  ctx.fillStyle = 'rgba(85, 120, 160, 0.55)';
+  ctx.fillRect(S / 2 - 1, gap, 2, S - gap * 2);
+  ctx.fillRect(gap, S / 2 - 1, S - gap * 2, 2);
+}
+
 const cache = {};
 
-export function getWallTexture(kind = 'stone') {
+// Shared kind→draw dispatcher. Either getter below accepts any of these kinds.
+//   'chrome' — Portal-style white chrome panels
+//   'glass'  — clear glass panels with grey/blue rivets (floor)
+//   'glow'   — glowing cool LED-blue panels (pair with an emissive material)
+//   'stone'  — original medieval block masonry  (preserved for fallback)
+//   'cobble' — original medieval cobblestone    (preserved for fallback)
+function drawByKind(kind, ctx) {
+  switch (kind) {
+    case 'chrome': drawPortalPanels(ctx);        break;
+    case 'glass':  drawGlassPanel(ctx);          break;
+    case 'glow':   drawGlowPanel(ctx);           break;
+    case 'stone':  drawStoneBlocks(ctx, 1, null); break;
+    case 'cobble': drawCobblestone(ctx);         break;
+    default:       drawPortalPanels(ctx);        break;
+  }
+}
+
+// Wall texture — defaults to glowing LED panels (was chrome before the swap).
+export function getWallTexture(kind = 'glow') {
   const key = 'w_' + kind;
   if (cache[key]) return cache[key];
   const c = makeCanvas(TILE, TILE);
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
-  drawStoneBlocks(ctx, 1, null);
-  cache[key] = nearestTex(c, [1, 1]); return cache[key];
+  drawByKind(kind, ctx);
+  cache[key] = nearestTex(c, [1, 1]);
+  return cache[key];
 }
 
-export function getFloorTexture(kind = 'cobble') {
+// Floor texture — defaults to white chrome panels (was glow before the swap).
+export function getFloorTexture(kind = 'chrome') {
   const key = 'f_' + kind;
   if (cache[key]) return cache[key];
   const c = makeCanvas(TILE, TILE);
   const ctx = c.getContext('2d');
   ctx.imageSmoothingEnabled = false;
-  drawCobblestone(ctx);
-  cache[key] = nearestTex(c, [1, 1]); return cache[key];
+  drawByKind(kind, ctx);
+  cache[key] = nearestTex(c, [1, 1]);
+  return cache[key];
 }
 
 export function getCeilingTexture() {

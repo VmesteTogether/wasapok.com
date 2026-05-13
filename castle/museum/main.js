@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=10';
-import { buildScene } from './scene.js?v=10';
+import { buildScene } from './scene.js?v=26';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
@@ -20,7 +20,7 @@ const gameEl = document.getElementById('game');
 const renderer = new THREE.WebGLRenderer({ antialias: false, powerPreference: 'high-performance' });
 renderer.outputColorSpace = THREE.SRGBColorSpace;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.1;
+renderer.toneMappingExposure = 0.45;
 renderer.setPixelRatio(1);
 gameEl.appendChild(renderer.domElement);
 
@@ -278,6 +278,7 @@ function animate() {
   if (built.playerLight) {
     built.playerLight.position.set(camera.position.x, 1.6, camera.position.z);
   }
+  if (built.waterMat) built.waterMat.uniforms.uTime.value = t;
 
   // Torch flicker (real flame-y)
   for (let i = 0; i < built.torchLights.length; i++) {

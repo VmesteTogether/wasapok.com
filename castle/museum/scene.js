@@ -1,11 +1,14 @@
 // Wasapok Castle — scene builder.
 // Variable per-cell ceiling height, room-specific props, portal location exposed.
 import * as THREE from 'three';
+import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import {
   getWallTexture, getFloorTexture, getCeilingTexture,
   makeTorchTexture, makeSignTexture, makeBannerTexture,
   makePortalTexture, makeStainedGlass, CAST,
-} from './textures.js';
+} from './textures.js?v=21';
+
+RectAreaLightUniformsLib.init();
 
 const CELL = 2;
 const STD_CEIL = 3.6;
@@ -13,29 +16,51 @@ const STD_CEIL = 3.6;
 export function buildScene(layout, opts) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color(0x040e08);
-  scene.fog = new THREE.Fog(0x040e08, 4, opts.fogDistance ?? 22);
+  scene.fog = new THREE.Fog(0x000000, 3, opts.fogDistance ?? 14);
 
-  // Dim ambient — orbs do the work
-  scene.add(new THREE.AmbientLight(0x0a1e0e, 0.55));
-  scene.add(new THREE.HemisphereLight(0x1a4a22, 0x040e08, 0.25));
+  scene.add(new THREE.AmbientLight(0x020402, 0.15));
+  scene.add(new THREE.HemisphereLight(0x060e08, 0x020402, 0.08));
 
   // Player-follow green light
-  const playerLight = new THREE.PointLight(0x40ff80, 1.6, 8, 2);
+  const playerLight = new THREE.PointLight(0x40ff80, 0.5, 5, 2);
   playerLight.position.set(0, 1.6, 0);
   scene.add(playerLight);
 
   // Materials
-  const wallTex = getWallTexture('stone');
-  const floorTex = getFloorTexture('cobble');
+  // Walls: glowing cool LED-blue panels. Use kind='chrome' for Portal panels,
+  // or 'stone' to restore the original medieval brick masonry.
+  const wallTex = getWallTexture('glow');
+  // Floor: Portal-style white chrome panels. Use 'glow' for LED panels, or
+  // 'cobble' to restore the original cobblestone.
+  const floorTex = getFloorTexture('chrome');
   const ceilTex = getCeilingTexture();
-  const wallMat = new THREE.MeshStandardMaterial({ map: wallTex, roughness: 0.62, metalness: 0.35 });
-  const ceilMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.95, metalness: 0 });
-  const floorMat = new THREE.MeshStandardMaterial({
-    map: floorTex.clone(), roughness: 0.85, metalness: 0.05,
+
+  // Walls — glow: same texture is used as both color and emissive map so the
+  // bright panel pixels emit cool LED-blue light, dark seams stay dark.
+  const wallMat = new THREE.MeshStandardMaterial({
+    map: wallTex,
+    emissive: 0xffffff,
+    emissiveMap: wallTex,
+    emissiveIntensity: 1.8,
+    roughness: 0.45, metalness: 0.20,
   });
-  floorMat.map.wrapS = floorMat.map.wrapT = THREE.RepeatWrapping;
-  floorMat.map.repeat.set(layout.width, layout.height);
-  floorMat.map.needsUpdate = true;
+  const ceilMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.95, metalness: 0 });
+
+  // Floor — glass panels: transparent with grey/blue rivets. Water plane sits below.
+  const glassTex = getFloorTexture('glass');
+  const glassMap = glassTex.clone();
+  glassMap.wrapS = glassMap.wrapT = THREE.RepeatWrapping;
+  glassMap.repeat.set(layout.width, layout.height);
+  glassMap.needsUpdate = true;
+  const floorMat = new THREE.MeshStandardMaterial({
+    map: glassMap,
+    color: 0x9ab8d0,
+    transparent: true,
+    opacity: 0.38,
+    roughness: 0.04,
+    metalness: 0.05,
+    depthWrite: false,
+  });
 
   const ironMat = new THREE.MeshStandardMaterial({ color: 0x2a2520, roughness: 0.6, metalness: 0.8 });
   const woodMat = new THREE.MeshStandardMaterial({ color: 0x4a2e14, roughness: 0.85, metalness: 0 });
@@ -49,19 +74,85 @@ export function buildScene(layout, opts) {
   scene.add(group);
   const W = layout.width * CELL, H = layout.height * CELL;
 
-  // FLOOR
+  // WATER — animated rough water visible through glass floor above
+  const waterMat = new THREE.ShaderMaterial({
+    uniforms: { uTime: { value: 0 } },
+    vertexShader: `
+      varying vec2 vUv;
+      void main() {
+        vUv = uv;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform float uTime;
+      varying vec2 vUv;
+
+      float hash21(vec2 p) {
+        p = fract(p * vec2(234.34, 435.345));
+        p += dot(p, p + 34.23);
+        return fract(p.x * p.y);
+      }
+      float vnoise(vec2 p) {
+        vec2 i = floor(p), f = fract(p);
+        f = f * f * (3.0 - 2.0 * f);
+        return mix(
+          mix(hash21(i), hash21(i + vec2(1,0)), f.x),
+          mix(hash21(i + vec2(0,1)), hash21(i + vec2(1,1)), f.x),
+          f.y);
+      }
+      float fbm(vec2 p) {
+        float v = 0.0, a = 0.5;
+        for (int i = 0; i < 5; i++) {
+          v += vnoise(p) * a; p = p * 2.1 + vec2(1.7, 9.2); a *= 0.5;
+        }
+        return v;
+      }
+
+      void main() {
+        float t = uTime;
+        vec2 uv = vUv * 7.0;
+        vec2 q = vec2(fbm(uv + vec2(t*0.09, t*0.07)),
+                      fbm(uv + vec2(t*0.11, t*0.06) + 5.2));
+        float n = fbm(uv + 2.2 * q + vec2(t*0.04, -t*0.05));
+        float w1 = sin(uv.x * 2.8 + t * 1.0 + n * 5.0) * 0.5 + 0.5;
+        float w2 = sin(uv.y * 2.2 - t * 0.75 + n * 4.0) * 0.5 + 0.5;
+        float w3 = sin((uv.x - uv.y) * 2.0 + t * 1.3 + q.x * 4.0) * 0.5 + 0.5;
+        float wave = n * 0.45 + w1 * 0.22 + w2 * 0.20 + w3 * 0.13;
+
+        vec3 deep  = vec3(0.01, 0.04, 0.11);
+        vec3 mid   = vec3(0.04, 0.11, 0.24);
+        vec3 crest = vec3(0.13, 0.24, 0.40);
+        vec3 foam  = vec3(0.30, 0.40, 0.55);
+        vec3 col = mix(deep, mid,   smoothstep(0.20, 0.58, wave));
+        col       = mix(col, crest, smoothstep(0.50, 0.76, wave));
+        col       = mix(col, foam,  smoothstep(0.73, 0.92, wave) * 0.55);
+        col += vec3(0.4, 0.5, 0.6) * pow(max(0.0, wave - 0.85), 2.0) * 6.0;
+
+        gl_FragColor = vec4(col, 1.0);
+      }
+    `,
+    side: THREE.FrontSide,
+  });
+  const waterMesh = new THREE.Mesh(new THREE.PlaneGeometry(W, H), waterMat);
+  waterMesh.rotation.x = -Math.PI / 2;
+  waterMesh.position.set(W/2 - CELL/2, -0.9, H/2 - CELL/2);
+  waterMesh.renderOrder = -1;
+  group.add(waterMesh);
+
+  // FLOOR — glass panels sit above the water, renderOrder after water so alpha blends correctly
   const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, H), floorMat);
   floor.rotation.x = -Math.PI / 2;
   floor.position.set(W/2 - CELL/2, 0, H/2 - CELL/2);
+  floor.renderOrder = 1;
   group.add(floor);
 
-  // CEILING per-cell (variable height)
+  // CEILING — dark backing plane (near-invisible against fog) gives chandeliers
+  // something to mount to and prevents seeing into the void above.
   const ceilGeom = new THREE.PlaneGeometry(CELL, CELL);
-  const ceilMatI = ceilMat.clone();
-  ceilMatI.map = ceilTex.clone();
-  ceilMatI.map.wrapS = ceilMatI.map.wrapT = THREE.RepeatWrapping;
-  ceilMatI.map.repeat.set(1, 1);
-  ceilMatI.map.needsUpdate = true;
+  const ceilMatI = new THREE.MeshStandardMaterial({
+    color: 0x070b08, roughness: 1, metalness: 0,
+  });
   const floorCells = [];
   for (let y = 0; y < layout.height; y++) for (let x = 0; x < layout.width; x++) {
     if (layout.grid[y][x] === 0) floorCells.push({ x, y, ceilH: layout.ceilH[y][x] });
@@ -77,6 +168,51 @@ export function buildScene(layout, opts) {
   });
   ceilInst.instanceMatrix.needsUpdate = true;
   group.add(ceilInst);
+
+  // STALACTITES — metallic-white blades hanging like grass from every floor cell,
+  // skipping the chandelier cell at each room's centre so nothing pokes through them.
+  {
+    const skipCells = new Set();
+    for (const r of layout.rooms || []) skipCells.add(`${r.cx},${r.cy}`);
+
+    const PER_CELL = 8;
+    const stalGeom = new THREE.CylinderGeometry(0.055, 0.0, 1, 6);
+    stalGeom.translate(0, -0.5, 0); // base at y=0 (ceiling), tip at y=-1
+    const stalMat = new THREE.MeshStandardMaterial({
+      color: 0xeaeaea, metalness: 0.95, roughness: 0.22,
+    });
+    let stalCells = 0;
+    for (const c of floorCells) if (!skipCells.has(`${c.x},${c.y}`)) stalCells++;
+    const stalInst = new THREE.InstancedMesh(stalGeom, stalMat, stalCells * PER_CELL);
+
+    // Seeded RNG so the stalactite layout is stable across reloads.
+    let seed = 0xc0ffee;
+    const rand = () => { seed = (seed * 1664525 + 1013904223) | 0; return ((seed >>> 0) / 4294967296); };
+
+    const eu = new THREE.Euler();
+    let i = 0;
+    for (const c of floorCells) {
+      if (skipCells.has(`${c.x},${c.y}`)) continue;
+      for (let n = 0; n < PER_CELL; n++) {
+        const rx = (rand() - 0.5) * (CELL - 0.18);
+        const rz = (rand() - 0.5) * (CELL - 0.18);
+        const len = 0.18 + rand() * 0.42;       // 0.18 – 0.60 m
+        const thick = 0.55 + rand() * 0.85;
+        const tiltX = (rand() - 0.5) * 0.32;
+        const tiltZ = (rand() - 0.5) * 0.32;
+        const yaw = rand() * Math.PI * 2;
+        v3.set(c.x * CELL + rx, c.ceilH, c.y * CELL + rz);
+        eu.set(tiltX, yaw, tiltZ);
+        q.setFromEuler(eu);
+        sc.set(thick, len, thick);
+        m4.compose(v3, q, sc);
+        stalInst.setMatrixAt(i++, m4);
+      }
+    }
+    sc.set(1, 1, 1); // reset for the wall section below
+    stalInst.instanceMatrix.needsUpdate = true;
+    group.add(stalInst);
+  }
 
   // WALLS as boxes — height = max ceiling of any adjacent floor
   const wallCells = [];
@@ -135,7 +271,7 @@ export function buildScene(layout, opts) {
 
     // Glowing orb core
     const orbMat = new THREE.MeshStandardMaterial({
-      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 2.2,
+      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 4.5,
       roughness: 0.08, metalness: 0.0,
     });
     const orb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), orbMat);
@@ -178,7 +314,7 @@ export function buildScene(layout, opts) {
     // Floating orbs around the ring
     const orbCount = 8;
     const smallOrbMat = new THREE.MeshStandardMaterial({
-      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 2.0,
+      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 4.5,
       roughness: 0.1, metalness: 0,
     });
     for (let i = 0; i < orbCount; i++) {
@@ -206,77 +342,194 @@ export function buildScene(layout, opts) {
     torchLights.push({ light: pl, baseIntensity: intensity, kind: 'chandelier' });
   }
 
-  // ===== UMBRELLA GLASS CHANDELIER — ceiling-mounted dome, faint Half-Life orange =====
+  // ===== ORGANIC ORANGE-GLASS SEA-ANEMONE CHANDELIER — upside-down, ceiling-hung.
+  // ~40 randomly-distributed tapered tentacles emerging from a small fused glass
+  // body, in iconic Half-Life HEV-suit orange. A faint internal glow + soft
+  // surrounding light make the whole organic form clearly visible.
   function addUmbrellaChandelier(wx, wz, ceilH) {
     const grp = new THREE.Group();
     grp.position.set(wx, ceilH, wz);
-    const domeR = 0.72;
 
-    // Ceiling mount disc
-    const mountMesh = new THREE.Mesh(
-      new THREE.CylinderGeometry(0.09, 0.09, 0.06, 12), ironMat
+    // Ceiling mount
+    const mount = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.10, 0.06, 12), ironMat);
+    mount.position.y = -0.03;
+    grp.add(mount);
+
+    // Iron stem — longer in tall hub so the form drops into view
+    const stemLen = ceilH > 4.5 ? 0.85 : 0.18;
+    const stem = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.022, 0.030, stemLen, 8), ironMat
     );
-    mountMesh.position.y = -0.03;
-    grp.add(mountMesh);
+    stem.position.y = -stemLen / 2;
+    grp.add(stem);
 
-    // Glass dome — top hemisphere, pole touches ceiling, rim hangs below
-    // SphereGeometry top half: pole at y=+r, equator at y=0; position.y=-domeR puts pole at ceiling
+    // Anemone group — origin at the bottom of the stem (top of the body)
+    const anem = new THREE.Group();
+    anem.position.y = -stemLen;
+    grp.add(anem);
+
+    // ---- Half-Life iconic HEV-orange palette ----
+    const HL_ORANGE = 0xff6800;   // canonical HEV / Lambda orange
+    const HL_HOT    = 0xff4400;   // deeper hot emissive
+    const HL_BRIGHT = 0xffb060;   // tip highlight
+
+    // Solid glass material — opaque + high emissive + near-zero roughness reads
+    // visually as glowing orange glass. Avoids the z-sort artifacts that plague
+    // overlapping transparent meshes.
     const glassMat = new THREE.MeshStandardMaterial({
-      color: 0xFFAA60, emissive: 0xFF6820, emissiveIntensity: 0.38,
-      transparent: true, opacity: 0.44,
+      color: HL_ORANGE, emissive: HL_HOT, emissiveIntensity: 5.0,
+      roughness: 0.05, metalness: 0.0,
+    });
+    const tipMat = new THREE.MeshStandardMaterial({
+      color: HL_BRIGHT, emissive: 0xff7800, emissiveIntensity: 7.0,
       roughness: 0.04, metalness: 0.0,
-      side: THREE.DoubleSide, depthWrite: false,
     });
-    const dome = new THREE.Mesh(
-      new THREE.SphereGeometry(domeR, 32, 14, 0, Math.PI * 2, 0, Math.PI / 2),
-      glassMat
-    );
-    dome.position.y = -domeR;
-    grp.add(dome);
 
-    // Inner glow shell — renders BackSide for a filled-glass look
-    const innerMat = new THREE.MeshBasicMaterial({
-      color: 0xFF7828, transparent: true, opacity: 0.14,
-      side: THREE.BackSide, depthWrite: false,
-    });
-    const innerDome = new THREE.Mesh(
-      new THREE.SphereGeometry(domeR * 0.91, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2),
-      innerMat
-    );
-    innerDome.position.y = -domeR;
-    grp.add(innerDome);
+    // Custom tapered-tube builder — TubeGeometry uses a constant radius, but
+    // anemone tentacles need to taper from thick base to thin tip.
+    function buildTaperedTube(curve, tubularSegs, radialSegs, radiusFn) {
+      const positions = [];
+      const normals = [];
+      const indices = [];
+      const frames = curve.computeFrenetFrames(tubularSegs, false);
+      const P = new THREE.Vector3();
 
-    // Iron rim ring at the equator
-    const rimRing = new THREE.Mesh(
-      new THREE.TorusGeometry(domeR, 0.022, 8, 40), ironMat
-    );
-    rimRing.rotation.x = Math.PI / 2;
-    rimRing.position.y = -domeR;
-    grp.add(rimRing);
-
-    // 8 iron ribs from pole (0,0,0) to rim points
-    const ribCount = 8;
-    const ribLen = domeR * Math.SQRT2;
-    const upVec = new THREE.Vector3(0, 1, 0);
-    for (let i = 0; i < ribCount; i++) {
-      const a = (i / ribCount) * Math.PI * 2;
-      const rimX = Math.cos(a) * domeR, rimZ = Math.sin(a) * domeR;
-      const rib = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.009, 0.009, ribLen, 5), ironMat
-      );
-      rib.position.set(rimX * 0.5, -domeR * 0.5, rimZ * 0.5);
-      const dir = new THREE.Vector3(rimX, -domeR, rimZ).normalize();
-      rib.quaternion.setFromUnitVectors(upVec, dir);
-      grp.add(rib);
+      for (let i = 0; i <= tubularSegs; i++) {
+        const t = i / tubularSegs;
+        curve.getPointAt(t, P);
+        const r = radiusFn(t);
+        const N = frames.normals[i];
+        const B = frames.binormals[i];
+        for (let j = 0; j <= radialSegs; j++) {
+          const v = (j / radialSegs) * Math.PI * 2;
+          const sin = Math.sin(v), cos = -Math.cos(v);
+          const nx = cos * N.x + sin * B.x;
+          const ny = cos * N.y + sin * B.y;
+          const nz = cos * N.z + sin * B.z;
+          positions.push(P.x + nx * r, P.y + ny * r, P.z + nz * r);
+          normals.push(nx, ny, nz);
+        }
+      }
+      for (let i = 1; i <= tubularSegs; i++) {
+        for (let j = 1; j <= radialSegs; j++) {
+          const a = (radialSegs + 1) * (i - 1) + (j - 1);
+          const b = (radialSegs + 1) *  i      + (j - 1);
+          const c = (radialSegs + 1) *  i      +  j;
+          const d = (radialSegs + 1) * (i - 1) +  j;
+          indices.push(a, b, d, b, c, d);
+        }
+      }
+      const geom = new THREE.BufferGeometry();
+      geom.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geom.setAttribute('normal',   new THREE.Float32BufferAttribute(normals,   3));
+      geom.setIndex(indices);
+      return geom;
     }
 
-    group.add(grp);
+    // Seeded RNG so the layout is stable across reloads
+    let seed = 0xa1cef00d;
+    const rand = () => { seed = (seed * 1664525 + 1013904223) | 0; return ((seed >>> 0) / 4294967296); };
 
-    // Faint orange area light — below the dome opening, low intensity so green orbs dominate
-    const pl = new THREE.PointLight(0xFF6820, 0.52, 14, 1.8);
-    pl.position.set(wx, ceilH - domeR - 0.35, wz);
-    group.add(pl);
-    torchLights.push({ light: pl, baseIntensity: 0.52, kind: 'umbrella' });
+    // ---- Central body ----
+    // Cluster of overlapping fused spheres — reads as an organic glass blob
+    // rather than a clean geometric shape. All in HL orange glass.
+    const BODY_BLOBS = 7;
+    for (let i = 0; i < BODY_BLOBS; i++) {
+      const r = 0.075 + rand() * 0.05;
+      const blob = new THREE.Mesh(new THREE.SphereGeometry(r, 14, 10), glassMat);
+      blob.position.set(
+        (rand() - 0.5) * 0.10,
+        -0.06 + (rand() - 0.5) * 0.06,
+        (rand() - 0.5) * 0.10,
+      );
+      anem.add(blob);
+    }
+
+    // ---- Tentacle mass ----
+    // ~40 tentacles, each emerging from a slightly randomized point near the
+    // body, sweeping outward and down with organic S-curves and tapering radius.
+    const TENTACLES = 42;
+    for (let i = 0; i < TENTACLES; i++) {
+      // Origin slightly jittered around the body centre
+      const oa = rand() * Math.PI * 2;
+      const oR = 0.04 + rand() * 0.07;
+      const ox = Math.cos(oa) * oR;
+      const oz = Math.sin(oa) * oR;
+      const oy = -0.05 + (rand() - 0.5) * 0.07;
+
+      // Exit angle roughly follows origin direction (radial flow), with jitter
+      const a   = oa + (rand() - 0.5) * 0.5;
+      const cs  = Math.cos(a), sn = Math.sin(a);
+
+      // Length / shape varies — some short & stubby, some long & trailing
+      const lengthBias = rand();           // 0..1
+      const reach = 0.20 + lengthBias * 0.70;   // 0.20 – 0.90 m outward
+      const drop  = 0.35 + lengthBias * 0.55 + rand() * 0.20;  // 0.35 – 1.10 m down
+
+      // Mid-curve organic wobble for non-uniform paths
+      const wob1X = (rand() - 0.5) * 0.12;
+      const wob1Z = (rand() - 0.5) * 0.12;
+      const wob1Y = (rand() - 0.5) * 0.10;
+      const wob2X = (rand() - 0.5) * 0.08;
+      const wob2Z = (rand() - 0.5) * 0.08;
+
+      // Tapered radii — base thick (anemone arm), tip thin
+      const baseR = 0.038 + rand() * 0.025;     // 0.038 – 0.063
+      const tipR  = 0.008 + rand() * 0.012;     // 0.008 – 0.020
+
+      const pts = [
+        new THREE.Vector3(ox,                             oy,                          oz),
+        new THREE.Vector3(ox + cs * 0.10,                 oy - drop * 0.12,            oz + sn * 0.10),
+        new THREE.Vector3(cs * (reach * 0.45) + wob1X,    oy - drop * 0.45 + wob1Y,    sn * (reach * 0.45) + wob1Z),
+        new THREE.Vector3(cs * (reach * 0.78) + wob2X,    oy - drop * 0.78,            sn * (reach * 0.78) + wob2Z),
+        new THREE.Vector3(cs * reach,                     oy - drop,                   sn * reach),
+      ];
+      const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.45);
+      // Smooth taper with slight power-curve bias toward thinner tips
+      const radiusFn = (t) => baseR + (tipR - baseR) * Math.pow(t, 1.25);
+      const geom = buildTaperedTube(curve, 16, 7, radiusFn);
+      anem.add(new THREE.Mesh(geom, glassMat));
+
+      // Bright nematocyst tip bulb
+      const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(tipR * 2.4, 8, 6), tipMat
+      );
+      bulb.position.copy(curve.getPoint(1));
+      anem.add(bulb);
+    }
+
+    // Single transparent halo — visible orange aura around the form
+    const halo = new THREE.Mesh(
+      new THREE.SphereGeometry(0.55, 18, 12),
+      new THREE.MeshBasicMaterial({
+        color: HL_ORANGE, transparent: true, opacity: 0.08, depthWrite: false,
+      })
+    );
+    halo.position.y = -0.30;
+    anem.add(halo);
+
+    // ---- Lighting ----
+    // Three layers: an internal point light makes the form self-illuminate so
+    // every tentacle reads, a soft RectAreaLight casts a faint orange wash on
+    // the floor below, and a wider PointLight tints the surrounding walls.
+    const anemY = ceilH - stemLen;
+
+    // Internal — small range, illuminates the tentacle mass from within
+    const inner = new THREE.PointLight(0xff8030, 4.0, 2.2, 1.4);
+    inner.position.set(wx, anemY - 0.10, wz);
+    group.add(inner);
+
+    // Soft downward area wash
+    const area = new THREE.RectAreaLight(HL_ORANGE, 14.0, 3.0, 3.0);
+    area.position.set(wx, anemY - 0.50, wz);
+    area.lookAt(wx, 0, wz);
+    group.add(area);
+
+    // Faint room-wide orange glow — drives the gentle 'umbrella' flicker
+    const glow = new THREE.PointLight(HL_ORANGE, 4.0, 14, 1.7);
+    glow.position.set(wx, anemY - 0.30, wz);
+    group.add(glow);
+    torchLights.push({ light: glow, baseIntensity: 4.0, kind: 'umbrella' });
   }
 
   for (const l of layout.lights || []) {
@@ -595,6 +848,7 @@ export function buildScene(layout, opts) {
     artObjects: [],
     floorMat, ceilMat: ceilMatI, wallMat,
     playerLight,
+    waterMat,
     portal: portalInfo,
     CELL, WALL_H: STD_CEIL,
   };
