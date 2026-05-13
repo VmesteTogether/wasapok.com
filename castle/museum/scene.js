@@ -7,6 +7,7 @@ import {
   makeTorchTexture, makeSignTexture, makeBannerTexture,
   makePortalTexture, makeStainedGlass, CAST,
 } from './textures.js?v=33';
+import { GATE_W, GATE_H, GATE_PIXELS } from './gnominium-data.js?v=1';
 
 RectAreaLightUniformsLib.init();
 
@@ -1295,6 +1296,140 @@ export function buildScene(layout, opts) {
     }
   }
 
+  // ===== GNOMINIUM GATE — pixel-accurate sprite reconstruction at west corridor end =====
+  // Each non-transparent pixel of GnominiumGateSprite_baseV2.png becomes a small
+  // extruded cube. Categories drive material + animation.
+  const gnomGate = (() => {
+    const armoryR = layout.rooms.find(r => r.kind === 'armory');
+    if (!armoryR) return null;
+
+    const PIXEL = 0.04;   // 0.04 m per sprite pixel → 1.92 × 2.56 m gate
+    const DEPTH = 0.10;   // extrusion depth toward the player
+
+    // Back face of gate sits flush with the corridor-end wall (west face of last corridor tile)
+    const gateBackX = (armoryR.x0 + armoryR.w + 0.5) * CELL + 0.015;
+    const gateZ     = armoryR.cy * CELL;
+    const cubeCX    = gateBackX + DEPTH / 2;
+
+    // Sprite-pixel (px,py) → world coords. py=0 is top of sprite, py=GATE_H-1 is bottom.
+    // Lift by PIXEL/2 so the bottom face of bottom-row pixels sits exactly at the floor.
+    const pxToY = py => (GATE_H - 1 - py) * PIXEL + PIXEL / 2;
+    const pxToZ = px => gateZ + (px - GATE_W / 2 + 0.5) * PIXEL;
+
+    // Bucket the pixel list by category
+    const buckets = { metal: [], orb: [], eye: [], fr: [], fy: [], fb: [], pk: [], oh: [] };
+    for (const p of GATE_PIXELS) {
+      const cat = p[2];
+      if (cat[0] === 'M')      buckets.metal.push(p);
+      else if (cat === 'OH')   buckets.oh.push(p);
+      else if (cat[0] === 'O') buckets.orb.push(p);
+      else if (cat === 'EY')   buckets.eye.push(p);
+      else if (cat === 'FR')   buckets.fr.push(p);
+      else if (cat === 'FY')   buckets.fy.push(p);
+      else if (cat === 'FB')   buckets.fb.push(p);
+      else if (cat === 'PK')   buckets.pk.push(p);
+    }
+
+    const cubeGeom = new THREE.BoxGeometry(DEPTH, PIXEL, PIXEL);
+
+    // Materials
+    const metalMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.28, metalness: 0.88,
+      emissive: 0x0a1834, emissiveIntensity: 0.35,
+    });
+    const orbMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, emissive: 0xff3010, emissiveIntensity: 2.2,
+      roughness: 0.30, metalness: 0.05,
+    });
+    const eyeMat = new THREE.MeshStandardMaterial({
+      color: 0x8cff3b, emissive: 0x60ff20, emissiveIntensity: 9.0,
+      roughness: 0.10, metalness: 0.0,
+    });
+    const frMat = new THREE.MeshStandardMaterial({
+      color: 0xff6060, emissive: 0xff2020, emissiveIntensity: 5.0, roughness: 0.20,
+    });
+    const fyMat = new THREE.MeshStandardMaterial({
+      color: 0xfff080, emissive: 0xfff020, emissiveIntensity: 5.0, roughness: 0.20,
+    });
+    const fbMat = new THREE.MeshStandardMaterial({
+      color: 0x80b0ff, emissive: 0x4070ff, emissiveIntensity: 5.0, roughness: 0.20,
+    });
+    const pkMat = new THREE.MeshStandardMaterial({
+      color: 0xff8acc, emissive: 0xff4099, emissiveIntensity: 3.0, roughness: 0.25,
+    });
+    const ohMat = new THREE.MeshStandardMaterial({
+      color: 0xeee09a, emissive: 0xc6a040, emissiveIntensity: 1.4,
+      roughness: 0.30, metalness: 0.45,
+    });
+
+    // Visual centre of the orb (matches sprite eye position, also the bbox centre).
+    // Orb pixels are positioned RELATIVE to this centre so the orb group can bob.
+    const orbCenter = new THREE.Vector3(cubeCX, pxToY(22), pxToZ(23));
+
+    function buildInstanced(pixels, mat, opts = {}) {
+      if (pixels.length === 0) return null;
+      const mesh = new THREE.InstancedMesh(cubeGeom, mat, pixels.length);
+      const m4 = new THREE.Matrix4();
+      const sc = new THREE.Vector3(1, 1, 1);
+      const q  = new THREE.Quaternion();
+      const v  = new THREE.Vector3();
+      const col = new THREE.Color();
+      pixels.forEach((p, i) => {
+        const [px, py, , hex] = p;
+        v.set(cubeCX, pxToY(py), pxToZ(px));
+        if (opts.relativeTo) v.sub(opts.relativeTo);
+        m4.compose(v, q, sc);
+        mesh.setMatrixAt(i, m4);
+        if (opts.useHexColor) {
+          col.set('#' + hex);
+          mesh.setColorAt(i, col);
+        }
+      });
+      mesh.instanceMatrix.needsUpdate = true;
+      if (opts.useHexColor && mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
+      return mesh;
+    }
+
+    // Static structures (anchored to the wall)
+    const metalMesh = buildInstanced(buckets.metal, metalMat, { useHexColor: true });
+    const ohMesh    = buildInstanced(buckets.oh,    ohMat);
+    const pkMesh    = buildInstanced(buckets.pk,    pkMat);
+    const frMesh    = buildInstanced(buckets.fr,    frMat);
+    const fyMesh    = buildInstanced(buckets.fy,    fyMat);
+    const fbMesh    = buildInstanced(buckets.fb,    fbMat);
+    if (metalMesh) group.add(metalMesh);
+    if (ohMesh)    group.add(ohMesh);
+    if (pkMesh)    group.add(pkMesh);
+    if (frMesh)    group.add(frMesh);
+    if (fyMesh)    group.add(fyMesh);
+    if (fbMesh)    group.add(fbMesh);
+
+    // Floating orb group — orb + green eye bob together
+    const orbGroup = new THREE.Group();
+    orbGroup.position.copy(orbCenter);
+    group.add(orbGroup);
+
+    const orbMesh = buildInstanced(buckets.orb, orbMat, { relativeTo: orbCenter, useHexColor: true });
+    const eyeMesh = buildInstanced(buckets.eye, eyeMat, { relativeTo: orbCenter });
+    if (orbMesh) orbGroup.add(orbMesh);
+    if (eyeMesh) orbGroup.add(eyeMesh);
+
+    // Lights — single orb point light + dim fill at gate base
+    const orbLight = new THREE.PointLight(0xff5020, 2.8, 7, 1.8);
+    orbLight.position.set(cubeCX + 0.2, orbCenter.y, orbCenter.z);
+    group.add(orbLight);
+
+    // Register animated entries in torchLights
+    torchLights.push({ kind: 'gnomGateOrb',   light: orbLight, baseIntensity: 2.8,
+                       orbGroup, orbBaseY: orbCenter.y, orbMat, eyeMat });
+    torchLights.push({ kind: 'gnomGateFlash', mat: frMat, base: 5.0, freq: 7.0, phase: 0.0 });
+    torchLights.push({ kind: 'gnomGateFlash', mat: fyMat, base: 5.0, freq: 5.5, phase: 1.7 });
+    torchLights.push({ kind: 'gnomGateFlash', mat: fbMat, base: 5.0, freq: 4.2, phase: 3.4 });
+    torchLights.push({ kind: 'gnomGateFlash', mat: pkMat, base: 3.0, freq: 3.1, phase: 2.2 });
+
+    return { orbGroup, orbCenter, gateBackX };
+  })();
+
   return {
     scene, group,
     walls, floorMesh: floor, ceilMesh: ceilInst,
@@ -1305,6 +1440,7 @@ export function buildScene(layout, opts) {
     waterMat,
     saloonDoors,
     portal: portalInfo,
+    gnomGate,
     CELL, WALL_H: STD_CEIL,
   };
 }

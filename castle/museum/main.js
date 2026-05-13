@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=12';
-import { buildScene } from './scene.js?v=47';
+import { buildScene } from './scene.js?v=48';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
@@ -296,6 +296,19 @@ function animate() {
       // Slow magical pulse
       const f = 0.7 + Math.sin(t * 2.1) * 0.25 + Math.sin(t * 5.3) * 0.05;
       tl.light.intensity = tl.baseIntensity * f;
+    } else if (tl.kind === 'gnomGateOrb') {
+      // Orange orb floats up/down and pulses; green eye breathes
+      const bob = Math.sin(t * 1.3) * 0.06 + Math.sin(t * 0.45) * 0.025;
+      if (tl.orbGroup) tl.orbGroup.position.y = tl.orbBaseY + bob;
+      const f = 0.78 + Math.sin(t * 1.5) * 0.18 + Math.sin(t * 4.3) * 0.06;
+      tl.light.intensity = tl.baseIntensity * f;
+      if (tl.orbMat) tl.orbMat.emissiveIntensity = 1.9 + Math.sin(t * 1.5) * 0.55 + Math.random() * 0.10;
+      if (tl.eyeMat) tl.eyeMat.emissiveIntensity = 7.5 + Math.sin(t * 2.7) * 2.5;
+    } else if (tl.kind === 'gnomGateFlash') {
+      // Discrete blinking — each light has its own frequency + phase
+      const phase = Math.sin(t * tl.freq + tl.phase);
+      const on = phase > 0.2 ? 1.0 : 0.15;
+      tl.mat.emissiveIntensity = tl.base * (on * 0.85 + 0.15 + Math.random() * 0.08);
     } else {
       const f = 0.96 + Math.sin(t * 1.8 + i * 0.4) * 0.04;
       tl.light.intensity = tl.baseIntensity * f;
