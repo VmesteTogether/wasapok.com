@@ -99,70 +99,23 @@ export async function buildScene() {
   const boundaryBoxes = boundaries.map(b => ({ name: b.name, box: bboxOf(b.obj) }));
   const building1Box = boundaryBoxes.find(b => b.name === 'Building 1')?.box || null;
 
-  // ----- Procedural portcullis replacing Gate 1 GLB mesh -----
+  // ----- Apply portcullis-style gate texture to "Gate 1" -----
+  // Vertical iron bars with transparent gaps so the grass shows through.
   const gateObj = find('Gate 1');
-  const gateBb  = boundaryBoxes.find(b => b.name === 'Gate 1')?.box;
-  if (gateObj) gateObj.parent?.remove(gateObj);
-
-  if (gateBb) {
-    const gW = gateBb.max.x - gateBb.min.x;
-    const gD = gateBb.max.z - gateBb.min.z;
-    const gH = gateBb.max.y - gateBb.min.y;
-    const spanX = gW >= gD;
-    const span  = spanX ? gW : gD;
-    const gateCX = (gateBb.min.x + gateBb.max.x) / 2;
-    const gateCZ = (gateBb.min.z + gateBb.max.z) / 2;
-
-    const ironMat  = new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.50, metalness: 0.90 });
-    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x484440, roughness: 0.90, metalness: 0.05 });
-
-    const FRAME = 0.20;   // pillar / top-beam thickness
-    const BAR   = 0.058;  // square bar side
-    const SPIKE = 0.34;   // spike height
-
-    const portGroup = new THREE.Group();
-    portGroup.position.set(gateCX, gateBb.min.y, gateCZ);
-    if (!spanX) portGroup.rotation.y = Math.PI / 2;
-
-    // Side pillars
-    for (const sx of [-1, 1]) {
-      const pillar = new THREE.Mesh(
-        new THREE.BoxGeometry(FRAME, gH + SPIKE, FRAME), stoneMat
-      );
-      pillar.position.set(sx * (span / 2 + FRAME / 2), (gH + SPIKE) / 2, 0);
-      portGroup.add(pillar);
-    }
-    // Top beam
-    const beam = new THREE.Mesh(
-      new THREE.BoxGeometry(span + FRAME * 2, FRAME, FRAME), stoneMat
-    );
-    beam.position.set(0, gH + SPIKE - FRAME / 2, 0);
-    portGroup.add(beam);
-
-    // Vertical bars + spike tops
-    const numBars = Math.max(3, Math.round(span / 0.44));
-    const barStep = span / numBars;
-    for (let i = 0; i < numBars; i++) {
-      const bx = -span / 2 + barStep * (i + 0.5);
-      const bar = new THREE.Mesh(new THREE.BoxGeometry(BAR, gH, BAR), ironMat);
-      bar.position.set(bx, gH / 2, 0);
-      portGroup.add(bar);
-      const spike = new THREE.Mesh(new THREE.ConeGeometry(BAR * 1.1, SPIKE, 4), ironMat);
-      spike.rotation.y = Math.PI / 4;
-      spike.position.set(bx, gH + SPIKE / 2, 0);
-      portGroup.add(spike);
-    }
-
-    // Horizontal crossbars
-    for (const frac of [0.28, 0.58, 0.82]) {
-      const cross = new THREE.Mesh(
-        new THREE.BoxGeometry(span, BAR * 0.85, BAR * 0.85), ironMat
-      );
-      cross.position.set(0, gH * frac, 0);
-      portGroup.add(cross);
-    }
-
-    scene.add(portGroup);
+  if (gateObj) {
+    const gateTex = makeGateTexture();
+    gateTex.repeat.set(6, 1);
+    gateObj.traverse(child => {
+      if (!child.isMesh) return;
+      child.material = new THREE.MeshStandardMaterial({
+        map: gateTex,
+        alphaTest: 0.5,            // hard pixel edge, no transparency sorting
+        side: THREE.DoubleSide,
+        color: 0xb8a890,
+        metalness: 0.55,
+        roughness: 0.45,
+      });
+    });
   }
 
   // ----- Build tile grid covering the walkable plane -----
