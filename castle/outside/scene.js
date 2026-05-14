@@ -269,9 +269,9 @@ export async function buildScene() {
 
   scene.fog = new THREE.FogExp2(0x8aaabf, 0.018);
 
-  // ----- Animated cel-shaded ocean with whitecaps -----
+  // ----- Animated cel-shaded ocean with animated whitecap particles -----
   {
-    // Toon gradient matching original deep blue palette
+    // Toon gradient: deep shadow → original blue → highlight
     const gradCanvas = document.createElement('canvas');
     gradCanvas.width = 3; gradCanvas.height = 1;
     const gc = gradCanvas.getContext('2d');
@@ -282,21 +282,26 @@ export async function buildScene() {
     gradMap.minFilter = THREE.NearestFilter;
     gradMap.magFilter = THREE.NearestFilter;
 
-    // Whitecap foam streaks (white on black → emissiveMap)
-    const foamCanvas = document.createElement('canvas');
-    foamCanvas.width = 128; foamCanvas.height = 128;
-    const fg = foamCanvas.getContext('2d');
-    fg.fillStyle = '#000'; fg.fillRect(0, 0, 128, 128);
-    fg.strokeStyle = '#fff'; fg.lineCap = 'round';
-    for (const [x1,y1,x2,y2,w] of [
-      [8,18,38,15,1],[55,8,90,5,1.5],[100,25,122,22,1],
-      [15,50,55,47,1.5],[70,42,110,38,1],[5,75,35,72,1.5],
-      [85,68,120,65,1],[40,95,80,92,1.5],[20,115,58,112,1.5],
-      [65,108,100,105,1],[108,115,126,112,1],
-    ]) { fg.lineWidth = w; fg.beginPath(); fg.moveTo(x1,y1); fg.lineTo(x2,y2); fg.stroke(); }
-    const foamTex = new THREE.CanvasTexture(foamCanvas);
+    // Whitecap particle system — redrawn every frame
+    const WC = 256;
+    const wcCanvas = document.createElement('canvas');
+    wcCanvas.width = WC; wcCanvas.height = WC;
+    const wg = wcCanvas.getContext('2d');
+    const caps = [];
+    function spawnCap(startAge) {
+      caps.push({
+        x: Math.random() * WC, y: Math.random() * WC,
+        len: 7 + Math.random() * 18,
+        angle: (Math.random() - 0.5) * 0.5,
+        age: startAge ?? 0,
+        life: 1.8 + Math.random() * 2.4,
+      });
+    }
+    for (let i = 0; i < 20; i++) spawnCap(Math.random() * 4);
+
+    const foamTex = new THREE.CanvasTexture(wcCanvas);
     foamTex.wrapS = foamTex.wrapT = THREE.RepeatWrapping;
-    foamTex.repeat.set(8, 8);
+    foamTex.repeat.set(6, 6);
     foamTex.magFilter = THREE.NearestFilter;
     foamTex.minFilter = THREE.NearestFilter;
 
@@ -306,16 +311,24 @@ export async function buildScene() {
     oceanGeom.attributes.position.usage = THREE.DynamicDrawUsage;
     oceanGeom.attributes.normal.usage   = THREE.DynamicDrawUsage;
     const _oOrig = new Float32Array(oceanGeom.attributes.position.array);
-    const oceanMesh = new THREE.Mesh(oceanGeom, new THREE.MeshToonMaterial({
+
+    const oceanMat = new THREE.MeshToonMaterial({
       color: 0x1a5070,
       gradientMap: gradMap,
       emissive: 0xffffff,
       emissiveMap: foamTex,
-      emissiveIntensity: 0.65,
-    }));
+      emissiveIntensity: 0.55,
+    });
+    const oceanMesh = new THREE.Mesh(oceanGeom, oceanMat);
     oceanMesh.position.set(wbcX, -2.50, wbcZ);
+
+    let _prevT = -1;
     oceanMesh.onBeforeRender = () => {
       const t = performance.now() * 0.001;
+      const dt = _prevT < 0 ? 0 : Math.min(t - _prevT, 0.1);
+      _prevT = t;
+
+      // Wave geometry
       const pa = oceanGeom.attributes.position.array;
       for (let i = 0, n = pa.length / 3; i < n; i++) {
         const x = _oOrig[i * 3], z = _oOrig[i * 3 + 2];
@@ -328,9 +341,29 @@ export async function buildScene() {
       oceanGeom.attributes.position.needsUpdate = true;
       oceanGeom.computeVertexNormals();
       oceanGeom.attributes.normal.needsUpdate = true;
-      foamTex.offset.x = t * 0.008;
-      foamTex.offset.y = t * 0.003;
-      oceanMesh.material.emissiveIntensity = (Math.sin(t * 0.22) * 0.45 + 0.55) * (Math.sin(t * 0.47) * 0.20 + 0.80) * 0.50;
+
+      // Whitecap particles
+      wg.clearRect(0, 0, WC, WC);
+      wg.strokeStyle = '#fff';
+      wg.lineCap = 'round';
+      wg.lineWidth = 1.2;
+      for (let i = caps.length - 1; i >= 0; i--) {
+        caps[i].age += dt;
+        if (caps[i].age >= caps[i].life) { caps.splice(i, 1); spawnCap(); continue; }
+        const p = caps[i].age / caps[i].life;
+        const alpha = p < 0.25 ? p / 0.25 : p > 0.70 ? (1 - p) / 0.30 : 1.0;
+        wg.globalAlpha = alpha * 0.88;
+        const cx = Math.cos(caps[i].angle), cy = Math.sin(caps[i].angle);
+        const hl = caps[i].len * 0.5;
+        wg.beginPath();
+        wg.moveTo(caps[i].x - cx * hl, caps[i].y - cy * hl);
+        wg.lineTo(caps[i].x + cx * hl, caps[i].y + cy * hl);
+        wg.stroke();
+      }
+      wg.globalAlpha = 1;
+      foamTex.needsUpdate = true;
+      foamTex.offset.x = t * 0.003;
+      foamTex.offset.y = t * 0.001;
     };
     scene.add(oceanMesh);
   }
