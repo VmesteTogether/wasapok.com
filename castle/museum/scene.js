@@ -611,7 +611,6 @@ export function buildScene(layout, opts) {
         const accentRing = new THREE.Mesh(
           new THREE.TorusGeometry(0.064, 0.010, 6, 16), doorAccentMat
         );
-        accentRing.rotation.x = Math.PI / 2;
         accentRing.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, fz);
         leaf.add(accentRing);
       }
