@@ -4,7 +4,7 @@
 // fades and navigates to main-hall.html.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=32';
+import { buildScene } from './scene.js?v=33';
 
 const opts = {
   pixelation: 3,

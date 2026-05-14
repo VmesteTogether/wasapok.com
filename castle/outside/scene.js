@@ -269,6 +269,37 @@ export async function buildScene() {
 
   scene.fog = new THREE.FogExp2(0x8aaabf, 0.018);
 
+  // ----- Animated ocean surrounding castle island -----
+  {
+    const SEG = 64, SIZE = 500;
+    const oceanGeom = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+    oceanGeom.rotateX(-Math.PI / 2);
+    oceanGeom.attributes.position.usage = THREE.DynamicDrawUsage;
+    const _oOrig = new Float32Array(oceanGeom.attributes.position.array);
+    const oceanMesh = new THREE.Mesh(oceanGeom, new THREE.MeshStandardMaterial({
+      color: 0x1a4f6e,
+      emissive: 0x06182a,
+      emissiveIntensity: 0.20,
+      metalness: 0.72,
+      roughness: 0.28,
+    }));
+    oceanMesh.position.set(wbcX, -0.30, wbcZ);
+    oceanMesh.onBeforeRender = () => {
+      const t = performance.now() * 0.001;
+      const pa = oceanGeom.attributes.position.array;
+      for (let i = 0, n = pa.length / 3; i < n; i++) {
+        const x = _oOrig[i * 3], z = _oOrig[i * 3 + 2];
+        pa[i * 3 + 1] = _oOrig[i * 3 + 1]
+          + Math.sin(x * 0.14 + t * 0.90) * 0.45
+          + Math.sin(z * 0.11 + t * 0.65) * 0.35
+          + Math.sin((x + z) * 0.07 + t * 1.30) * 0.22
+          + Math.sin((x - z) * 0.09 + t * 0.50) * 0.18;
+      }
+      oceanGeom.attributes.position.needsUpdate = true;
+    };
+    scene.add(oceanMesh);
+  }
+
   // ----- Floating vase sculpture (Eskleo-Vase-01.obj) at walkable-plane centre -----
   const vaseGroup = new THREE.Group();
   const vaseBaseY = 2.6;
@@ -355,54 +386,4 @@ export async function buildScene() {
     sun, hemi,
     vaseGroup, vaseBaseY,
   };
-}
-
-// Procedural canvas texture for Gate 1: dark iron vertical bars on
-// transparent background, with thicker top/bottom rails. Pixelated.
-function makeGateTexture() {
-  const c = document.createElement('canvas');
-  c.width = 128; c.height = 256;
-  const g = c.getContext('2d');
-  g.clearRect(0, 0, c.width, c.height);
-
-  // Top + bottom rails (full opaque iron)
-  g.fillStyle = '#241a10';
-  g.fillRect(0, 0, c.width, 22);
-  g.fillRect(0, c.height - 22, c.width, 22);
-  // Rail highlights
-  g.fillStyle = '#5a4428';
-  g.fillRect(0, 2, c.width, 2);
-  g.fillRect(0, c.height - 22, c.width, 2);
-
-  // 6 vertical bars across, equal spacing
-  const numBars = 6;
-  const barW = 10;
-  const totalBars = numBars * barW;
-  const gap = (c.width - totalBars) / (numBars + 1);
-
-  for (let i = 0; i < numBars; i++) {
-    const x = Math.round(gap + i * (barW + gap));
-    // Bar body
-    g.fillStyle = '#2a1d10';
-    g.fillRect(x, 0, barW, c.height);
-    // Specular highlight (left side, 2px)
-    g.fillStyle = '#6a5028';
-    g.fillRect(x + 1, 0, 2, c.height);
-    // Mid tone
-    g.fillStyle = '#3c2c18';
-    g.fillRect(x + 4, 0, barW - 6, c.height);
-    // Rivets at top + bottom
-    g.fillStyle = '#1a1208';
-    g.fillRect(x + barW / 2 - 1, 26, 2, 2);
-    g.fillRect(x + barW / 2 - 1, c.height - 28, 2, 2);
-  }
-
-  const tex = new THREE.CanvasTexture(c);
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  tex.wrapS = THREE.RepeatWrapping;
-  tex.wrapT = THREE.ClampToEdgeWrapping;
-  tex.generateMipmaps = false;
-  tex.needsUpdate = true;
-  return tex;
 }
