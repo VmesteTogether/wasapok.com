@@ -160,31 +160,85 @@ export async function buildScene() {
     }
   }
 
-  // ----- Trigger: a single walkable tile near the center of the walkable plane.
-  // Independent of Building 1's bbox (which is unreliable in this glb). The
-  // player can see the red pad on the ground and walk onto it.
+  // ----- Spawn anchor: the walkable tile nearest the centre of the plane.
+  // Only used to derive the spawn position; not the actual trigger pad. -----
   const wbcX = (walkableBox.min.x + walkableBox.max.x) * 0.5;
   const wbcZ = (walkableBox.min.z + walkableBox.max.z) * 0.5;
   const ctrX = Math.floor(wbcX / CELL);
   const ctrY = Math.floor(wbcZ / CELL);
-  let triggerTile = null;
+  let centerTile = null;
   {
     let bestD = Infinity;
     for (let ty = 0; ty < H; ty++) {
       for (let tx = 0; tx < W; tx++) {
         if (grid[ty][tx] !== 0) continue;
         const d = (tx - ctrX) * (tx - ctrX) + (ty - ctrY) * (ty - ctrY);
-        if (d < bestD) { bestD = d; triggerTile = { x: tx, y: ty }; }
+        if (d < bestD) { bestD = d; centerTile = { x: tx, y: ty }; }
       }
     }
+  }
+
+  // ----- Spawn: back against the gate, centered across the walkable plane,
+  // facing the castle. Derived from the centre anchor as before. -----
+  let spawn = null;
+  if (centerTile) {
+    let maxDX = 0, maxDY = 0;
+    for (let ty = 0; ty < H; ty++) {
+      for (let tx = 0; tx < W; tx++) {
+        if (grid[ty][tx] !== 0) continue;
+        const adx = Math.abs(tx - centerTile.x);
+        const ady = Math.abs(ty - centerTile.y);
+        if (adx > maxDX) maxDX = adx;
+        if (ady > maxDY) maxDY = ady;
+      }
+    }
+    const useX = maxDX > maxDY;
+    const extremeMax = useX ? maxDX : maxDY;
+
+    let best = null, bestPerp = Infinity;
+    for (let ty = 0; ty < H; ty++) {
+      for (let tx = 0; tx < W; tx++) {
+        if (grid[ty][tx] !== 0) continue;
+        const extreme = useX ? Math.abs(tx - centerTile.x) : Math.abs(ty - centerTile.y);
+        if (extreme !== extremeMax) continue;
+        const perp = useX ? Math.abs(ty - centerTile.y) : Math.abs(tx - centerTile.x);
+        if (perp < bestPerp) { bestPerp = perp; best = { x: tx, y: ty }; }
+      }
+    }
+
+    if (best) {
+      const dxn = centerTile.x - best.x;
+      const dyn = centerTile.y - best.y;
+      let dir;
+      if (Math.abs(dxn) > Math.abs(dyn)) dir = dxn > 0 ? 1 : 3;
+      else                                dir = dyn > 0 ? 2 : 0;
+      spawn = { x: best.x, y: best.y, dir };
+    }
+  }
+  if (!spawn) {
+    spawn = { x: Math.floor(W / 2), y: Math.floor(H / 2), dir: 0 };
+  }
+
+  // Trigger pad: 10 tiles forward of spawn (5 past the previous position,
+  // i.e. closer to the castle). Falls back to the farthest valid tile if
+  // that exact tile is blocked or off-grid.
+  const FORWARD_TILES = 10;
+  const fwdDx = [0, 1, 0, -1][spawn.dir];
+  const fwdDy = [-1, 0, 1, 0][spawn.dir];
+  let triggerTile = null;
+  for (let n = FORWARD_TILES; n >= 1; n--) {
+    const tx = spawn.x + fwdDx * n;
+    const ty = spawn.y + fwdDy * n;
+    if (ty < 0 || ty >= H || tx < 0 || tx >= W) continue;
+    if (grid[ty][tx] !== 0) continue;
+    triggerTile = { x: tx, y: ty };
+    break;
   }
   const triggerTiles = triggerTile ? [triggerTile] : [];
 
   // ----- Visible red trigger pad on the walkable plane -----
   const triggerMarkerGroup = new THREE.Group();
   if (triggerTile) {
-    // A slightly raised red slab — bright enough to spot from a distance,
-    // low enough that the player walks over it normally.
     const padGeom = new THREE.BoxGeometry(CELL * 0.9, 0.06, CELL * 0.9);
     const padMat = new THREE.MeshBasicMaterial({ color: 0xff2030 });
     const pad = new THREE.Mesh(padGeom, padMat);
@@ -198,51 +252,7 @@ export async function buildScene() {
   }
 
   console.log('[outside] walkable bbox', walkableBox);
-  console.log('[outside] grid', W, 'x', H, 'triggerTile=', triggerTile);
-
-  // ----- Spawn: back against the gate, centered across the walkable plane,
-  // facing the trigger pad (and thus the castle beyond it). -----
-  let spawn = null;
-  if (triggerTile) {
-    // Find max extent along each axis among walkable tiles. The axis with
-    // the larger extent is the gate-to-castle axis; spawn at its far end
-    // and centre on the perpendicular axis.
-    let maxDX = 0, maxDY = 0;
-    for (let ty = 0; ty < H; ty++) {
-      for (let tx = 0; tx < W; tx++) {
-        if (grid[ty][tx] !== 0) continue;
-        const adx = Math.abs(tx - triggerTile.x);
-        const ady = Math.abs(ty - triggerTile.y);
-        if (adx > maxDX) maxDX = adx;
-        if (ady > maxDY) maxDY = ady;
-      }
-    }
-    const useX = maxDX > maxDY;
-    const extremeMax = useX ? maxDX : maxDY;
-
-    let best = null, bestPerp = Infinity;
-    for (let ty = 0; ty < H; ty++) {
-      for (let tx = 0; tx < W; tx++) {
-        if (grid[ty][tx] !== 0) continue;
-        const extreme = useX ? Math.abs(tx - triggerTile.x) : Math.abs(ty - triggerTile.y);
-        if (extreme !== extremeMax) continue;
-        const perp = useX ? Math.abs(ty - triggerTile.y) : Math.abs(tx - triggerTile.x);
-        if (perp < bestPerp) { bestPerp = perp; best = { x: tx, y: ty }; }
-      }
-    }
-
-    if (best) {
-      const dxn = triggerTile.x - best.x;
-      const dyn = triggerTile.y - best.y;
-      let dir;
-      if (Math.abs(dxn) > Math.abs(dyn)) dir = dxn > 0 ? 1 : 3;
-      else                                dir = dyn > 0 ? 2 : 0;
-      spawn = { x: best.x, y: best.y, dir };
-    }
-  }
-  if (!spawn) {
-    spawn = { x: Math.floor(W / 2), y: Math.floor(H / 2), dir: 0 };
-  }
+  console.log('[outside] spawn=', spawn, ' triggerTile=', triggerTile);
 
   // ----- Atmospheric fog at edge of the textured ground planes -----
   // Compute union bbox of the 4 ground planes, then ramp fog from inside
