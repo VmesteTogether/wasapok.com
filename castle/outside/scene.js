@@ -102,14 +102,7 @@ export async function buildScene() {
   // ----- Apply portcullis-style gate texture to "Gate 1" -----
   // Vertical iron bars with transparent gaps so the grass shows through.
   const gateObj = find('Gate 1');
-  if (gateObj) {
-    gateObj.traverse(o => {
-      o.visible = false;
-      if (o.isMesh) {
-        o.material = new THREE.MeshStandardMaterial({ transparent: true, opacity: 0 });
-      }
-    });
-  }
+  if (gateObj) gateObj.visible = false;
 
   // ----- Build tile grid covering the walkable plane -----
   const W = Math.max(2, Math.ceil(walkableBox.max.x / CELL));
