@@ -248,7 +248,7 @@ export async function buildScene() {
 
   // ----- Visible red trigger pad on the walkable plane -----
   const triggerMarkerGroup = new THREE.Group();
-  const padMat = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+  const padMat = new THREE.MeshBasicMaterial({ color: 0xff2030, transparent: true, opacity: 0 });
   for (const t of triggerTiles) {
     const pad = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.9, 0.06, CELL * 0.9), padMat);
     pad.position.set((t.x + 0.5) * CELL, 0.03, (t.y + 0.5) * CELL);
