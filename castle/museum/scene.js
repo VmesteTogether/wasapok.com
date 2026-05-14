@@ -1,6 +1,7 @@
 // Wasapok Castle — scene builder.
 // Variable per-cell ceiling height, room-specific props, portal location exposed.
 import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import { RectAreaLightUniformsLib } from 'three/addons/lights/RectAreaLightUniformsLib.js';
 import {
   getWallTexture, getFloorTexture, getCeilingTexture,
@@ -542,7 +543,7 @@ export function buildScene(layout, opts) {
   // ===== SALOON DOORS =====
   const saloonDoors = [];
 
-  const doorWoodMat = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.88, metalness: 0.02 });
+  const doorWoodMat = new THREE.MeshStandardMaterial({ color: 0xc8752a, roughness: 0.75, metalness: 0.02 });
   const doorIronMat = new THREE.MeshStandardMaterial({ color: 0x252018, roughness: 0.55, metalness: 0.90 });
 
   function addSaloonDoor(doorCX, doorCZ, doorYaw) {
@@ -1430,6 +1431,87 @@ export function buildScene(layout, opts) {
     return { orbGroup, orbCenter, gateBackX };
   })();
 
+  // ===========================================================
+  // FLOATING DIAMOND CLUSTER — hub centre, Eye-of-Magnus reference.
+  // Loaded async from Wasapok_Diamonds-01.obj. The hub centre tile is
+  // marked solid so the player can't walk through it.
+  // ===========================================================
+  const diamondGroup = new THREE.Group();
+  let diamondBaseY = 2.4;
+  {
+    const hub = (layout.rooms || []).find(r => r.kind === 'hub');
+    if (hub) {
+      const cx = hub.cx * CELL;
+      const cz = hub.cy * CELL;
+      diamondBaseY = (hub.ceilH || STD_CEIL) * 0.30; // lowered closer to eye level
+      diamondGroup.position.set(cx, diamondBaseY, cz);
+      group.add(diamondGroup);
+
+      // Glowing base ring on the floor — same crystal tone as the sculpture,
+      // reads like a pedestal beneath the floating diamonds. No hitbox.
+      // Torus gives the ring real 3D thickness instead of a flat decal.
+      const ringGeom = new THREE.TorusGeometry(0.85, 0.11, 16, 64);
+      const ringMat = new THREE.MeshStandardMaterial({
+        color: 0x9cd6ff,
+        emissive: 0x4080ff,
+        emissiveIntensity: 1.5,
+        metalness: 0.30,
+        roughness: 0.20,
+        transparent: true,
+        opacity: 0.92,
+      });
+      const baseRing = new THREE.Mesh(ringGeom, ringMat);
+      baseRing.rotation.x = -Math.PI / 2;
+      baseRing.position.set(cx, 0.12, cz); // sits on the floor, tube radius above
+      group.add(baseRing);
+
+      // Glowing pale-blue crystal — emissive heavy so it reads as a light source.
+      // DoubleSide keeps the cluster visible even when spinning edge-on.
+      const crystalMat = new THREE.MeshStandardMaterial({
+        color: 0x9cd6ff,
+        emissive: 0x4080ff,
+        emissiveIntensity: 1.6,
+        metalness: 0.30,
+        roughness: 0.18,
+        transparent: true,
+        opacity: 0.92,
+        side: THREE.DoubleSide,
+      });
+
+      // Inner glow — point light at the centre, animated from main.js
+      const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 7, 1.6);
+      diamondGroup.add(innerLight);
+
+      const objLoader = new OBJLoader();
+      objLoader.load('museum/WasaDiminds-02.obj', (loaded) => {
+        // Scale to ~1.4 m max dimension and re-centre around the local origin
+        const bbox  = new THREE.Box3().setFromObject(loaded);
+        const size  = bbox.getSize(new THREE.Vector3());
+        const maxD  = Math.max(size.x, size.y, size.z);
+        const TARGET = 1.8;
+        const s = maxD > 0 ? (TARGET / maxD) : 1;
+        // Non-uniform scale: stretch the thinnest axis so the cluster always
+        // has presence even when spun edge-on (its native shape is plate-like).
+        const MIN_RATIO = 0.7;
+        const sx = s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x));
+        const sy = s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y));
+        const sz = s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z));
+        loaded.scale.set(sx, sy, sz);
+        const bbox2 = new THREE.Box3().setFromObject(loaded);
+        const ctr   = bbox2.getCenter(new THREE.Vector3());
+        loaded.position.sub(ctr);
+
+        loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+        diamondGroup.add(loaded);
+      }, undefined, (err) => {
+        console.warn('[museum] failed to load WasaDiminds-02.obj', err);
+      });
+
+      // Expose the crystal material so main.js can pulse its emissive intensity
+      diamondGroup.userData.innerLight = innerLight;
+    }
+  }
+
   return {
     scene, group,
     walls, floorMesh: floor, ceilMesh: ceilInst,
@@ -1441,6 +1523,7 @@ export function buildScene(layout, opts) {
     saloonDoors,
     portal: portalInfo,
     gnomGate,
+    diamondGroup, diamondBaseY,
     CELL, WALL_H: STD_CEIL,
   };
 }
