@@ -16,7 +16,7 @@ export const CELL = 2; // tile size, matches main hall
 const GLB_URL = 'outside/Temmys-Castle-01.glb';
 
 // Names of the 4 solid boundary objects in the glb
-const BOUNDARY_NAMES = ['Wall L', 'Wall R', 'Gate 1', 'Building 1'];
+const BOUNDARY_NAMES = ['Wall L', 'Wall R', 'Gate_1', 'Building 1'];
 // Names of the 4 textured planes that define the visible ground
 const GROUND_NAMES = ['ocean texture 1', 'ocean texture 2', 'ocean texture 3', 'grass texture'];
 
@@ -71,9 +71,6 @@ export async function buildScene() {
 
   root.updateMatrixWorld(true);
 
-  // Debug: dump all object names in the GLB so we can verify exact strings
-  { const names = []; root.traverse(o => { if (o.name) names.push(o.type + ':' + o.name); }); console.log('[outside] GLB objects:', names.join(', ')); }
-
   // ----- Locate required objects -----
   const walkable = find('Walkable_Plane');
   if (!walkable) {
@@ -104,7 +101,7 @@ export async function buildScene() {
 
   // ----- Apply portcullis-style gate texture to "Gate 1" -----
   // Vertical iron bars with transparent gaps so the grass shows through.
-  const gateObj = find('Gate 1');
+  const gateObj = find('Gate_1');
   if (gateObj) {
     const gateTex = makeGateTexture();
     gateTex.repeat.set(6, 1);
