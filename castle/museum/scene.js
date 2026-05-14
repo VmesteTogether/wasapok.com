@@ -543,8 +543,9 @@ export function buildScene(layout, opts) {
   // ===== SALOON DOORS =====
   const saloonDoors = [];
 
-  const doorWoodMat = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.88, metalness: 0.02 });
-  const doorIronMat = new THREE.MeshStandardMaterial({ color: 0x252018, roughness: 0.55, metalness: 0.90 });
+  const doorWoodMat  = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.88, metalness: 0.02 });
+  const doorIronMat  = new THREE.MeshStandardMaterial({ color: 0x252018, roughness: 0.55, metalness: 0.90 });
+  const doorAccentMat = new THREE.MeshStandardMaterial({ color: 0xf8f4ee, roughness: 0.55, metalness: 0.0 });
 
   function addSaloonDoor(doorCX, doorCZ, doorYaw) {
     // Classic western batwing: mid-height panel, hinge edge taller than inner,
@@ -599,13 +600,19 @@ export function buildScene(layout, opts) {
         leaf.add(brace);
       }
 
-      // Central iron boss medallion (octagonal)
+      // Central iron boss medallion (octagonal) with white enamel ring accent
       const boss = new THREE.Mesh(
         new THREE.CylinderGeometry(0.052, 0.052, THICK + 0.022, 8), doorIronMat
       );
       boss.rotation.x = Math.PI / 2;
       boss.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
       leaf.add(boss);
+      const accentRing = new THREE.Mesh(
+        new THREE.TorusGeometry(0.064, 0.010, 6, 16), doorAccentMat
+      );
+      accentRing.rotation.x = Math.PI / 2;
+      accentRing.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, THICK / 2 + 0.012);
+      leaf.add(accentRing);
 
       // Vertical meeting-edge post on the inner (centre) edge
       const postH = INNER_H + 0.06;
