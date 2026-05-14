@@ -24,7 +24,7 @@ export async function buildScene() {
   const scene = new THREE.Scene();
 
   // ----- Cool daylight sky -----
-  scene.background = new THREE.Color(0xa8c0dc);
+  scene.background = new THREE.Color(0x8a8880);
 
   // Hemisphere: cool blue sky above, slightly warmer ground bounce below
   const hemi = new THREE.HemisphereLight(0xbcd4ee, 0x5a6072, 0.95);
@@ -255,23 +255,7 @@ export async function buildScene() {
   console.log('[outside] walkable bbox', walkableBox);
   console.log('[outside] spawn=', spawn, ' triggerTile=', triggerTile);
 
-  // ----- Atmospheric fog at edge of the textured ground planes -----
-  // Compute union bbox of the 4 ground planes, then ramp fog from inside
-  // the playable area out to the edges of the textured area.
-  const groundBox = new THREE.Box3();
-  for (const g of groundPlanes) groundBox.expandByObject(g);
-
-  let fogNear, fogFar;
-  if (!groundBox.isEmpty()) {
-    const sz = groundBox.getSize(new THREE.Vector3());
-    const halfSpan = Math.max(sz.x, sz.z) * 0.5;
-    fogNear = Math.max(20, halfSpan * 0.55);
-    fogFar  = Math.max(fogNear + 30, halfSpan * 1.05);
-  } else {
-    fogNear = 30; fogFar = 90;
-  }
-  // Slight cool/warm haze that blends with the sky color
-  scene.fog = new THREE.Fog(0xb6c8de, fogNear, fogFar);
+  scene.fog = new THREE.FogExp2(0x8a8880, 0.055);
 
   // ----- Floating vase sculpture (Eskleo-Vase-01.obj) at walkable-plane centre -----
   const vaseGroup = new THREE.Group();
@@ -355,7 +339,7 @@ export async function buildScene() {
     walkableBox,
     boundaryBoxes,
     building1Box,
-    fog: { near: fogNear, far: fogFar },
+    fog: null,
     sun, hemi,
     vaseGroup, vaseBaseY,
   };
