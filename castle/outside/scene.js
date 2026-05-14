@@ -277,7 +277,9 @@ export async function buildScene() {
   const vaseGroup = new THREE.Group();
   const vaseBaseY = 1.8;
   {
-    vaseGroup.position.set(wbcX, vaseBaseY, wbcZ);
+    const vaseX = wbcX - fwdDx * 2 * CELL;
+    const vaseZ = wbcZ - fwdDy * 2 * CELL;
+    vaseGroup.position.set(vaseX, vaseBaseY, vaseZ);
     scene.add(vaseGroup);
 
     const crystalMat = new THREE.MeshStandardMaterial({
@@ -314,7 +316,7 @@ export async function buildScene() {
     });
     const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.90, 0.11, 16, 64), ringMat);
     baseRing.rotation.x = -Math.PI / 2;
-    baseRing.position.set(wbcX, 0.12, wbcZ);
+    baseRing.position.set(vaseX, 0.12, vaseZ);
     scene.add(baseRing);
   }
 
