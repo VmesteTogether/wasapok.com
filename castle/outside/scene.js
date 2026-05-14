@@ -284,7 +284,7 @@ export async function buildScene() {
 
     const crystalMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.4,
-      metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.90,
+      metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.55,
       side: THREE.DoubleSide,
     });
 
