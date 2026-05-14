@@ -1783,6 +1783,44 @@ export function buildScene(layout, opts) {
     }, undefined, err => console.warn('[museum] WasaDiminds-02.obj failed', err));
   }
 
+  // ===== TRIGGER PADS — red glowing teleport tiles =====
+  // Each entry: { x, y, target }. Stepping on (tx,ty) in main.js navigates to target.
+  const triggerTiles = [];
+  const triggerPadGroup = new THREE.Group();
+  {
+    const libR = layout.rooms.find(r => r.id === 'library');
+    if (libR) {
+      // End of hallway 2 — last floor tile in the east corridor, just west of library.
+      const ty = libR.cy;
+      let tx = libR.x0 - 1;
+      while (tx > 0 && layout.grid[ty] && layout.grid[ty][tx] !== 0) tx--;
+      if (layout.grid[ty] && layout.grid[ty][tx] === 0) {
+        triggerTiles.push({ x: tx, y: ty, target: 'hallway-2-room.html' });
+      }
+    }
+    const padMat = new THREE.MeshStandardMaterial({
+      color: 0xff2030,
+      emissive: 0xff1818,
+      emissiveIntensity: 2.6,
+      roughness: 0.35, metalness: 0.10,
+      transparent: true, opacity: 0.92,
+    });
+    for (const t of triggerTiles) {
+      const pad = new THREE.Mesh(
+        new THREE.BoxGeometry(CELL * 0.92, 0.05, CELL * 0.92),
+        padMat,
+      );
+      pad.position.set(t.x * CELL, 0.028, t.y * CELL);
+      pad.userData.trigger = t;
+      triggerPadGroup.add(pad);
+      // Soft red point light hovering above the pad
+      const pl = new THREE.PointLight(0xff3030, 1.1, 4.5, 1.8);
+      pl.position.set(t.x * CELL, 0.7, t.y * CELL);
+      triggerPadGroup.add(pl);
+    }
+    if (triggerTiles.length) group.add(triggerPadGroup);
+  }
+
   return {
     scene, group,
     walls, floorMesh: floor, ceilMesh: ceilInst,
@@ -1795,6 +1833,7 @@ export function buildScene(layout, opts) {
     portal: portalInfo,
     gnomGate,
     diamondGroup, diamondBaseY,
+    triggerTiles, triggerPadGroup,
     CELL, WALL_H: STD_CEIL,
   };
 }

@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=14';
-import { buildScene } from './scene.js?v=78';
+import { buildScene } from './scene.js?v=79';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
@@ -55,8 +55,10 @@ const minimap = createMinimap(document.getElementById('minimap'), layout);
 // INPUT — keyboard + on-screen D-pad (touch / click)
 // ===========================================================
 const keyDown = {};
+let transitioning = false;
 function handleAction(act) {
   if (portalFullscreen) return; // wasapok takes over
+  if (transitioning) return;
   switch (act) {
     case 'forward': player.tryMove(0); break;
     case 'back':    player.tryMove(2); break;
@@ -174,6 +176,24 @@ function showDiscovery(info) {
   discoverEl.classList.add('show');
   if (discoverTimer) clearTimeout(discoverTimer);
   discoverTimer = setTimeout(() => discoverEl.classList.remove('show'), 3600);
+}
+
+// ===========================================================
+// TRIGGER TILES — red pads that navigate to a new scene
+// (e.g. the hallway 2 room). Mirrors outside/main.js trigger pattern.
+// ===========================================================
+function checkTrigger() {
+  if (transitioning) return;
+  const tx = player.state.tx, ty = player.state.ty;
+  const tiles = built.triggerTiles || [];
+  for (let i = 0; i < tiles.length; i++) {
+    const t = tiles[i];
+    if (t.x === tx && t.y === ty) {
+      transitioning = true;
+      window.location.href = t.target || 'hallway-2-room.html';
+      return;
+    }
+  }
 }
 
 // ===========================================================
@@ -337,6 +357,19 @@ function animate() {
 
   // Portal fade logic
   updatePortalTransition();
+
+  // Hallway 2 room trigger
+  checkTrigger();
+
+  // Pulse the red trigger pads
+  if (built.triggerPadGroup) {
+    const pulse = 2.0 + Math.sin(t * 2.4) * 0.7;
+    built.triggerPadGroup.traverse(o => {
+      if (o.isMesh && o.material && 'emissiveIntensity' in o.material) {
+        o.material.emissiveIntensity = pulse;
+      }
+    });
+  }
 
   // Diamond sculpture animation
   if (built.diamondGroup) {
