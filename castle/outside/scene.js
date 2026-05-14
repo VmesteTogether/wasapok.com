@@ -310,13 +310,30 @@ export async function buildScene() {
       vaseGroup.add(loaded);
     }, undefined, err => console.warn('[outside] Eskleo-Vase-01.obj failed', err));
 
+    const ringGeom = new THREE.TorusGeometry(0.85, 0.09, 16, 64);
+    ringGeom.attributes.position.usage = THREE.DynamicDrawUsage;
+    const _rOrig = new Float32Array(ringGeom.attributes.position.array);
+    const _rNorm = ringGeom.attributes.normal.array;
     const ringMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
-      metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.92,
+      metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.75,
     });
-    const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.90, 0.11, 16, 64), ringMat);
+    const baseRing = new THREE.Mesh(ringGeom, ringMat);
     baseRing.rotation.x = -Math.PI / 2;
     baseRing.position.set(vaseX, 0.12, vaseZ);
+    baseRing.onBeforeRender = () => {
+      const t = performance.now() * 0.001;
+      const pa = ringGeom.attributes.position.array;
+      const n = pa.length / 3;
+      for (let i = 0; i < n; i++) {
+        const tu = (Math.floor(i / 17) / 64) * Math.PI * 2;
+        const d = Math.sin(tu * 5 - t * 3) * 0.025;
+        pa[i*3]   = _rOrig[i*3]   + _rNorm[i*3]   * d;
+        pa[i*3+1] = _rOrig[i*3+1] + _rNorm[i*3+1] * d;
+        pa[i*3+2] = _rOrig[i*3+2] + _rNorm[i*3+2] * d;
+      }
+      ringGeom.attributes.position.needsUpdate = true;
+    };
     scene.add(baseRing);
   }
 
