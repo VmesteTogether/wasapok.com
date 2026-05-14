@@ -586,14 +586,26 @@ export function buildScene(layout, opts) {
       panelGeom.translate(0, 0, -THICK / 2);   // centre panel around z=0
       leaf.add(new THREE.Mesh(panelGeom, doorWoodMat));
 
-      // Two horizontal iron cross-braces at safe heights inside the panel
-      for (const by of [PANEL_BASE + 0.13, PANEL_BASE + INNER_H * 0.52]) {
+      // Three horizontal iron cross-braces
+      for (const [by, w] of [
+        [PANEL_BASE + 0.13,          0.88],
+        [PANEL_BASE + INNER_H * 0.52, 0.88],
+        [PANEL_BASE + INNER_H * 0.80, 0.68],
+      ]) {
         const brace = new THREE.Mesh(
-          new THREE.BoxGeometry(leafW * 0.88, 0.048, THICK + 0.014), doorIronMat
+          new THREE.BoxGeometry(leafW * w, 0.048, THICK + 0.014), doorIronMat
         );
-        brace.position.set(sx * leafW * 0.44, by, 0);
+        brace.position.set(sx * leafW * (w / 2), by, 0);
         leaf.add(brace);
       }
+
+      // Central iron boss medallion (octagonal)
+      const boss = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.052, 0.052, THICK + 0.022, 8), doorIronMat
+      );
+      boss.rotation.x = Math.PI / 2;
+      boss.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
+      leaf.add(boss);
 
       // Hinge plates (top and bottom, on the hinge side)
       for (const hy of [PANEL_BASE + 0.10, PANEL_BASE + OUTER_H - 0.10]) {
