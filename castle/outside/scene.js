@@ -293,6 +293,7 @@ export async function buildScene() {
         x: Math.random() * WC, y: Math.random() * WC,
         len: 7 + Math.random() * 18,
         angle: (Math.random() - 0.5) * 0.5,
+        bow: (Math.random() - 0.5) * 0.35,
         age: startAge ?? 0,
         life: 1.8 + Math.random() * 2.4,
       });
@@ -355,9 +356,11 @@ export async function buildScene() {
         wg.strokeStyle = `rgb(${b},${b},${b})`;
         const cx = Math.cos(caps[i].angle), cy = Math.sin(caps[i].angle);
         const hl = caps[i].len * 0.5;
+        const cpx = caps[i].x - cy * (caps[i].len * caps[i].bow);
+        const cpy = caps[i].y + cx * (caps[i].len * caps[i].bow);
         wg.beginPath();
         wg.moveTo(caps[i].x - cx * hl, caps[i].y - cy * hl);
-        wg.lineTo(caps[i].x + cx * hl, caps[i].y + cy * hl);
+        wg.quadraticCurveTo(cpx, cpy, caps[i].x + cx * hl, caps[i].y + cy * hl);
         wg.stroke();
       }
       foamTex.needsUpdate = true;
