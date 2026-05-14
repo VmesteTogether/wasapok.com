@@ -1272,92 +1272,91 @@ export function buildScene(layout, opts) {
     }
 
     // ══ IAN HUBERT INDUSTRIAL LAYER ══════════════════════════════════════════
-    // Fat-gauge mains, flanged couplings, valve handwheels, ceiling conduit grid.
     {
-      const R0 = 0.10;   // heavy main pipe (~20 cm dia)
-      const RC = 0.013;  // thin cable conduit
+      const R0 = 0.10;
+      const RC = 0.013;
+      const HDH = 1.35; // corridor half-gap clearance
 
       const heavyMat = new THREE.MeshStandardMaterial({
         color: 0x7a6248, emissive: 0x2a1a08, emissiveIntensity: 0.14,
         roughness: 0.78, metalness: 0.68,
       });
-      // Flange disc perpendicular to an X-axis pipe
       function flangeX(x, y, z, r) {
-        const m = new THREE.Mesh(
-          new THREE.CylinderGeometry(r*1.85, r*1.85, 0.058, 8), heavyMat);
-        m.position.set(x, y, z); m.rotation.z = Math.PI/2; group.add(m);
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r*1.85,r*1.85,0.058,8), heavyMat);
+        m.position.set(x,y,z); m.rotation.z = Math.PI/2; group.add(m);
       }
-      // Flange disc perpendicular to a Z-axis pipe
       function flangeZ(x, y, z, r) {
-        const m = new THREE.Mesh(
-          new THREE.CylinderGeometry(r*1.85, r*1.85, 0.058, 8), heavyMat);
-        m.position.set(x, y, z); m.rotation.x = Math.PI/2; group.add(m);
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r*1.85,r*1.85,0.058,8), heavyMat);
+        m.position.set(x,y,z); m.rotation.x = Math.PI/2; group.add(m);
       }
-      // Flange disc at midpoint of a diagonal pipe (sphere joint is cleaner)
+      function flangeY(x, y, z, r) {
+        const m = new THREE.Mesh(new THREE.CylinderGeometry(r*1.85,r*1.85,0.058,8), heavyMat);
+        m.position.set(x,y,z); group.add(m);
+      }
       function flangeNode(x, y, z, r) {
-        const m = new THREE.Mesh(new THREE.SphereGeometry(r*1.7, 8, 6), heavyMat);
-        m.position.set(x, y, z); group.add(m);
+        const m = new THREE.Mesh(new THREE.SphereGeometry(r*1.7,8,6), heavyMat);
+        m.position.set(x,y,z); group.add(m);
       }
-      // Valve: body sphere + torus handwheel
       function valve(x, y, z, r) {
-        const body = new THREE.Mesh(new THREE.SphereGeometry(r*1.3, 8, 6), heavyMat);
-        body.position.set(x, y, z); group.add(body);
-        const wheel = new THREE.Mesh(
-          new THREE.TorusGeometry(r*2.3, r*0.28, 6, 12), heavyMat);
-        wheel.position.set(x, y + r*2.8, z); group.add(wheel);
+        const body = new THREE.Mesh(new THREE.SphereGeometry(r*1.3,8,6), heavyMat);
+        body.position.set(x,y,z); group.add(body);
+        const wheel = new THREE.Mesh(new THREE.TorusGeometry(r*2.3,r*0.28,6,12), heavyMat);
+        wheel.position.set(x, y+r*2.8, z); group.add(wheel);
       }
-      // Heavy pipe segment using heavyMat
       function hpipe(pts, r) {
-        for (let i = 0; i < pts.length - 1; i++) {
+        for (let i = 0; i < pts.length-1; i++) {
           const p1 = new THREE.Vector3(...pts[i]);
           const p2 = new THREE.Vector3(...pts[i+1]);
           const d = p2.clone().sub(p1);
           const len = d.length();
           if (len < 0.01) continue;
           d.normalize();
-          const geom = new THREE.CylinderGeometry(r, r, len, 8, 1);
-          const mesh = new THREE.Mesh(geom, heavyMat);
-          mesh.position.lerpVectors(p1, p2, 0.5);
-          const cross = new THREE.Vector3(0, 1, 0).cross(d);
-          if (cross.length() > 0.001) {
+          const mesh = new THREE.Mesh(new THREE.CylinderGeometry(r,r,len,8,1), heavyMat);
+          mesh.position.lerpVectors(p1,p2,0.5);
+          if (new THREE.Vector3(0,1,0).cross(d).length() > 0.001)
             mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d);
-          }
           group.add(mesh);
         }
-        for (let i = 1; i < pts.length - 1; i++) {
-          flangeNode(...pts[i], r);
-        }
+        for (let i = 1; i < pts.length-1; i++) flangeNode(...pts[i], r);
       }
 
       if (hubR) {
         const hcx = hubR.cx*CELL, hcz = hubR.cy*CELL;
         const hN = hubR.y0*CELL - CELL/2;
-        const hS = (hubR.y0 + hubR.h - 1)*CELL + CELL/2;
+        const hS = (hubR.y0+hubR.h-1)*CELL + CELL/2;
         const hW = hubR.x0*CELL - CELL/2;
-        const hE = (hubR.x0 + hubR.w - 1)*CELL + CELL/2;
+        const hE = (hubR.x0+hubR.w-1)*CELL + CELL/2;
         const HCH = hubR.ceilH;
-        const HDH = 1.35;
+        const CT  = HCH - 0.08;
 
-        // ── North wall: fat floor main + fat chest main + risers + valves ──
+        // ── North wall (throne door at hcx) ──
         const hnz = hN + G + 0.08;
+        // Floor mains, split at door
         hpipe([[hW-0.2, 0.28, hnz], [hcx-HDH, 0.28, hnz]], R0);
         hpipe([[hcx+HDH, 0.28, hnz], [hE+0.2, 0.28, hnz]], R0);
         flangeX(hW+1.2, 0.28, hnz, R0); flangeX(hW+3.5, 0.28, hnz, R0); flangeX(hE-1.4, 0.28, hnz, R0);
+        // Chest-height mains, split at door
         hpipe([[hW-0.2, 1.45, hnz], [hcx-HDH, 1.45, hnz]], R0);
         hpipe([[hcx+HDH, 1.45, hnz], [hE+0.2, 1.45, hnz]], R0);
         flangeX(hcx-HDH-1.2, 1.45, hnz, R0); flangeX(hE-2.2, 1.45, hnz, R0);
-        hpipe([[hW+0.55, 0.28, hnz], [hW+0.55, 1.45, hnz]], R0);  // L riser W
-        hpipe([[hE-0.55, 0.28, hnz], [hE-0.55, 1.45, hnz]], R0);  // L riser E
+        // Full-height risers at corners (floor → ceiling)
+        hpipe([[hW+0.55, 0.28, hnz], [hW+0.55, CT, hnz]], R0);
+        flangeY(hW+0.55, 1.45, hnz, R0); flangeY(hW+0.55, HCH*0.7, hnz, R0);
+        hpipe([[hE-0.55, 0.28, hnz], [hE-0.55, CT, hnz]], R0);
+        flangeY(hE-0.55, 1.45, hnz, R0); flangeY(hE-0.55, HCH*0.65, hnz, R0);
+        // L-bend: rises then turns horizontal back toward door
+        hpipe([[hcx-HDH-1.0, 0.28, hnz], [hcx-HDH-1.0, 2.80, hnz], [hcx-HDH-2.8, 2.80, hnz]], R0);
+        flangeX(hcx-HDH-2.0, 2.80, hnz, R0);
         valve(hW+2.8, 0.28, hnz, R0);
         valve(hE-3.2, 1.45, hnz, R0);
-        // Thin conduits racing from chest main up to ceiling
-        pipe([[hW+1.8, 1.45, hnz], [hW+1.8, HCH-0.05, hnz]], RC);
-        pipe([[hW+2.2, 1.45, hnz], [hW+2.2, HCH-0.05, hnz]], RC);
-        pipe([[hW+2.6, 1.45, hnz], [hW+2.6, HCH-0.05, hnz]], RC);
-        pipe([[hE-1.5, 1.45, hnz], [hE-1.5, HCH-0.05, hnz]], RC);
-        pipe([[hE-1.9, 1.45, hnz], [hE-1.9, HCH-0.05, hnz]], RC);
+        // Thin conduits racing to ceiling
+        pipe([[hW+1.8, 1.45, hnz], [hW+1.8, CT, hnz]], RC);
+        pipe([[hW+2.2, 1.45, hnz], [hW+2.2, CT, hnz]], RC);
+        pipe([[hW+2.6, 1.45, hnz], [hW+2.6, CT, hnz]], RC);
+        pipe([[hE-1.5, 1.45, hnz], [hE-1.5, CT, hnz]], RC);
+        pipe([[hE-1.9, 1.45, hnz], [hE-1.9, CT, hnz]], RC);
 
-        // ── South wall ──
+        // ── South wall (portal door at hcx) ──
         const hsz = hS - G - 0.08;
         hpipe([[hW-0.2, 0.28, hsz], [hcx-HDH, 0.28, hsz]], R0);
         hpipe([[hcx+HDH, 0.28, hsz], [hE+0.2, 0.28, hsz]], R0);
@@ -1365,66 +1364,168 @@ export function buildScene(layout, opts) {
         hpipe([[hW-0.2, 1.55, hsz], [hcx-HDH, 1.55, hsz]], R0);
         hpipe([[hcx+HDH, 1.55, hsz], [hE+0.2, 1.55, hsz]], R0);
         flangeX(hW+2.8, 1.55, hsz, R0); flangeX(hE-3.0, 1.55, hsz, R0);
-        hpipe([[hW+0.5, 0.28, hsz], [hW+0.5, 1.55, hsz]], R0);
+        // Full-height riser near W corner
+        hpipe([[hW+0.5, 0.28, hsz], [hW+0.5, CT, hsz]], R0);
+        flangeY(hW+0.5, 1.55, hsz, R0); flangeY(hW+0.5, HCH*0.72, hsz, R0);
+        // Short riser on E side (floor → chest)
         hpipe([[hE-0.5, 0.28, hsz], [hE-0.5, 1.55, hsz]], R0);
+        // L-bend on E side: rises from chest then turns outward
+        hpipe([[hE-0.5, 1.55, hsz], [hE-0.5, 3.10, hsz], [hE-2.2, 3.10, hsz]], R0);
+        flangeX(hE-1.4, 3.10, hsz, R0);
         valve(hcx-HDH-0.9, 0.28, hsz, R0);
-        pipe([[hE-2.0, 1.55, hsz], [hE-2.0, HCH-0.05, hsz]], RC);
-        pipe([[hE-2.4, 1.55, hsz], [hE-2.4, HCH-0.05, hsz]], RC);
-        pipe([[hW+1.5, 1.55, hsz], [hW+1.5, HCH-0.05, hsz]], RC);
+        pipe([[hE-2.0, 1.55, hsz], [hE-2.0, CT, hsz]], RC);
+        pipe([[hE-2.4, 1.55, hsz], [hE-2.4, CT, hsz]], RC);
+        pipe([[hW+1.5, 1.55, hsz], [hW+1.5, CT, hsz]], RC);
 
-        // ── West wall: floor-to-ceiling fat main + chest run ──
+        // ── West wall (armory door at hcz) — split at hcz±HDH ──
         const hwx = hW + G + 0.08;
-        hpipe([[hwx, 0.28, hN-0.2], [hwx, 0.28, hS+0.2]], R0);
-        flangeZ(hwx, 0.28, hN+1.5, R0); flangeZ(hwx, 0.28, hcz, R0); flangeZ(hwx, 0.28, hS-1.5, R0);
+        // Floor mains, split at door
+        hpipe([[hwx, 0.28, hN-0.2], [hwx, 0.28, hcz-HDH]], R0);
+        hpipe([[hwx, 0.28, hcz+HDH], [hwx, 0.28, hS+0.2]], R0);
+        flangeZ(hwx, 0.28, hN+1.5, R0); flangeZ(hwx, 0.28, hS-1.5, R0);
+        // Chest-height mains, split at door
         hpipe([[hwx, 1.65, hN+0.5], [hwx, 1.65, hcz-HDH]], R0);
         hpipe([[hwx, 1.65, hcz+HDH], [hwx, 1.65, hS-0.5]], R0);
+        // Full-height riser at south end (floor → ceiling)
+        hpipe([[hwx, 0.28, hS-1.2], [hwx, CT, hS-1.2]], R0);
+        flangeZ(hwx, 1.65, hS-1.2, R0); flangeZ(hwx, HCH*0.68, hS-1.2, R0);
+        // Riser connecting N floor main to chest main
         hpipe([[hwx, 0.28, hN+0.8], [hwx, 1.65, hN+0.8]], R0);
-        valve(hwx, 0.28, hcz, R0);
-        pipe([[hwx, 1.65, hS-1.0], [hwx, HCH-0.05, hS-1.0]], RC);
-        pipe([[hwx, 1.65, hS-1.5], [hwx, HCH-0.05, hS-1.5]], RC);
-        pipe([[hwx, 1.65, hS-2.0], [hwx, HCH-0.05, hS-2.0]], RC);
+        // L-bend on N side: rises from chest, hooks toward N wall
+        hpipe([[hwx, 1.65, hN+2.0], [hwx, 3.00, hN+2.0], [hwx, 3.00, hN+0.6]], R0);
+        flangeZ(hwx, 3.00, hN+1.2, R0);
+        valve(hwx, 0.28, hN+2.8, R0);
+        pipe([[hwx, 1.65, hS-1.8], [hwx, CT, hS-1.8]], RC);
+        pipe([[hwx, 1.65, hS-2.3], [hwx, CT, hS-2.3]], RC);
+        pipe([[hwx, 1.65, hS-2.8], [hwx, CT, hS-2.8]], RC);
 
-        // ── East wall: floor main + chest run on north half ──
+        // ── East wall (library door at hcz) — split at hcz±HDH ──
         const hex2 = hE - G - 0.08;
-        hpipe([[hex2, 0.28, hN-0.2], [hex2, 0.28, hS+0.2]], R0);
+        // Floor mains, split at door
+        hpipe([[hex2, 0.28, hN-0.2], [hex2, 0.28, hcz-HDH]], R0);
+        hpipe([[hex2, 0.28, hcz+HDH], [hex2, 0.28, hS+0.2]], R0);
         flangeZ(hex2, 0.28, hN+2.0, R0); flangeZ(hex2, 0.28, hS-2.0, R0);
-        hpipe([[hex2, 1.70, hN+0.5], [hex2, 1.70, hcz+HDH]], R0);
+        // Chest-height main on north side only
+        hpipe([[hex2, 1.70, hN+0.5], [hex2, 1.70, hcz-HDH]], R0);
+        // Full-height riser at north end (floor → ceiling)
+        hpipe([[hex2, 0.28, hN+1.0], [hex2, CT, hN+1.0]], R0);
+        flangeZ(hex2, 1.70, hN+1.0, R0); flangeZ(hex2, HCH*0.66, hN+1.0, R0);
+        // Short riser S side (floor → mid)
         hpipe([[hex2, 0.28, hS-0.8], [hex2, 1.70, hS-0.8]], R0);
-        valve(hex2, 1.70, hcz-1.0, R0);
-        pipe([[hex2, 1.70, hN+1.5], [hex2, HCH-0.05, hN+1.5]], RC);
-        pipe([[hex2, 1.70, hN+2.0], [hex2, HCH-0.05, hN+2.0]], RC);
-        pipe([[hex2, 1.70, hN+2.5], [hex2, HCH-0.05, hN+2.5]], RC);
+        // L-bend south side: rises then turns toward south wall
+        hpipe([[hex2, 0.28, hS-2.5], [hex2, 2.60, hS-2.5], [hex2, 2.60, hS-0.6]], R0);
+        flangeZ(hex2, 2.60, hS-1.4, R0);
+        valve(hex2, 1.70, hcz-1.8, R0);
+        pipe([[hex2, 1.70, hN+1.8], [hex2, CT, hN+1.8]], RC);
+        pipe([[hex2, 1.70, hN+2.3], [hex2, CT, hN+2.3]], RC);
+        pipe([[hex2, 1.70, hN+2.8], [hex2, CT, hN+2.8]], RC);
 
-        // ── Ceiling conduit grid: thin cables crisscrossing just below ceiling ──
+        // ── Ceiling conduit grid ──
         const cy = HCH - 0.20;
-        for (let x = hW+2.0; x < hE-0.5; x += 2.5) {
+        for (let x = hW+2.0; x < hE-0.5; x += 2.5)
           pipe([[x, cy, hN+0.1], [x, cy, hS-0.1]], RC);
-        }
-        for (let z = hN+2.0; z < hS-0.5; z += 2.5) {
+        for (let z = hN+2.0; z < hS-0.5; z += 2.5)
           pipe([[hW+0.1, cy, z], [hE-0.1, cy, z]], RC);
-        }
 
-        // ── Dramatic diagonal ceiling pipe: NW corner → SE corner ──
+        // ── Diagonal ceiling pipe NW→SE ──
         hpipe([[hW+0.5, HCH-0.16, hN+0.5], [hE-0.5, HCH-0.16, hS-0.5]], R0);
         flangeNode((hW+hE)/2, HCH-0.16, (hN+hS)/2, R0);
       }
 
-      // ── All non-hub rooms: fat floor main on all four walls ──
+      // ── Non-hub rooms: fat floor mains (door-wall-aware) + vertical risers ──
       for (const room of layout.rooms) {
         if (room.kind === 'hub') continue;
-        const N = room.y0*CELL - CELL/2, S = (room.y0+room.h-1)*CELL + CELL/2;
-        const W = room.x0*CELL - CELL/2, E = (room.x0+room.w-1)*CELL + CELL/2;
-        const cx = room.cx*CELL;
+        const N  = room.y0*CELL - CELL/2, S = (room.y0+room.h-1)*CELL + CELL/2;
+        const W  = room.x0*CELL - CELL/2, E = (room.x0+room.w-1)*CELL + CELL/2;
+        const cx = room.cx*CELL,          cz = room.cy*CELL;
+        const CH = room.ceilH,            CT2 = CH - 0.08;
         const nz2 = N+G+0.08, sz2 = S-G-0.08;
         const wx2 = W+G+0.08, ex2 = E-G-0.08;
-        hpipe([[W-0.2, 0.24, nz2], [E+0.2, 0.24, nz2]], R0);
-        flangeX(W+1.0, 0.24, nz2, R0); flangeX(cx, 0.24, nz2, R0); flangeX(E-1.0, 0.24, nz2, R0);
-        hpipe([[W-0.2, 0.24, sz2], [E+0.2, 0.24, sz2]], R0);
-        flangeX(W+1.2, 0.24, sz2, R0); flangeX(E-1.2, 0.24, sz2, R0);
-        hpipe([[wx2, 0.24, N-0.2], [wx2, 0.24, S+0.2]], R0);
-        flangeZ(wx2, 0.24, N+1.2, R0); flangeZ(wx2, 0.24, S-1.2, R0);
-        hpipe([[ex2, 0.24, N-0.2], [ex2, 0.24, S+0.2]], R0);
-        flangeZ(ex2, 0.24, N+1.5, R0); flangeZ(ex2, 0.24, S-1.5, R0);
+
+        // Helper: full-height riser + L-bend arm on a Z-facing wall
+        const riserOnZWall = (x, z0, z1, wallZ) => {
+          // riser from floor to mid-height, then horizontal arm
+          hpipe([[x, 0.24, wallZ], [x, CH*0.55, wallZ]], R0);
+          flangeZ(x, CH*0.55, wallZ, R0);
+          hpipe([[x, CH*0.55, wallZ], [x, CH*0.55, z1]], R0);
+        };
+        const riserOnXWall = (z, x0, x1, wallX) => {
+          hpipe([[wallX, 0.24, z], [wallX, CH*0.55, z]], R0);
+          flangeX(wallX, CH*0.55, z, R0);
+          hpipe([[wallX, CH*0.55, z], [x1, CH*0.55, z]], R0);
+        };
+
+        if (room.kind === 'throne') {
+          // door: south wall at cx
+          hpipe([[W-0.2, 0.24, nz2], [E+0.2, 0.24, nz2]], R0);          // N full
+          flangeX(W+1.0,0.24,nz2,R0); flangeX(cx,0.24,nz2,R0); flangeX(E-1.0,0.24,nz2,R0);
+          hpipe([[W-0.2, 0.24, sz2], [cx-HDH, 0.24, sz2]], R0);          // S left
+          hpipe([[cx+HDH, 0.24, sz2], [E+0.2, 0.24, sz2]], R0);          // S right
+          flangeX(W+1.2,0.24,sz2,R0); flangeX(E-1.2,0.24,sz2,R0);
+          hpipe([[wx2, 0.24, N-0.2], [wx2, 0.24, S+0.2]], R0);           // W full
+          flangeZ(wx2,0.24,N+1.2,R0); flangeZ(wx2,0.24,S-1.2,R0);
+          hpipe([[ex2, 0.24, N-0.2], [ex2, 0.24, S+0.2]], R0);           // E full
+          flangeZ(ex2,0.24,N+1.5,R0); flangeZ(ex2,0.24,S-1.5,R0);
+          // Vertical: N wall centre riser turns into ceiling arm
+          hpipe([[cx, 0.24, nz2], [cx, CT2, nz2], [cx-2.5, CT2, nz2]], R0);
+          // Vertical: W wall riser
+          hpipe([[wx2, 0.24, cz], [wx2, CH*0.60, cz]], R0);
+          flangeZ(wx2, CH*0.60, cz, R0);
+
+        } else if (room.kind === 'library') {
+          // door: west wall at cz
+          hpipe([[W-0.2, 0.24, nz2], [E+0.2, 0.24, nz2]], R0);          // N full
+          flangeX(W+1.0,0.24,nz2,R0); flangeX(cx,0.24,nz2,R0); flangeX(E-1.0,0.24,nz2,R0);
+          hpipe([[W-0.2, 0.24, sz2], [E+0.2, 0.24, sz2]], R0);          // S full
+          flangeX(W+1.2,0.24,sz2,R0); flangeX(E-1.2,0.24,sz2,R0);
+          hpipe([[wx2, 0.24, N-0.2], [wx2, 0.24, cz-HDH]], R0);         // W north
+          hpipe([[wx2, 0.24, cz+HDH], [wx2, 0.24, S+0.2]], R0);         // W south
+          flangeZ(wx2,0.24,N+1.2,R0); flangeZ(wx2,0.24,S-1.2,R0);
+          hpipe([[ex2, 0.24, N-0.2], [ex2, 0.24, S+0.2]], R0);          // E full
+          flangeZ(ex2,0.24,N+1.5,R0); flangeZ(ex2,0.24,S-1.5,R0);
+          // Vertical: E wall, full riser turning horizontal
+          hpipe([[ex2, 0.24, cz], [ex2, CT2, cz], [ex2, CT2, cz-2.0]], R0);
+          flangeZ(ex2,CT2,cz-1.0,R0);
+          // Vertical: N wall riser
+          hpipe([[E-1.5, 0.24, nz2], [E-1.5, CH*0.58, nz2]], R0);
+          flangeX(E-1.5,CH*0.58,nz2,R0);
+
+        } else if (room.kind === 'armory') {
+          // door: east wall at cz
+          hpipe([[W-0.2, 0.24, nz2], [E+0.2, 0.24, nz2]], R0);          // N full
+          flangeX(W+1.0,0.24,nz2,R0); flangeX(cx,0.24,nz2,R0); flangeX(E-1.0,0.24,nz2,R0);
+          hpipe([[W-0.2, 0.24, sz2], [E+0.2, 0.24, sz2]], R0);          // S full
+          flangeX(W+1.2,0.24,sz2,R0); flangeX(E-1.2,0.24,sz2,R0);
+          hpipe([[wx2, 0.24, N-0.2], [wx2, 0.24, S+0.2]], R0);          // W full
+          flangeZ(wx2,0.24,N+1.2,R0); flangeZ(wx2,0.24,S-1.2,R0);
+          hpipe([[ex2, 0.24, N-0.2], [ex2, 0.24, cz-HDH]], R0);         // E north
+          hpipe([[ex2, 0.24, cz+HDH], [ex2, 0.24, S+0.2]], R0);         // E south
+          flangeZ(ex2,0.24,N+1.5,R0); flangeZ(ex2,0.24,S-1.5,R0);
+          // Vertical: W wall, full riser + ceiling arm
+          hpipe([[wx2, 0.24, cz], [wx2, CT2, cz], [wx2, CT2, cz+2.0]], R0);
+          flangeZ(wx2,CT2,cz+1.0,R0);
+          // Vertical: S wall riser
+          hpipe([[cx, 0.24, sz2], [cx, CH*0.62, sz2]], R0);
+          flangeX(cx,CH*0.62,sz2,R0);
+
+        } else if (room.kind === 'portal') {
+          // door: north wall at cx
+          hpipe([[W-0.2, 0.24, nz2], [cx-HDH, 0.24, nz2]], R0);         // N left
+          hpipe([[cx+HDH, 0.24, nz2], [E+0.2, 0.24, nz2]], R0);         // N right
+          flangeX(W+1.0,0.24,nz2,R0); flangeX(E-1.0,0.24,nz2,R0);
+          hpipe([[W-0.2, 0.24, sz2], [E+0.2, 0.24, sz2]], R0);          // S full
+          flangeX(W+1.2,0.24,sz2,R0); flangeX(cx,0.24,sz2,R0); flangeX(E-1.2,0.24,sz2,R0);
+          hpipe([[wx2, 0.24, N-0.2], [wx2, 0.24, S+0.2]], R0);          // W full
+          flangeZ(wx2,0.24,N+1.0,R0); flangeZ(wx2,0.24,S-1.0,R0);
+          hpipe([[ex2, 0.24, N-0.2], [ex2, 0.24, S+0.2]], R0);          // E full
+          flangeZ(ex2,0.24,N+1.0,R0); flangeZ(ex2,0.24,S-1.0,R0);
+          // Vertical: S wall centre riser + ceiling arm
+          hpipe([[cx, 0.24, sz2], [cx, CT2, sz2], [cx+2.0, CT2, sz2]], R0);
+          flangeX(cx+1.0,CT2,sz2,R0);
+          // Vertical: E wall short riser
+          hpipe([[ex2, 0.24, cz], [ex2, CH*0.65, cz]], R0);
+          flangeZ(ex2,CH*0.65,cz,R0);
+        }
       }
     }
   }
