@@ -43,6 +43,19 @@
     font-size: 11px; letter-spacing: 0.15em; color: #b8945a; text-transform: none;
   }
 
+  /* ========== CHAMBER PROXIMITY MESSAGE ========== */
+  #chamber-msg {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 12; pointer-events: none;
+    font-family: 'VT323', monospace; font-size: 30px;
+    color: #ffc24a; text-shadow: 0 0 12px rgba(255,140,30,0.45), 0 2px 6px rgba(0,0,0,0.9);
+    letter-spacing: 0.08em; opacity: 0;
+    transition: opacity 0.45s ease;
+    white-space: nowrap;
+  }
+  #chamber-msg.show { opacity: 0.72; }
+
   /* ========== 3D NAV CROSS ========== */
   #nav-wrapper {
     position: fixed;
@@ -172,6 +185,7 @@
 <body>
   <div id="game"></div>
   <div id="vignette"></div>
+  <div id="chamber-msg">you aren&rsquo;t ready to strap in yet</div>
 
   <div id="title">
     Hallway 2 Room

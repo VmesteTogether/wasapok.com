@@ -52,14 +52,35 @@ resize();
 // INPUT — keyboard + on-screen D-pad (mirrors museum/main.js)
 // ===========================================================
 const keyDown = {};
+
+// ----- Chamber hitbox proximity message -----
+const CHAMBER_TILES = new Set(['6,4', '7,4', '8,4']);
+const _DX = [0, 1, 0, -1], _DY = [-1, 0, 1, 0];
+const chamberMsgEl = document.getElementById('chamber-msg');
+let chamberMsgTimer = null;
+function showChamberMsg() {
+  if (!chamberMsgEl) return;
+  chamberMsgEl.classList.remove('show');
+  void chamberMsgEl.offsetWidth; // restart transition
+  chamberMsgEl.classList.add('show');
+  if (chamberMsgTimer) clearTimeout(chamberMsgTimer);
+  chamberMsgTimer = setTimeout(() => chamberMsgEl.classList.remove('show'), 2200);
+}
+function bumpsChamber(relDir) {
+  const wd = (player.state.dir + relDir) % 4;
+  const tx = player.state.tx + _DX[wd];
+  const ty = player.state.ty + _DY[wd];
+  return CHAMBER_TILES.has(`${tx},${ty}`);
+}
+
 function handleAction(act) {
   switch (act) {
-    case 'forward': player.tryMove(0); break;
-    case 'back':    player.tryMove(2); break;
+    case 'forward': if (bumpsChamber(0)) showChamberMsg(); player.tryMove(0); break;
+    case 'back':    if (bumpsChamber(2)) showChamberMsg(); player.tryMove(2); break;
     case 'left':    player.tryTurn(-1); break;
     case 'right':   player.tryTurn(1); break;
-    case 'strafeL': player.tryMove(3); break;
-    case 'strafeR': player.tryMove(1); break;
+    case 'strafeL': if (bumpsChamber(3)) showChamberMsg(); player.tryMove(3); break;
+    case 'strafeR': if (bumpsChamber(1)) showChamberMsg(); player.tryMove(1); break;
     case 'sprint_on':  player.setSprint(true); break;
     case 'sprint_off': player.setSprint(false); break;
   }

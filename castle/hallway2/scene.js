@@ -412,6 +412,9 @@ export function buildScene(opts) {
   }
   chamberGroup.rotation.y = -Math.PI / 2;
   group.add(chamberGroup);
+  // Hitbox: block the 3 tiles the chamber spans along world-X.
+  // Walls were built earlier so flipping these now only affects collision.
+  for (const tx of [6, 7, 8]) layout.grid[4][tx] = 1;
   {
     const placeholderMat = new THREE.MeshStandardMaterial({
       color: 0xffffff, roughness: 0.28, metalness: 0.55,
