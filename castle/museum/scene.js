@@ -607,12 +607,14 @@ export function buildScene(layout, opts) {
       boss.rotation.x = Math.PI / 2;
       boss.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
       leaf.add(boss);
-      const accentRing = new THREE.Mesh(
-        new THREE.TorusGeometry(0.064, 0.010, 6, 16), doorAccentMat
-      );
-      accentRing.rotation.x = Math.PI / 2;
-      accentRing.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, THICK / 2 + 0.012);
-      leaf.add(accentRing);
+      for (const fz of [THICK / 2 + 0.012, -(THICK / 2 + 0.012)]) {
+        const accentRing = new THREE.Mesh(
+          new THREE.TorusGeometry(0.064, 0.010, 6, 16), doorAccentMat
+        );
+        accentRing.rotation.x = Math.PI / 2;
+        accentRing.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, fz);
+        leaf.add(accentRing);
+      }
 
       // Vertical meeting-edge post on the inner (centre) edge
       const postH = INNER_H + 0.06;
@@ -622,13 +624,15 @@ export function buildScene(layout, opts) {
       post.position.set(sx * (leafW - 0.028), PANEL_BASE + INNER_H / 2 + 0.03, 0);
       leaf.add(post);
 
-      // Hinge plates (top and bottom, on the hinge side)
+      // Hinge plates on both faces (top and bottom, on the hinge side)
       for (const hy of [PANEL_BASE + 0.10, PANEL_BASE + OUTER_H - 0.10]) {
-        const hinge = new THREE.Mesh(
-          new THREE.BoxGeometry(leafW * 0.36, 0.11, 0.032), doorIronMat
-        );
-        hinge.position.set(sx * leafW * 0.18, hy, THICK / 2 + 0.016);
-        leaf.add(hinge);
+        for (const fz of [THICK / 2 + 0.016, -(THICK / 2 + 0.016)]) {
+          const hinge = new THREE.Mesh(
+            new THREE.BoxGeometry(leafW * 0.36, 0.11, 0.032), doorIronMat
+          );
+          hinge.position.set(sx * leafW * 0.18, hy, fz);
+          leaf.add(hinge);
+        }
       }
 
       return leaf;
