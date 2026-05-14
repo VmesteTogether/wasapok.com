@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=14';
-import { buildScene } from './scene.js?v=55';
+import { buildScene } from './scene.js?v=48';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
@@ -279,15 +279,6 @@ function animate() {
     built.playerLight.position.set(camera.position.x, 1.6, camera.position.z);
   }
   if (built.waterMat) built.waterMat.uniforms.uTime.value = t;
-
-  // Floating diamond cluster — slow rotate + gentle bob + pulsing inner glow
-  if (built.diamondGroup) {
-    built.diamondGroup.rotation.y = t * 0.32;
-    built.diamondGroup.rotation.x = Math.sin(t * 0.6) * 0.08;
-    built.diamondGroup.position.y = built.diamondBaseY + Math.sin(t * 1.1) * 0.14;
-    const inner = built.diamondGroup.userData.innerLight;
-    if (inner) inner.intensity = 2.0 + Math.sin(t * 1.8) * 0.6 + Math.sin(t * 4.7) * 0.15;
-  }
 
   // Torch flicker (real flame-y)
   for (let i = 0; i < built.torchLights.length; i++) {
