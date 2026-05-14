@@ -352,8 +352,8 @@ export async function buildScene() {
         caps[i].age += dt;
         if (caps[i].age >= caps[i].life) { caps.splice(i, 1); spawnCap(); continue; }
         const p = caps[i].age / caps[i].life;
-        const b = Math.round(Math.sin(p * Math.PI) * 224);
-        wg.strokeStyle = `rgb(${b},${b},${b})`;
+        const b = Math.round(Math.sin(p * Math.PI) * 190);
+        wg.strokeStyle = `rgb(${Math.round(b*0.84)},${Math.round(b*0.88)},${b})`;
         const cx = Math.cos(caps[i].angle), cy = Math.sin(caps[i].angle);
         const hl = caps[i].len * 0.5;
         const cpx = caps[i].x - cy * (caps[i].len * caps[i].bow);
