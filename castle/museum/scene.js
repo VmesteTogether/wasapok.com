@@ -608,7 +608,7 @@ export function buildScene(layout, opts) {
       boss.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
       leaf.add(boss);
       const whiteBand = new THREE.Mesh(
-        new THREE.BoxGeometry(leafW * 0.88, 0.048, THICK + 0.014), doorAccentMat
+        new THREE.BoxGeometry(leafW * 0.88, 0.022, THICK + 0.014), doorAccentMat
       );
       whiteBand.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
       leaf.add(whiteBand);
