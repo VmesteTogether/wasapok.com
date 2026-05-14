@@ -187,6 +187,8 @@ export function buildScene(opts) {
     if (!near) continue;
     wallCells.push({ x, y, h: maxH });
   }
+  // Seal the west end of the hallway (no grid tile exists at x=-1)
+  wallCells.push({ x: -1, y: 4, h: STD_CEIL });
   const wallGeom = new THREE.BoxGeometry(CELL, 1, CELL);
   const walls = new THREE.InstancedMesh(wallGeom, wallMat, wallCells.length);
   const idQ = new THREE.Quaternion();

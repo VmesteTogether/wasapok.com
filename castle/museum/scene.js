@@ -1803,7 +1803,7 @@ export function buildScene(layout, opts) {
       emissive: 0xff1818,
       emissiveIntensity: 2.6,
       roughness: 0.35, metalness: 0.10,
-      transparent: true, opacity: 0.92,
+      transparent: true, opacity: 0,
     });
     for (const t of triggerTiles) {
       const pad = new THREE.Mesh(
@@ -1811,12 +1811,9 @@ export function buildScene(layout, opts) {
         padMat,
       );
       pad.position.set(t.x * CELL, 0.028, t.y * CELL);
+      pad.visible = false;
       pad.userData.trigger = t;
       triggerPadGroup.add(pad);
-      // Soft red point light hovering above the pad
-      const pl = new THREE.PointLight(0xff3030, 1.1, 4.5, 1.8);
-      pl.position.set(t.x * CELL, 0.7, t.y * CELL);
-      triggerPadGroup.add(pl);
     }
     if (triggerTiles.length) group.add(triggerPadGroup);
   }
