@@ -10,6 +10,7 @@
 //   Room:      x=2..10, y=0..8 (81 floor tiles)
 //   Spawn:     (0,4) facing east
 import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 import {
   getWallTexture, getFloorTexture, getCeilingTexture,
 } from '../museum/textures.js?v=33';
@@ -349,6 +350,90 @@ export function buildScene(opts) {
   }
   // Room center (x=6, y=4) — tall ceiling
   addChandelier(6 * CELL, 4 * CELL, ROOM_CEIL);
+
+  // ===== ESKLEO CHAMBER (center of room) =====
+  // Loaded once from OBJ; we apply a placeholder material (aesthetics later).
+  const chamberGroup = new THREE.Group();
+  chamberGroup.position.set(7 * CELL, 0, 4 * CELL);
+  for (const [dx, dz] of [[0,0],[-3,0],[3,0],[0,-3],[0,3]]) {
+    const sp = new THREE.SpotLight(0xffffff, 28, 14, Math.PI / 3.2, 0.45, 1.4);
+    sp.position.set(7 * CELL + dx, ROOM_CEIL - 0.1, 4 * CELL + dz);
+    sp.target.position.set(7 * CELL, 0.4, 4 * CELL);
+    group.add(sp);
+    group.add(sp.target);
+  }
+  // Showroom fill light so the chamber's silhouette reads from any angle
+  {
+    const fill = new THREE.PointLight(0xfff6e6, 1.4, 10, 1.4);
+    fill.position.set(7 * CELL, 1.2, 4 * CELL);
+    group.add(fill);
+  }
+
+  // ===== BIOPUNK HOSES (front of chamber, hooking into the floor) =====
+  {
+    const blue = new THREE.MeshStandardMaterial({
+      color: 0x101f3a, roughness: 0.55, metalness: 0.15,
+      emissive: 0x06101e, emissiveIntensity: 0.45,
+    });
+    const black = new THREE.MeshStandardMaterial({
+      color: 0x07070a, roughness: 0.85, metalness: 0.10,
+    });
+    const cx = 7 * CELL, cz = 4 * CELL;
+    const sideZ = 0.63; // half-width along chamber's short axis (world Z)
+    // s = ±1 picks which side (north / south). Hoses leave middle of side.
+    const hoses = [
+      { s: -1, dx: -0.30, y: 1.00, mat: blue,  ez: -1.6, r: 0.085 },
+      { s: -1, dx:  0.30, y: 0.65, mat: black, ez: -1.0, r: 0.060 },
+      { s: -1, dx:  0.00, y: 0.40, mat: black, ez: -0.7, r: 0.055 },
+      { s:  1, dx: -0.30, y: 1.00, mat: blue,  ez:  1.6, r: 0.085 },
+      { s:  1, dx:  0.30, y: 0.65, mat: black, ez:  1.0, r: 0.060 },
+      { s:  1, dx:  0.00, y: 0.40, mat: black, ez:  0.7, r: 0.055 },
+      { s: -1, dx:  0.10, y: 0.85, mat: blue,  ez: -2.3, r: 0.075 },
+      { s:  1, dx:  0.10, y: 0.85, mat: blue,  ez:  2.3, r: 0.075 },
+      { s: -1, dx:  0.70, y: 0.80, mat: black, ez: -2.3, r: 0.070 },
+      { s:  1, dx:  0.70, y: 0.80, mat: black, ez:  2.3, r: 0.070 },
+    ];
+    for (const h of hoses) {
+      const z0 = cz + h.s * sideZ;
+      const zE = cz + h.ez;
+      const a = new THREE.Vector3(cx + h.dx,        h.y,        z0);
+      const b = new THREE.Vector3(cx + h.dx,        h.y - 0.05, z0 + h.s * 0.35);
+      const c = new THREE.Vector3(cx + h.dx * 0.6,  0.25,       cz + h.ez * 0.85);
+      const d = new THREE.Vector3(cx + h.dx * 0.3,  0.04,       zE);
+      const curve = new THREE.CatmullRomCurve3([a, b, c, d], false, 'catmullrom', 0.4);
+      group.add(new THREE.Mesh(new THREE.TubeGeometry(curve, 32, h.r, 8, false), h.mat));
+      const cap = new THREE.Mesh(
+        new THREE.CylinderGeometry(h.r * 1.9, h.r * 2.2, 0.07, 12), h.mat,
+      );
+      cap.position.set(d.x, 0.035, d.z);
+      group.add(cap);
+    }
+
+  }
+  chamberGroup.rotation.y = -Math.PI / 2;
+  group.add(chamberGroup);
+  {
+    const placeholderMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.28, metalness: 0.55,
+      side: THREE.DoubleSide,
+    });
+    new OBJLoader().load('hallway2/eskleo-chamber-01.obj', (loaded) => {
+      // Scale so longest axis ≈ TARGET m (life-sized, one rider can lie in cockpit)
+      const bbox = new THREE.Box3().setFromObject(loaded);
+      const size = bbox.getSize(new THREE.Vector3());
+      const TARGET = 6.0; // metres — long axis
+      const maxD = Math.max(size.x, size.y, size.z);
+      const s = maxD > 0 ? TARGET / maxD : 1;
+      loaded.scale.setScalar(s);
+      // Re-measure after scaling, then center on chamberGroup and sit on floor
+      const b2 = new THREE.Box3().setFromObject(loaded);
+      const ctr = b2.getCenter(new THREE.Vector3());
+      loaded.position.sub(ctr);
+      loaded.position.y -= b2.min.y - ctr.y; // bottom -> y=0
+      loaded.traverse(o => { if (o.isMesh) o.material = placeholderMat; });
+      chamberGroup.add(loaded);
+    }, undefined, err => console.warn('[hallway2] eskleo-chamber-01.obj failed', err));
+  }
 
   return {
     scene, group, layout,
