@@ -1712,7 +1712,7 @@ export function buildScene(layout, opts) {
 
     const crystalMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.6,
-      metalness: 0.30, roughness: 0.18, transparent: true, opacity: 0.92,
+      metalness: 0.30, roughness: 0.18, transparent: true, opacity: 0.65,
       side: THREE.DoubleSide,
     });
     const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 7, 1.6);
