@@ -1700,13 +1700,23 @@ export function buildScene(layout, opts) {
     diamondGroup.position.set(cx, diamondBaseY, cz);
     group.add(diamondGroup);
 
-    const ringGeom = new THREE.TorusGeometry(0.85, 0.11, 16, 64);
+    // D-profile ring: inner radius unchanged (0.74), rounded inner edge, gradual outer ramp.
+    // LatheGeometry revolves around Y so it's already horizontal — no rotation needed.
+    const ringProfile = [
+      new THREE.Vector2(0.74, 0.00), // inner bottom
+      new THREE.Vector2(0.74, 0.05), // straight inner wall
+      new THREE.Vector2(0.76, 0.10), // inner curve begins
+      new THREE.Vector2(0.80, 0.13), // peak (inner rounded apex)
+      new THREE.Vector2(0.90, 0.08), // outer ramp
+      new THREE.Vector2(1.01, 0.03), // outer ramp
+      new THREE.Vector2(1.12, 0.00), // outer bottom
+    ];
+    const ringGeom = new THREE.LatheGeometry(ringProfile, 64);
     const ringMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
       metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.75,
     });
     const baseRing = new THREE.Mesh(ringGeom, ringMat);
-    baseRing.rotation.x = -Math.PI / 2;
     baseRing.position.set(cx, 0.12, cz);
     group.add(baseRing);
 
