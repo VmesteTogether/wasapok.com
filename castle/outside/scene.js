@@ -289,10 +289,10 @@ export async function buildScene() {
     fg.fillStyle = '#000'; fg.fillRect(0, 0, 128, 128);
     fg.strokeStyle = '#fff'; fg.lineCap = 'round';
     for (const [x1,y1,x2,y2,w] of [
-      [8,18,38,15,2],[55,8,90,5,3],[100,25,122,22,2],
-      [15,50,55,47,2.5],[70,42,110,38,2],[5,75,35,72,3],
-      [85,68,120,65,2],[40,95,80,92,2.5],[20,115,58,112,3],
-      [65,108,100,105,2],[108,115,126,112,2],
+      [8,18,38,15,1],[55,8,90,5,1.5],[100,25,122,22,1],
+      [15,50,55,47,1.5],[70,42,110,38,1],[5,75,35,72,1.5],
+      [85,68,120,65,1],[40,95,80,92,1.5],[20,115,58,112,1.5],
+      [65,108,100,105,1],[108,115,126,112,1],
     ]) { fg.lineWidth = w; fg.beginPath(); fg.moveTo(x1,y1); fg.lineTo(x2,y2); fg.stroke(); }
     const foamTex = new THREE.CanvasTexture(foamCanvas);
     foamTex.wrapS = foamTex.wrapT = THREE.RepeatWrapping;
