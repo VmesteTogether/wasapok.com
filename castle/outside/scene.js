@@ -277,8 +277,8 @@ export async function buildScene() {
   const vaseGroup = new THREE.Group();
   const vaseBaseY = 1.8;
   {
-    const vaseX = wbcX - fwdDx * 2 * CELL;
-    const vaseZ = wbcZ - fwdDy * 2 * CELL;
+    const vaseX = wbcX - fwdDx * 1 * CELL;
+    const vaseZ = wbcZ - fwdDy * 1 * CELL;
     vaseGroup.position.set(vaseX, vaseBaseY, vaseZ);
     scene.add(vaseGroup);
 
