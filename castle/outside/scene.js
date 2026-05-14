@@ -269,19 +269,28 @@ export async function buildScene() {
 
   scene.fog = new THREE.FogExp2(0x8aaabf, 0.018);
 
-  // ----- Animated ocean surrounding castle island -----
+  // ----- Animated cel-shaded ocean (Wind Waker style) -----
   {
+    // 3-step toon gradient: shadow → mid → highlight
+    const gradCanvas = document.createElement('canvas');
+    gradCanvas.width = 3; gradCanvas.height = 1;
+    const gc = gradCanvas.getContext('2d');
+    gc.fillStyle = '#0055aa'; gc.fillRect(0, 0, 1, 1);
+    gc.fillStyle = '#0099cc'; gc.fillRect(1, 0, 1, 1);
+    gc.fillStyle = '#55ddff'; gc.fillRect(2, 0, 1, 1);
+    const gradMap = new THREE.CanvasTexture(gradCanvas);
+    gradMap.minFilter = THREE.NearestFilter;
+    gradMap.magFilter = THREE.NearestFilter;
+
     const SEG = 64, SIZE = 500;
     const oceanGeom = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
     oceanGeom.rotateX(-Math.PI / 2);
     oceanGeom.attributes.position.usage = THREE.DynamicDrawUsage;
+    oceanGeom.attributes.normal.usage   = THREE.DynamicDrawUsage;
     const _oOrig = new Float32Array(oceanGeom.attributes.position.array);
-    const oceanMesh = new THREE.Mesh(oceanGeom, new THREE.MeshStandardMaterial({
-      color: 0x1a4f6e,
-      emissive: 0x06182a,
-      emissiveIntensity: 0.20,
-      metalness: 0.72,
-      roughness: 0.28,
+    const oceanMesh = new THREE.Mesh(oceanGeom, new THREE.MeshToonMaterial({
+      color: 0x00aadd,
+      gradientMap: gradMap,
     }));
     oceanMesh.position.set(wbcX, -2.50, wbcZ);
     oceanMesh.onBeforeRender = () => {
@@ -296,6 +305,8 @@ export async function buildScene() {
           + Math.sin((x - z) * 0.09 + t * 0.50) * 0.18;
       }
       oceanGeom.attributes.position.needsUpdate = true;
+      oceanGeom.computeVertexNormals();
+      oceanGeom.attributes.normal.needsUpdate = true;
     };
     scene.add(oceanMesh);
   }
