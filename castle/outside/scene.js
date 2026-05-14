@@ -9,6 +9,7 @@
 // future edits can reference them.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 export const CELL = 2; // tile size, matches main hall
 
@@ -272,30 +273,40 @@ export async function buildScene() {
   // Slight cool/warm haze that blends with the sky color
   scene.fog = new THREE.Fog(0xb6c8de, fogNear, fogFar);
 
-  // ----- Floating vase sculpture at walkable-plane centre -----
+  // ----- Floating vase sculpture (Eskleo-Vase-01.obj) at walkable-plane centre -----
   const vaseGroup = new THREE.Group();
   const vaseBaseY = 1.8;
   {
     vaseGroup.position.set(wbcX, vaseBaseY, wbcZ);
     scene.add(vaseGroup);
 
-    const pts = [
-      [0.08, 0.00], [0.34, 0.06], [0.27, 0.14],
-      [0.11, 0.32], [0.09, 0.46], [0.44, 0.82],
-      [0.41, 0.96], [0.17, 1.22], [0.13, 1.36],
-      [0.21, 1.51], [0.19, 1.56],
-    ].map(([x, y]) => new THREE.Vector2(x * 1.28, y * 1.28));
-
-    const vaseMat = new THREE.MeshStandardMaterial({
+    const crystalMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.4,
       metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.90,
       side: THREE.DoubleSide,
     });
-    vaseGroup.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 40), vaseMat));
 
     const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 8, 1.6);
     vaseGroup.add(innerLight);
     vaseGroup.userData.innerLight = innerLight;
+
+    new OBJLoader().load('outside/Eskleo-Vase-01.obj', (loaded) => {
+      const bbox = new THREE.Box3().setFromObject(loaded);
+      const size = bbox.getSize(new THREE.Vector3());
+      const maxD = Math.max(size.x, size.y, size.z);
+      const TARGET = 3.6; // 2× the base 1.8 size
+      const s = maxD > 0 ? TARGET / maxD : 1;
+      const MIN_RATIO = 0.7;
+      loaded.scale.set(
+        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
+        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
+        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
+      );
+      const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+      loaded.position.sub(ctr);
+      loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+      vaseGroup.add(loaded);
+    }, undefined, err => console.warn('[outside] Eskleo-Vase-01.obj failed', err));
 
     const ringMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
