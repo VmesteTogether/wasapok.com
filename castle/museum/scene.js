@@ -1278,8 +1278,8 @@ export function buildScene(layout, opts) {
       const HDH = 1.35; // corridor half-gap clearance
 
       const heavyMat = new THREE.MeshStandardMaterial({
-        color: 0x2e3c45, emissive: 0x0a1218, emissiveIntensity: 0.10,
-        roughness: 0.52, metalness: 0.88,
+        color: 0x4a7a96, emissive: 0x1a3a50, emissiveIntensity: 0.18,
+        roughness: 0.48, metalness: 0.82,
       });
       function flangeX(x, y, z, r) {
         const m = new THREE.Mesh(new THREE.CylinderGeometry(r*1.85,r*1.85,0.058,8), heavyMat);
