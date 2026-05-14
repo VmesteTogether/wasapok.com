@@ -71,6 +71,9 @@ export async function buildScene() {
 
   root.updateMatrixWorld(true);
 
+  // Debug: dump all object names in the GLB so we can verify exact strings
+  { const names = []; root.traverse(o => { if (o.name) names.push(o.type + ':' + o.name); }); console.log('[outside] GLB objects:', names.join(', ')); }
+
   // ----- Locate required objects -----
   const walkable = find('Walkable_Plane');
   if (!walkable) {
