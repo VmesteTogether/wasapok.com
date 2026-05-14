@@ -1700,7 +1700,7 @@ export function buildScene(layout, opts) {
     diamondGroup.position.set(cx, diamondBaseY, cz);
     group.add(diamondGroup);
 
-    const ringGeom = new THREE.TorusGeometry(0.85, 0.11, 16, 64);
+    const ringGeom = new THREE.TorusGeometry(0.85, 0.07, 4, 8);
     const ringMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
       metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.75,
