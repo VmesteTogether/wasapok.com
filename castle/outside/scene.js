@@ -351,8 +351,7 @@ export async function buildScene() {
         caps[i].age += dt;
         if (caps[i].age >= caps[i].life) { caps.splice(i, 1); spawnCap(); continue; }
         const p = caps[i].age / caps[i].life;
-        const alpha = p < 0.25 ? p / 0.25 : p > 0.70 ? (1 - p) / 0.30 : 1.0;
-        wg.globalAlpha = alpha * 0.88;
+        wg.globalAlpha = Math.sin(p * Math.PI) * 0.88;
         const cx = Math.cos(caps[i].angle), cy = Math.sin(caps[i].angle);
         const hl = caps[i].len * 0.5;
         wg.beginPath();
