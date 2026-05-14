@@ -275,7 +275,7 @@ export async function buildScene() {
 
   // ----- Floating vase sculpture (Eskleo-Vase-01.obj) at walkable-plane centre -----
   const vaseGroup = new THREE.Group();
-  const vaseBaseY = 1.8;
+  const vaseBaseY = 2.6;
   {
     const vaseX = wbcX;
     const vaseZ = wbcZ;
