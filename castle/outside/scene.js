@@ -99,9 +99,24 @@ export async function buildScene() {
   const boundaryBoxes = boundaries.map(b => ({ name: b.name, box: bboxOf(b.obj) }));
   const building1Box = boundaryBoxes.find(b => b.name === 'Building 1')?.box || null;
 
-  // bbox already captured above — remove Gate 1 mesh from scene
+  // ----- Apply portcullis-style gate texture to "Gate 1" -----
+  // Vertical iron bars with transparent gaps so the grass shows through.
   const gateObj = find('Gate 1');
-  if (gateObj) gateObj.parent?.remove(gateObj);
+  if (gateObj) {
+    const gateTex = makeGateTexture();
+    gateTex.repeat.set(6, 1);
+    gateObj.traverse(child => {
+      if (!child.isMesh) return;
+      child.material = new THREE.MeshStandardMaterial({
+        map: gateTex,
+        alphaTest: 0.5,            // hard pixel edge, no transparency sorting
+        side: THREE.DoubleSide,
+        color: 0xb8a890,
+        metalness: 0.55,
+        roughness: 0.45,
+      });
+    });
+  }
 
   // ----- Build tile grid covering the walkable plane -----
   const W = Math.max(2, Math.ceil(walkableBox.max.x / CELL));
