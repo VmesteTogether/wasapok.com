@@ -283,7 +283,7 @@ export async function buildScene() {
       metalness: 0.72,
       roughness: 0.28,
     }));
-    oceanMesh.position.set(wbcX, -1.50, wbcZ);
+    oceanMesh.position.set(wbcX, -3.00, wbcZ);
     oceanMesh.onBeforeRender = () => {
       const t = performance.now() * 0.001;
       const pa = oceanGeom.attributes.position.array;
