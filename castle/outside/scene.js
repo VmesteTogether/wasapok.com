@@ -272,6 +272,41 @@ export async function buildScene() {
   // Slight cool/warm haze that blends with the sky color
   scene.fog = new THREE.Fog(0xb6c8de, fogNear, fogFar);
 
+  // ----- Floating vase sculpture at walkable-plane centre -----
+  const vaseGroup = new THREE.Group();
+  const vaseBaseY = 1.8;
+  {
+    vaseGroup.position.set(wbcX, vaseBaseY, wbcZ);
+    scene.add(vaseGroup);
+
+    const pts = [
+      [0.08, 0.00], [0.34, 0.06], [0.27, 0.14],
+      [0.11, 0.32], [0.09, 0.46], [0.44, 0.82],
+      [0.41, 0.96], [0.17, 1.22], [0.13, 1.36],
+      [0.21, 1.51], [0.19, 1.56],
+    ].map(([x, y]) => new THREE.Vector2(x * 1.28, y * 1.28));
+
+    const vaseMat = new THREE.MeshStandardMaterial({
+      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.4,
+      metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.90,
+      side: THREE.DoubleSide,
+    });
+    vaseGroup.add(new THREE.Mesh(new THREE.LatheGeometry(pts, 40), vaseMat));
+
+    const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 8, 1.6);
+    vaseGroup.add(innerLight);
+    vaseGroup.userData.innerLight = innerLight;
+
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
+      metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.92,
+    });
+    const baseRing = new THREE.Mesh(new THREE.TorusGeometry(0.90, 0.11, 16, 64), ringMat);
+    baseRing.rotation.x = -Math.PI / 2;
+    baseRing.position.set(wbcX, 0.12, wbcZ);
+    scene.add(baseRing);
+  }
+
   // Layout in the same shape as museum/layout.js so player.js consumes it directly
   const layout = {
     grid, ceilH, roomId,
@@ -292,6 +327,7 @@ export async function buildScene() {
     building1Box,
     fog: { near: fogNear, far: fogFar },
     sun, hemi,
+    vaseGroup, vaseBaseY,
   };
 }
 

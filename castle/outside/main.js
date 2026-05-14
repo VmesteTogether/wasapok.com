@@ -4,7 +4,7 @@
 // fades and navigates to main-hall.html.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=13';
+import { buildScene } from './scene.js?v=14';
 
 const opts = {
   pixelation: 3,
@@ -28,6 +28,8 @@ let player = null;
 let camera = null;
 let triggerTiles = [];
 let booted = false;
+let vaseGroup = null;
+let vaseBaseY = 1.8;
 
 const camPreview = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
 
@@ -169,6 +171,8 @@ function checkTrigger() {
     scene        = built.scene;
     CELL         = built.CELL;
     triggerTiles = built.triggerTiles || [];
+    vaseGroup    = built.vaseGroup || null;
+    vaseBaseY    = built.vaseBaseY ?? 1.8;
 
     camera = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
     player = createPlayer(built.layout, CELL);
@@ -214,6 +218,16 @@ function animate() {
   player.update(now);
   player.applyToCamera(camera, { bobEnabled: opts.headbob, fovEnabled: opts.sprintFov, baseFov: 72 });
   checkTrigger();
+
+  if (vaseGroup) {
+    const t = now * 0.001;
+    vaseGroup.rotation.y = t * 0.32;
+    vaseGroup.rotation.x = Math.sin(t * 0.6) * 0.08;
+    vaseGroup.position.y = vaseBaseY + Math.sin(t * 1.1) * 0.14;
+    const il = vaseGroup.userData.innerLight;
+    if (il) il.intensity = 2.0 + Math.sin(t * 1.8) * 0.6 + Math.sin(t * 4.7) * 0.15;
+  }
+
   renderer.render(scene, camera);
 }
 animate();
