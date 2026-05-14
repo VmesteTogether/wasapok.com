@@ -24,7 +24,7 @@ export async function buildScene() {
   const scene = new THREE.Scene();
 
   // ----- Cool daylight sky -----
-  scene.background = new THREE.Color(0x8a8880);
+  scene.background = new THREE.Color(0x8aaabf);
 
   // Hemisphere: cool blue sky above, slightly warmer ground bounce below
   const hemi = new THREE.HemisphereLight(0xbcd4ee, 0x5a6072, 0.95);
@@ -255,7 +255,7 @@ export async function buildScene() {
   console.log('[outside] walkable bbox', walkableBox);
   console.log('[outside] spawn=', spawn, ' triggerTile=', triggerTile);
 
-  scene.fog = new THREE.FogExp2(0x8a8880, 0.055);
+  scene.fog = new THREE.FogExp2(0x8aaabf, 0.018);
 
   // ----- Floating vase sculpture (Eskleo-Vase-01.obj) at walkable-plane centre -----
   const vaseGroup = new THREE.Group();
