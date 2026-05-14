@@ -269,18 +269,36 @@ export async function buildScene() {
 
   scene.fog = new THREE.FogExp2(0x8aaabf, 0.018);
 
-  // ----- Animated cel-shaded ocean (Wind Waker style) -----
+  // ----- Animated cel-shaded ocean with whitecaps -----
   {
-    // 3-step toon gradient: shadow → mid → highlight
+    // Toon gradient matching original deep blue palette
     const gradCanvas = document.createElement('canvas');
     gradCanvas.width = 3; gradCanvas.height = 1;
     const gc = gradCanvas.getContext('2d');
-    gc.fillStyle = '#0055aa'; gc.fillRect(0, 0, 1, 1);
-    gc.fillStyle = '#0099cc'; gc.fillRect(1, 0, 1, 1);
-    gc.fillStyle = '#55ddff'; gc.fillRect(2, 0, 1, 1);
+    gc.fillStyle = '#0a2a3a'; gc.fillRect(0, 0, 1, 1);
+    gc.fillStyle = '#1a5070'; gc.fillRect(1, 0, 1, 1);
+    gc.fillStyle = '#2a7898'; gc.fillRect(2, 0, 1, 1);
     const gradMap = new THREE.CanvasTexture(gradCanvas);
     gradMap.minFilter = THREE.NearestFilter;
     gradMap.magFilter = THREE.NearestFilter;
+
+    // Whitecap foam streaks (white on black → emissiveMap)
+    const foamCanvas = document.createElement('canvas');
+    foamCanvas.width = 128; foamCanvas.height = 128;
+    const fg = foamCanvas.getContext('2d');
+    fg.fillStyle = '#000'; fg.fillRect(0, 0, 128, 128);
+    fg.strokeStyle = '#fff'; fg.lineCap = 'round';
+    for (const [x1,y1,x2,y2,w] of [
+      [8,18,38,15,2],[55,8,90,5,3],[100,25,122,22,2],
+      [15,50,55,47,2.5],[70,42,110,38,2],[5,75,35,72,3],
+      [85,68,120,65,2],[40,95,80,92,2.5],[20,115,58,112,3],
+      [65,108,100,105,2],[108,115,126,112,2],
+    ]) { fg.lineWidth = w; fg.beginPath(); fg.moveTo(x1,y1); fg.lineTo(x2,y2); fg.stroke(); }
+    const foamTex = new THREE.CanvasTexture(foamCanvas);
+    foamTex.wrapS = foamTex.wrapT = THREE.RepeatWrapping;
+    foamTex.repeat.set(8, 8);
+    foamTex.magFilter = THREE.NearestFilter;
+    foamTex.minFilter = THREE.NearestFilter;
 
     const SEG = 64, SIZE = 500;
     const oceanGeom = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
@@ -289,8 +307,11 @@ export async function buildScene() {
     oceanGeom.attributes.normal.usage   = THREE.DynamicDrawUsage;
     const _oOrig = new Float32Array(oceanGeom.attributes.position.array);
     const oceanMesh = new THREE.Mesh(oceanGeom, new THREE.MeshToonMaterial({
-      color: 0x00aadd,
+      color: 0x1a5070,
       gradientMap: gradMap,
+      emissive: 0xffffff,
+      emissiveMap: foamTex,
+      emissiveIntensity: 0.65,
     }));
     oceanMesh.position.set(wbcX, -2.50, wbcZ);
     oceanMesh.onBeforeRender = () => {
@@ -307,6 +328,8 @@ export async function buildScene() {
       oceanGeom.attributes.position.needsUpdate = true;
       oceanGeom.computeVertexNormals();
       oceanGeom.attributes.normal.needsUpdate = true;
+      foamTex.offset.x = t * 0.008;
+      foamTex.offset.y = t * 0.003;
     };
     scene.add(oceanMesh);
   }
