@@ -96,8 +96,10 @@ export function buildLayout() {
   const hub = rooms[0];
   for (let d = 0; d < 4; d++) carve(hub, d);
 
-  // Spawn: hub center, facing SOUTH (toward the PORTAL door — the headline feature)
-  let spawn = { x: hub.cx + offX, y: hub.cy + offY, dir: 2 };
+  // Spawn: 2 tiles north of the THRONE corridor mouth — at the far end of
+  // hallway 1 (the corridor tile nearest the THRONE room). Facing SOUTH so
+  // the player walks down the hallway into the hub.
+  let spawn = { x: hub.cx + offX, y: hub.y0 - 2, dir: 2 };
 
   // ====== Lights (torches on walls) ======
   // For each room, place a few torches; for hub place 4 in corners + 1 in center (chandelier).
