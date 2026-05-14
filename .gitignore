@@ -1,0 +1,2 @@
+# Large binary assets — host via CDN or git-lfs instead
+castle/outside/*.glb
