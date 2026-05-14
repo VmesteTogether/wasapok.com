@@ -330,7 +330,7 @@ export async function buildScene() {
       oceanGeom.attributes.normal.needsUpdate = true;
       foamTex.offset.x = t * 0.008;
       foamTex.offset.y = t * 0.003;
-      oceanMesh.material.emissiveIntensity = Math.max(0, Math.sin(t * 0.5) * 0.45 + Math.sin(t * 1.1) * 0.25);
+      oceanMesh.material.emissiveIntensity = (Math.sin(t * 0.22) * 0.45 + 0.55) * (Math.sin(t * 0.47) * 0.20 + 0.80) * 0.75;
     };
     scene.add(oceanMesh);
   }
