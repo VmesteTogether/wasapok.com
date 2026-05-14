@@ -1735,6 +1735,8 @@ export function buildScene(layout, opts) {
     const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 7, 1.6);
     diamondGroup.add(innerLight);
     diamondGroup.userData.innerLight = innerLight;
+    const areaGlow = new THREE.PointLight(0x7ab8ff, 0.55, 18, 1.2);
+    diamondGroup.add(areaGlow);
 
     new OBJLoader().load('museum/WasaDiminds-02.obj', (loaded) => {
       const bbox = new THREE.Box3().setFromObject(loaded);
