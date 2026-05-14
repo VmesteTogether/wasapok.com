@@ -235,22 +235,26 @@ export async function buildScene() {
     triggerTile = { x: tx, y: ty };
     break;
   }
-  const triggerTiles = triggerTile ? [triggerTile] : [];
+  const perpDx = fwdDy, perpDy = -fwdDx;
+  const triggerTiles = [];
+  if (triggerTile) {
+    for (const s of [-1, 0, 1]) {
+      const tx2 = triggerTile.x + perpDx * s;
+      const ty2 = triggerTile.y + perpDy * s;
+      if (ty2 >= 0 && ty2 < H && tx2 >= 0 && tx2 < W && grid[ty2][tx2] === 0)
+        triggerTiles.push({ x: tx2, y: ty2 });
+    }
+  }
 
   // ----- Visible red trigger pad on the walkable plane -----
   const triggerMarkerGroup = new THREE.Group();
-  if (triggerTile) {
-    const padGeom = new THREE.BoxGeometry(CELL * 0.9, 0.06, CELL * 0.9);
-    const padMat = new THREE.MeshBasicMaterial({ color: 0xff2030 });
-    const pad = new THREE.Mesh(padGeom, padMat);
-    pad.position.set(
-      (triggerTile.x + 0.5) * CELL,
-      0.03,
-      (triggerTile.y + 0.5) * CELL,
-    );
+  const padMat = new THREE.MeshBasicMaterial({ color: 0xff2030 });
+  for (const t of triggerTiles) {
+    const pad = new THREE.Mesh(new THREE.BoxGeometry(CELL * 0.9, 0.06, CELL * 0.9), padMat);
+    pad.position.set((t.x + 0.5) * CELL, 0.03, (t.y + 0.5) * CELL);
     triggerMarkerGroup.add(pad);
-    scene.add(triggerMarkerGroup);
   }
+  if (triggerTiles.length) scene.add(triggerMarkerGroup);
 
   console.log('[outside] walkable bbox', walkableBox);
   console.log('[outside] spawn=', spawn, ' triggerTile=', triggerTile);
