@@ -99,23 +99,50 @@ export async function buildScene() {
   const boundaryBoxes = boundaries.map(b => ({ name: b.name, box: bboxOf(b.obj) }));
   const building1Box = boundaryBoxes.find(b => b.name === 'Building 1')?.box || null;
 
-  // ----- Apply portcullis-style gate texture to "Gate 1" -----
-  // Vertical iron bars with transparent gaps so the grass shows through.
+  // ----- Replace Gate_1 mesh with procedural portcullis -----
   const gateObj = find('Gate_1');
-  if (gateObj) {
-    const gateTex = makeGateTexture();
-    gateTex.repeat.set(6, 1);
-    gateObj.traverse(child => {
-      if (!child.isMesh) return;
-      child.material = new THREE.MeshStandardMaterial({
-        map: gateTex,
-        alphaTest: 0.5,            // hard pixel edge, no transparency sorting
-        side: THREE.DoubleSide,
-        color: 0xb8a890,
-        metalness: 0.55,
-        roughness: 0.45,
-      });
-    });
+  const gateBb  = boundaryBoxes.find(b => b.name === 'Gate_1')?.box;
+  if (gateObj) gateObj.parent?.remove(gateObj);
+  if (gateBb) {
+    const gW   = gateBb.max.x - gateBb.min.x;
+    const gD   = gateBb.max.z - gateBb.min.z;
+    const gH   = gateBb.max.y - gateBb.min.y;
+    const spanX = gW >= gD;
+    const span  = spanX ? gW : gD;
+    const gateCX = (gateBb.min.x + gateBb.max.x) / 2;
+    const gateCZ = (gateBb.min.z + gateBb.max.z) / 2;
+    const ironMat  = new THREE.MeshStandardMaterial({ color: 0x22222a, roughness: 0.50, metalness: 0.90 });
+    const stoneMat = new THREE.MeshStandardMaterial({ color: 0x484440, roughness: 0.90, metalness: 0.05 });
+    const FRAME = 0.20, BAR = 0.058, SPIKE = 0.34;
+    const portGroup = new THREE.Group();
+    portGroup.position.set(gateCX, gateBb.min.y, gateCZ);
+    if (!spanX) portGroup.rotation.y = Math.PI / 2;
+    for (const sx of [-1, 1]) {
+      const pillar = new THREE.Mesh(new THREE.BoxGeometry(FRAME, gH + SPIKE, FRAME), stoneMat);
+      pillar.position.set(sx * (span / 2 + FRAME / 2), (gH + SPIKE) / 2, 0);
+      portGroup.add(pillar);
+    }
+    const beam = new THREE.Mesh(new THREE.BoxGeometry(span + FRAME * 2, FRAME, FRAME), stoneMat);
+    beam.position.set(0, gH + SPIKE - FRAME / 2, 0);
+    portGroup.add(beam);
+    const numBars = Math.max(3, Math.round(span / 0.44));
+    const barStep = span / numBars;
+    for (let i = 0; i < numBars; i++) {
+      const bx = -span / 2 + barStep * (i + 0.5);
+      const bar = new THREE.Mesh(new THREE.BoxGeometry(BAR, gH, BAR), ironMat);
+      bar.position.set(bx, gH / 2, 0);
+      portGroup.add(bar);
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(BAR * 1.1, SPIKE, 4), ironMat);
+      spike.rotation.y = Math.PI / 4;
+      spike.position.set(bx, gH + SPIKE / 2, 0);
+      portGroup.add(spike);
+    }
+    for (const frac of [0.28, 0.58, 0.82]) {
+      const cross = new THREE.Mesh(new THREE.BoxGeometry(span, BAR * 0.85, BAR * 0.85), ironMat);
+      cross.position.set(0, gH * frac, 0);
+      portGroup.add(cross);
+    }
+    scene.add(portGroup);
   }
 
   // ----- Build tile grid covering the walkable plane -----
@@ -179,46 +206,27 @@ export async function buildScene() {
     }
   }
 
-  // ----- Spawn: back against the gate, centered across the walkable plane,
-  // facing the castle. Derived from the centre anchor as before. -----
+  // ----- Spawn: nearest walkable tile to Gate_1, facing the castle (centerTile) -----
   let spawn = null;
-  if (centerTile) {
-    let maxDX = 0, maxDY = 0;
+  if (gateBb && centerTile) {
+    const gcx = (gateBb.min.x + gateBb.max.x) / (2 * CELL);
+    const gcz = (gateBb.min.z + gateBb.max.z) / (2 * CELL);
+    let best = null, bestD = Infinity;
     for (let ty = 0; ty < H; ty++) {
       for (let tx = 0; tx < W; tx++) {
         if (grid[ty][tx] !== 0) continue;
-        const adx = Math.abs(tx - centerTile.x);
-        const ady = Math.abs(ty - centerTile.y);
-        if (adx > maxDX) maxDX = adx;
-        if (ady > maxDY) maxDY = ady;
+        const d = (tx - gcx) ** 2 + (ty - gcz) ** 2;
+        if (d < bestD) { bestD = d; best = { x: tx, y: ty }; }
       }
     }
-    const useX = maxDX > maxDY;
-    const extremeMax = useX ? maxDX : maxDY;
-
-    let best = null, bestPerp = Infinity;
-    for (let ty = 0; ty < H; ty++) {
-      for (let tx = 0; tx < W; tx++) {
-        if (grid[ty][tx] !== 0) continue;
-        const extreme = useX ? Math.abs(tx - centerTile.x) : Math.abs(ty - centerTile.y);
-        if (extreme !== extremeMax) continue;
-        const perp = useX ? Math.abs(ty - centerTile.y) : Math.abs(tx - centerTile.x);
-        if (perp < bestPerp) { bestPerp = perp; best = { x: tx, y: ty }; }
-      }
-    }
-
     if (best) {
       const dxn = centerTile.x - best.x;
       const dyn = centerTile.y - best.y;
-      let dir;
-      if (Math.abs(dxn) > Math.abs(dyn)) dir = dxn > 0 ? 1 : 3;
-      else                                dir = dyn > 0 ? 2 : 0;
+      const dir = Math.abs(dxn) > Math.abs(dyn) ? (dxn > 0 ? 1 : 3) : (dyn > 0 ? 2 : 0);
       spawn = { x: best.x, y: best.y, dir };
     }
   }
-  if (!spawn) {
-    spawn = { x: Math.floor(W / 2), y: Math.floor(H / 2), dir: 0 };
-  }
+  if (!spawn) spawn = { x: Math.floor(W / 2), y: Math.floor(H / 2), dir: 0 };
 
   // Trigger pad: 10 tiles forward of spawn (5 past the previous position,
   // i.e. closer to the castle). Falls back to the farthest valid tile if
