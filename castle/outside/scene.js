@@ -344,14 +344,15 @@ export async function buildScene() {
 
       // Whitecap particles
       wg.clearRect(0, 0, WC, WC);
-      wg.strokeStyle = '#fff';
       wg.lineCap = 'round';
       wg.lineWidth = 1.2;
+      wg.globalAlpha = 1;
       for (let i = caps.length - 1; i >= 0; i--) {
         caps[i].age += dt;
         if (caps[i].age >= caps[i].life) { caps.splice(i, 1); spawnCap(); continue; }
         const p = caps[i].age / caps[i].life;
-        wg.globalAlpha = Math.sin(p * Math.PI) * 0.88;
+        const b = Math.round(Math.sin(p * Math.PI) * 224);
+        wg.strokeStyle = `rgb(${b},${b},${b})`;
         const cx = Math.cos(caps[i].angle), cy = Math.sin(caps[i].angle);
         const hl = caps[i].len * 0.5;
         wg.beginPath();
@@ -359,7 +360,6 @@ export async function buildScene() {
         wg.lineTo(caps[i].x + cx * hl, caps[i].y + cy * hl);
         wg.stroke();
       }
-      wg.globalAlpha = 1;
       foamTex.needsUpdate = true;
       foamTex.offset.x = t * 0.003;
       foamTex.offset.y = t * 0.001;
