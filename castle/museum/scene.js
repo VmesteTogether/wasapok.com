@@ -1696,7 +1696,7 @@ export function buildScene(layout, opts) {
   if (hub) {
     const cx = hub.cx * CELL;
     const cz = hub.cy * CELL;
-    diamondBaseY = (hub.ceilH || STD_CEIL) * 0.48;
+    diamondBaseY = (hub.ceilH || STD_CEIL) * 0.39;
     diamondGroup.position.set(cx, diamondBaseY, cz);
     group.add(diamondGroup);
 
