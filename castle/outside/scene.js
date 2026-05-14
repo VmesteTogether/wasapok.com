@@ -231,7 +231,7 @@ export async function buildScene() {
   // Trigger pad: 10 tiles forward of spawn (5 past the previous position,
   // i.e. closer to the castle). Falls back to the farthest valid tile if
   // that exact tile is blocked or off-grid.
-  const FORWARD_TILES = 14;
+  const FORWARD_TILES = 13;
   const fwdDx = [0, 1, 0, -1][spawn.dir];
   const fwdDy = [-1, 0, 1, 0][spawn.dir];
   let triggerTile = null;
