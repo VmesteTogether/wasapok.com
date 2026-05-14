@@ -277,8 +277,8 @@ export async function buildScene() {
   const vaseGroup = new THREE.Group();
   const vaseBaseY = 1.8;
   {
-    const vaseX = wbcX - fwdDx * 1 * CELL;
-    const vaseZ = wbcZ - fwdDy * 1 * CELL;
+    const vaseX = wbcX;
+    const vaseZ = wbcZ;
     vaseGroup.position.set(vaseX, vaseBaseY, vaseZ);
     scene.add(vaseGroup);
 
@@ -296,7 +296,7 @@ export async function buildScene() {
       const bbox = new THREE.Box3().setFromObject(loaded);
       const size = bbox.getSize(new THREE.Vector3());
       const maxD = Math.max(size.x, size.y, size.z);
-      const TARGET = 3.6; // 2× the base 1.8 size
+      const TARGET = 5.4; // 3× the base 1.8 size
       const s = maxD > 0 ? TARGET / maxD : 1;
       const MIN_RATIO = 0.7;
       loaded.scale.set(
