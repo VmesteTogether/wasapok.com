@@ -200,17 +200,37 @@ export async function buildScene() {
   console.log('[outside] walkable bbox', walkableBox);
   console.log('[outside] grid', W, 'x', H, 'triggerTile=', triggerTile);
 
-  // ----- Spawn: walkable tile farthest from the trigger pad, facing toward it -----
+  // ----- Spawn: back against the gate, centered across the walkable plane,
+  // facing the trigger pad (and thus the castle beyond it). -----
   let spawn = null;
   if (triggerTile) {
-    let bestD = -1, best = null;
+    // Find max extent along each axis among walkable tiles. The axis with
+    // the larger extent is the gate-to-castle axis; spawn at its far end
+    // and centre on the perpendicular axis.
+    let maxDX = 0, maxDY = 0;
     for (let ty = 0; ty < H; ty++) {
       for (let tx = 0; tx < W; tx++) {
         if (grid[ty][tx] !== 0) continue;
-        const d = (tx - triggerTile.x) * (tx - triggerTile.x) + (ty - triggerTile.y) * (ty - triggerTile.y);
-        if (d > bestD) { bestD = d; best = { x: tx, y: ty }; }
+        const adx = Math.abs(tx - triggerTile.x);
+        const ady = Math.abs(ty - triggerTile.y);
+        if (adx > maxDX) maxDX = adx;
+        if (ady > maxDY) maxDY = ady;
       }
     }
+    const useX = maxDX > maxDY;
+    const extremeMax = useX ? maxDX : maxDY;
+
+    let best = null, bestPerp = Infinity;
+    for (let ty = 0; ty < H; ty++) {
+      for (let tx = 0; tx < W; tx++) {
+        if (grid[ty][tx] !== 0) continue;
+        const extreme = useX ? Math.abs(tx - triggerTile.x) : Math.abs(ty - triggerTile.y);
+        if (extreme !== extremeMax) continue;
+        const perp = useX ? Math.abs(ty - triggerTile.y) : Math.abs(tx - triggerTile.x);
+        if (perp < bestPerp) { bestPerp = perp; best = { x: tx, y: ty }; }
+      }
+    }
+
     if (best) {
       const dxn = triggerTile.x - best.x;
       const dyn = triggerTile.y - best.y;
