@@ -545,7 +545,7 @@ export function buildScene(layout, opts) {
 
   const doorWoodMat  = new THREE.MeshStandardMaterial({ color: 0x5c3520, roughness: 0.88, metalness: 0.02 });
   const doorIronMat  = new THREE.MeshStandardMaterial({ color: 0x252018, roughness: 0.55, metalness: 0.90 });
-  const doorAccentMat = new THREE.MeshStandardMaterial({ color: 0xb0c2ce, roughness: 0.50, metalness: 0.0 });
+  const doorAccentMat = new THREE.MeshStandardMaterial({ color: 0x98aeba, roughness: 0.50, metalness: 0.0 });
 
   function addSaloonDoor(doorCX, doorCZ, doorYaw) {
     // Classic western batwing: mid-height panel, hinge edge taller than inner,
