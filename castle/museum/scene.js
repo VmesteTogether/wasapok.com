@@ -607,14 +607,11 @@ export function buildScene(layout, opts) {
       boss.rotation.x = Math.PI / 2;
       boss.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
       leaf.add(boss);
-      for (const fz of [THICK / 2 + 0.012, -(THICK / 2 + 0.012)]) {
-        const accentRing = new THREE.Mesh(
-          new THREE.TorusGeometry(0.064, 0.010, 6, 16), doorAccentMat
-        );
-        accentRing.rotation.x = Math.PI / 2;
-        accentRing.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, fz);
-        leaf.add(accentRing);
-      }
+      const whiteBand = new THREE.Mesh(
+        new THREE.BoxGeometry(leafW * 0.88, 0.048, THICK + 0.014), doorAccentMat
+      );
+      whiteBand.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
+      leaf.add(whiteBand);
 
       // Vertical meeting-edge post on the inner (centre) edge
       const postH = INNER_H + 0.06;
