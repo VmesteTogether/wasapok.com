@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=14';
-import { buildScene } from './scene.js?v=48';
+import { buildScene } from './scene.js?v=55';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 
@@ -337,6 +337,16 @@ function animate() {
 
   // Portal fade logic
   updatePortalTransition();
+
+  // Diamond sculpture animation
+  if (built.diamondGroup) {
+    const t = now * 0.001;
+    built.diamondGroup.rotation.y = t * 0.32;
+    built.diamondGroup.rotation.x = Math.sin(t * 0.6) * 0.08;
+    built.diamondGroup.position.y = built.diamondBaseY + Math.sin(t * 1.1) * 0.14;
+    const il = built.diamondGroup.userData.innerLight;
+    if (il) il.intensity = 2.0 + Math.sin(t * 1.8) * 0.6 + Math.sin(t * 4.7) * 0.15;
+  }
 
   // Minimap
   minimap.draw(player, []);

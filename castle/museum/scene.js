@@ -8,6 +8,7 @@ import {
   makePortalTexture, makeStainedGlass, CAST,
 } from './textures.js?v=33';
 import { GATE_W, GATE_H, GATE_PIXELS } from './gnominium-data.js?v=1';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 RectAreaLightUniformsLib.init();
 
@@ -1430,6 +1431,55 @@ export function buildScene(layout, opts) {
     return { orbGroup, orbCenter, gateBackX };
   })();
 
+  // ===== FLOATING DIAMOND SCULPTURE =====
+  const diamondGroup = new THREE.Group();
+  let diamondBaseY = 2.4;
+  const hub = (layout.rooms || []).find(r => r.kind === 'hub');
+  if (hub) {
+    const cx = hub.cx * CELL;
+    const cz = hub.cy * CELL;
+    diamondBaseY = (hub.ceilH || STD_CEIL) * 0.30;
+    diamondGroup.position.set(cx, diamondBaseY, cz);
+    group.add(diamondGroup);
+
+    const ringGeom = new THREE.TorusGeometry(0.85, 0.11, 16, 64);
+    const ringMat = new THREE.MeshStandardMaterial({
+      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
+      metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.92,
+    });
+    const baseRing = new THREE.Mesh(ringGeom, ringMat);
+    baseRing.rotation.x = -Math.PI / 2;
+    baseRing.position.set(cx, 0.12, cz);
+    group.add(baseRing);
+
+    const crystalMat = new THREE.MeshStandardMaterial({
+      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.6,
+      metalness: 0.30, roughness: 0.18, transparent: true, opacity: 0.92,
+      side: THREE.DoubleSide,
+    });
+    const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 7, 1.6);
+    diamondGroup.add(innerLight);
+    diamondGroup.userData.innerLight = innerLight;
+
+    new OBJLoader().load('museum/WasaDiminds-02.obj', (loaded) => {
+      const bbox = new THREE.Box3().setFromObject(loaded);
+      const size = bbox.getSize(new THREE.Vector3());
+      const maxD = Math.max(size.x, size.y, size.z);
+      const TARGET = 1.8;
+      const s = maxD > 0 ? TARGET / maxD : 1;
+      const MIN_RATIO = 0.7;
+      loaded.scale.set(
+        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
+        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
+        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
+      );
+      const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+      loaded.position.sub(ctr);
+      loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+      diamondGroup.add(loaded);
+    }, undefined, err => console.warn('[museum] WasaDiminds-02.obj failed', err));
+  }
+
   return {
     scene, group,
     walls, floorMesh: floor, ceilMesh: ceilInst,
@@ -1441,6 +1491,7 @@ export function buildScene(layout, opts) {
     saloonDoors,
     portal: portalInfo,
     gnomGate,
+    diamondGroup, diamondBaseY,
     CELL, WALL_H: STD_CEIL,
   };
 }
