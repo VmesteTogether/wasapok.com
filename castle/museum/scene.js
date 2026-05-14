@@ -607,6 +607,14 @@ export function buildScene(layout, opts) {
       boss.position.set(sx * leafW * 0.44, PANEL_BASE + INNER_H * 0.30, 0);
       leaf.add(boss);
 
+      // Vertical meeting-edge post on the inner (centre) edge
+      const postH = INNER_H + 0.06;
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.028, 0.028, postH, 8), doorIronMat
+      );
+      post.position.set(sx * (leafW - 0.028), PANEL_BASE + INNER_H / 2 + 0.03, 0);
+      leaf.add(post);
+
       // Hinge plates (top and bottom, on the hinge side)
       for (const hy of [PANEL_BASE + 0.10, PANEL_BASE + OUTER_H - 0.10]) {
         const hinge = new THREE.Mesh(
