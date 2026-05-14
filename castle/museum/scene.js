@@ -1270,6 +1270,163 @@ export function buildScene(layout, opts) {
       pipe([[hE - 1.1, cy1, hN], [hE - 1.1, cy1, hS]], R2);
       pipe([[hE, cy2, hcz + 0.7], [hcx, cy2, hcz + 0.7], [hcx, cy2, hS]], R3);
     }
+
+    // ══ IAN HUBERT INDUSTRIAL LAYER ══════════════════════════════════════════
+    // Fat-gauge mains, flanged couplings, valve handwheels, ceiling conduit grid.
+    {
+      const R0 = 0.10;   // heavy main pipe (~20 cm dia)
+      const RC = 0.013;  // thin cable conduit
+
+      const heavyMat = new THREE.MeshStandardMaterial({
+        color: 0x7a6248, emissive: 0x2a1a08, emissiveIntensity: 0.14,
+        roughness: 0.78, metalness: 0.68,
+      });
+      // Flange disc perpendicular to an X-axis pipe
+      function flangeX(x, y, z, r) {
+        const m = new THREE.Mesh(
+          new THREE.CylinderGeometry(r*1.85, r*1.85, 0.058, 8), heavyMat);
+        m.position.set(x, y, z); m.rotation.z = Math.PI/2; group.add(m);
+      }
+      // Flange disc perpendicular to a Z-axis pipe
+      function flangeZ(x, y, z, r) {
+        const m = new THREE.Mesh(
+          new THREE.CylinderGeometry(r*1.85, r*1.85, 0.058, 8), heavyMat);
+        m.position.set(x, y, z); m.rotation.x = Math.PI/2; group.add(m);
+      }
+      // Flange disc at midpoint of a diagonal pipe (sphere joint is cleaner)
+      function flangeNode(x, y, z, r) {
+        const m = new THREE.Mesh(new THREE.SphereGeometry(r*1.7, 8, 6), heavyMat);
+        m.position.set(x, y, z); group.add(m);
+      }
+      // Valve: body sphere + torus handwheel
+      function valve(x, y, z, r) {
+        const body = new THREE.Mesh(new THREE.SphereGeometry(r*1.3, 8, 6), heavyMat);
+        body.position.set(x, y, z); group.add(body);
+        const wheel = new THREE.Mesh(
+          new THREE.TorusGeometry(r*2.3, r*0.28, 6, 12), heavyMat);
+        wheel.position.set(x, y + r*2.8, z); group.add(wheel);
+      }
+      // Heavy pipe segment using heavyMat
+      function hpipe(pts, r) {
+        for (let i = 0; i < pts.length - 1; i++) {
+          const p1 = new THREE.Vector3(...pts[i]);
+          const p2 = new THREE.Vector3(...pts[i+1]);
+          const d = p2.clone().sub(p1);
+          const len = d.length();
+          if (len < 0.01) continue;
+          d.normalize();
+          const geom = new THREE.CylinderGeometry(r, r, len, 8, 1);
+          const mesh = new THREE.Mesh(geom, heavyMat);
+          mesh.position.lerpVectors(p1, p2, 0.5);
+          const cross = new THREE.Vector3(0, 1, 0).cross(d);
+          if (cross.length() > 0.001) {
+            mesh.quaternion.setFromUnitVectors(new THREE.Vector3(0,1,0), d);
+          }
+          group.add(mesh);
+        }
+        for (let i = 1; i < pts.length - 1; i++) {
+          flangeNode(...pts[i], r);
+        }
+      }
+
+      if (hubR) {
+        const hcx = hubR.cx*CELL, hcz = hubR.cy*CELL;
+        const hN = hubR.y0*CELL - CELL/2;
+        const hS = (hubR.y0 + hubR.h - 1)*CELL + CELL/2;
+        const hW = hubR.x0*CELL - CELL/2;
+        const hE = (hubR.x0 + hubR.w - 1)*CELL + CELL/2;
+        const HCH = hubR.ceilH;
+        const HDH = 1.35;
+
+        // ── North wall: fat floor main + fat chest main + risers + valves ──
+        const hnz = hN + G + 0.08;
+        hpipe([[hW-0.2, 0.28, hnz], [hcx-HDH, 0.28, hnz]], R0);
+        hpipe([[hcx+HDH, 0.28, hnz], [hE+0.2, 0.28, hnz]], R0);
+        flangeX(hW+1.2, 0.28, hnz, R0); flangeX(hW+3.5, 0.28, hnz, R0); flangeX(hE-1.4, 0.28, hnz, R0);
+        hpipe([[hW-0.2, 1.45, hnz], [hcx-HDH, 1.45, hnz]], R0);
+        hpipe([[hcx+HDH, 1.45, hnz], [hE+0.2, 1.45, hnz]], R0);
+        flangeX(hcx-HDH-1.2, 1.45, hnz, R0); flangeX(hE-2.2, 1.45, hnz, R0);
+        hpipe([[hW+0.55, 0.28, hnz], [hW+0.55, 1.45, hnz]], R0);  // L riser W
+        hpipe([[hE-0.55, 0.28, hnz], [hE-0.55, 1.45, hnz]], R0);  // L riser E
+        valve(hW+2.8, 0.28, hnz, R0);
+        valve(hE-3.2, 1.45, hnz, R0);
+        // Thin conduits racing from chest main up to ceiling
+        pipe([[hW+1.8, 1.45, hnz], [hW+1.8, HCH-0.05, hnz]], RC);
+        pipe([[hW+2.2, 1.45, hnz], [hW+2.2, HCH-0.05, hnz]], RC);
+        pipe([[hW+2.6, 1.45, hnz], [hW+2.6, HCH-0.05, hnz]], RC);
+        pipe([[hE-1.5, 1.45, hnz], [hE-1.5, HCH-0.05, hnz]], RC);
+        pipe([[hE-1.9, 1.45, hnz], [hE-1.9, HCH-0.05, hnz]], RC);
+
+        // ── South wall ──
+        const hsz = hS - G - 0.08;
+        hpipe([[hW-0.2, 0.28, hsz], [hcx-HDH, 0.28, hsz]], R0);
+        hpipe([[hcx+HDH, 0.28, hsz], [hE+0.2, 0.28, hsz]], R0);
+        flangeX(hW+2.0, 0.28, hsz, R0); flangeX(hcx-HDH-0.9, 0.28, hsz, R0);
+        hpipe([[hW-0.2, 1.55, hsz], [hcx-HDH, 1.55, hsz]], R0);
+        hpipe([[hcx+HDH, 1.55, hsz], [hE+0.2, 1.55, hsz]], R0);
+        flangeX(hW+2.8, 1.55, hsz, R0); flangeX(hE-3.0, 1.55, hsz, R0);
+        hpipe([[hW+0.5, 0.28, hsz], [hW+0.5, 1.55, hsz]], R0);
+        hpipe([[hE-0.5, 0.28, hsz], [hE-0.5, 1.55, hsz]], R0);
+        valve(hcx-HDH-0.9, 0.28, hsz, R0);
+        pipe([[hE-2.0, 1.55, hsz], [hE-2.0, HCH-0.05, hsz]], RC);
+        pipe([[hE-2.4, 1.55, hsz], [hE-2.4, HCH-0.05, hsz]], RC);
+        pipe([[hW+1.5, 1.55, hsz], [hW+1.5, HCH-0.05, hsz]], RC);
+
+        // ── West wall: floor-to-ceiling fat main + chest run ──
+        const hwx = hW + G + 0.08;
+        hpipe([[hwx, 0.28, hN-0.2], [hwx, 0.28, hS+0.2]], R0);
+        flangeZ(hwx, 0.28, hN+1.5, R0); flangeZ(hwx, 0.28, hcz, R0); flangeZ(hwx, 0.28, hS-1.5, R0);
+        hpipe([[hwx, 1.65, hN+0.5], [hwx, 1.65, hcz-HDH]], R0);
+        hpipe([[hwx, 1.65, hcz+HDH], [hwx, 1.65, hS-0.5]], R0);
+        hpipe([[hwx, 0.28, hN+0.8], [hwx, 1.65, hN+0.8]], R0);
+        valve(hwx, 0.28, hcz, R0);
+        pipe([[hwx, 1.65, hS-1.0], [hwx, HCH-0.05, hS-1.0]], RC);
+        pipe([[hwx, 1.65, hS-1.5], [hwx, HCH-0.05, hS-1.5]], RC);
+        pipe([[hwx, 1.65, hS-2.0], [hwx, HCH-0.05, hS-2.0]], RC);
+
+        // ── East wall: floor main + chest run on north half ──
+        const hex2 = hE - G - 0.08;
+        hpipe([[hex2, 0.28, hN-0.2], [hex2, 0.28, hS+0.2]], R0);
+        flangeZ(hex2, 0.28, hN+2.0, R0); flangeZ(hex2, 0.28, hS-2.0, R0);
+        hpipe([[hex2, 1.70, hN+0.5], [hex2, 1.70, hcz+HDH]], R0);
+        hpipe([[hex2, 0.28, hS-0.8], [hex2, 1.70, hS-0.8]], R0);
+        valve(hex2, 1.70, hcz-1.0, R0);
+        pipe([[hex2, 1.70, hN+1.5], [hex2, HCH-0.05, hN+1.5]], RC);
+        pipe([[hex2, 1.70, hN+2.0], [hex2, HCH-0.05, hN+2.0]], RC);
+        pipe([[hex2, 1.70, hN+2.5], [hex2, HCH-0.05, hN+2.5]], RC);
+
+        // ── Ceiling conduit grid: thin cables crisscrossing just below ceiling ──
+        const cy = HCH - 0.20;
+        for (let x = hW+2.0; x < hE-0.5; x += 2.5) {
+          pipe([[x, cy, hN+0.1], [x, cy, hS-0.1]], RC);
+        }
+        for (let z = hN+2.0; z < hS-0.5; z += 2.5) {
+          pipe([[hW+0.1, cy, z], [hE-0.1, cy, z]], RC);
+        }
+
+        // ── Dramatic diagonal ceiling pipe: NW corner → SE corner ──
+        hpipe([[hW+0.5, HCH-0.16, hN+0.5], [hE-0.5, HCH-0.16, hS-0.5]], R0);
+        flangeNode((hW+hE)/2, HCH-0.16, (hN+hS)/2, R0);
+      }
+
+      // ── All non-hub rooms: fat floor main on all four walls ──
+      for (const room of layout.rooms) {
+        if (room.kind === 'hub') continue;
+        const N = room.y0*CELL - CELL/2, S = (room.y0+room.h-1)*CELL + CELL/2;
+        const W = room.x0*CELL - CELL/2, E = (room.x0+room.w-1)*CELL + CELL/2;
+        const cx = room.cx*CELL;
+        const nz2 = N+G+0.08, sz2 = S-G-0.08;
+        const wx2 = W+G+0.08, ex2 = E-G-0.08;
+        hpipe([[W-0.2, 0.24, nz2], [E+0.2, 0.24, nz2]], R0);
+        flangeX(W+1.0, 0.24, nz2, R0); flangeX(cx, 0.24, nz2, R0); flangeX(E-1.0, 0.24, nz2, R0);
+        hpipe([[W-0.2, 0.24, sz2], [E+0.2, 0.24, sz2]], R0);
+        flangeX(W+1.2, 0.24, sz2, R0); flangeX(E-1.2, 0.24, sz2, R0);
+        hpipe([[wx2, 0.24, N-0.2], [wx2, 0.24, S+0.2]], R0);
+        flangeZ(wx2, 0.24, N+1.2, R0); flangeZ(wx2, 0.24, S-1.2, R0);
+        hpipe([[ex2, 0.24, N-0.2], [ex2, 0.24, S+0.2]], R0);
+        flangeZ(ex2, 0.24, N+1.5, R0); flangeZ(ex2, 0.24, S-1.5, R0);
+      }
+    }
   }
 
   // Floating corridor number labels: N=1, E=2, S=3, W=4
