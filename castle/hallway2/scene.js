@@ -438,30 +438,49 @@ export function buildScene(opts) {
         // back-faced shell so the silhouette stays visible when rotating edge-on.
         // Also enable DoubleSide on every material so thin polys don't vanish.
         const shells = [];
+        const sparkleMats = [];
         obj.traverse(o => {
           if (!o.isMesh || !o.material) return;
           o.material.side = THREE.DoubleSide;
           const c = o.material.color;
           const lum = c ? c.r * 0.299 + c.g * 0.587 + c.b * 0.114 : 1;
           if (lum < 0.40) {
-            // Tint the darker meshes a dark violet obsidian and crank
-            // metalness/gloss so the rotating geometry sparkles.
+            // Tint dark meshes obsidian-violet; crank metalness + animate
+            // the emissive to twinkle in a brighter purple.
             o.material = o.material.clone();
             o.material.color.setHex(0x2a1638);
             o.material.metalness = 1.0;
             o.material.roughness = 0.12;
             if ('emissive' in o.material) {
-              o.material.emissive = new THREE.Color(0x2a1638);
-              o.material.emissiveIntensity = 0.25;
+              o.material.emissive = new THREE.Color(0xa040ff);
+              o.material.emissiveIntensity = 0.3;
+              sparkleMats.push(o.material);
             }
             const sh = o.clone();
             sh.material = o.material.clone();
             sh.material.side = THREE.BackSide;
             sh.scale.multiplyScalar(1.05);
+            if ('emissive' in sh.material) sparkleMats.push(sh.material);
             shells.push([o.parent, sh]);
           }
         });
         shells.forEach(([p, sh]) => p.add(sh));
+        // Twinkle driver — pick any mesh in the GLB and tick all sparkle materials.
+        if (sparkleMats.length) {
+          let twDr = null;
+          obj.traverse(o => { if (!twDr && o.isMesh) twDr = o; });
+          if (twDr) {
+            twDr.frustumCulled = false;
+            const _twT0 = performance.now();
+            twDr.onBeforeRender = () => {
+              const t = (performance.now() - _twT0) / 1000;
+              for (let i = 0; i < sparkleMats.length; i++) {
+                const f = 0.5 + 0.5 * Math.sin(t * 4.0 + i * 1.7) * Math.sin(t * 6.5 + i * 0.9);
+                sparkleMats[i].emissiveIntensity = 0.15 + f * 1.05;
+              }
+            };
+          }
+        }
         const bbox = new THREE.Box3().setFromObject(obj);
         const size = bbox.getSize(new THREE.Vector3());
         const maxD = Math.max(size.x, size.y, size.z);
@@ -711,14 +730,15 @@ export function buildScene(opts) {
           const r = sR() * ROOM_R * 0.7;
           wrap.position.set(ROOM_CX + Math.cos(a) * r, HOVER_Y, ROOM_CZ + Math.sin(a) * r);
           const heading = sR() * Math.PI * 2;
-          const speed = 0.75 + sR() * 0.85;
+          const speed = 1.6 + sR() * 1.4;
           wrap.rotation.y = heading;
           ships.push({
-            wrap,
+            wrap, speed,
             vx: Math.sin(heading) * speed, vz: Math.cos(heading) * speed,
-            vy: 0, flutterT: 3 + sR() * 3, driftT: 3 + sR() * 5, phase: sR() * 6.28,
+            vy: 0, flutterT: 8 + sR() * 6, driftT: 3 + sR() * 5, phase: sR() * 6.28,
             orbitDir: sR() < 0.5 ? 1 : -1,
             targetR: ROOM_R * (0.45 + sR() * 0.35),
+            ph: 'alive', phT: 0, expT: 22 + sR() * 35, // random explode every ~25-55 s
           });
           group.add(wrap);
         }
@@ -735,6 +755,62 @@ export function buildScene(opts) {
         dust.instanceMatrix.needsUpdate = true;
         group.add(dust);
         const _dV = new THREE.Vector3(), _dQ = new THREE.Quaternion(), _dSc = new THREE.Vector3(), _dM = new THREE.Matrix4();
+        // Orange explosion flame particles (the burst that precedes the ash).
+        const FLM_N = 64;
+        const flmMat = new THREE.MeshBasicMaterial({
+          color: 0xff6020, transparent: true, opacity: 0.95, depthWrite: false,
+          blending: THREE.AdditiveBlending, toneMapped: false,
+        });
+        const flm = new THREE.InstancedMesh(new THREE.SphereGeometry(0.22, 6, 5), flmMat, FLM_N);
+        flm.frustumCulled = false;
+        const flmS = [];
+        for (let i = 0; i < FLM_N; i++) { flmS.push({ life: 0, age: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }); flm.setMatrixAt(i, _zM); }
+        flm.instanceMatrix.needsUpdate = true;
+        group.add(flm);
+        let fCur = 0;
+        const spawnFlame = (x, y, z, n) => {
+          for (let k = 0; k < n; k++) {
+            const i = fCur; fCur = (fCur + 1) % FLM_N;
+            const p = flmS[i];
+            p.life = 0.4 + Math.random() * 0.3;
+            p.age = 0;
+            p.x = x; p.y = y; p.z = z;
+            const sp = 1.5 + Math.random() * 2.0;
+            const a = Math.random() * Math.PI * 2;
+            const v = Math.random() * Math.PI - Math.PI / 2;
+            p.vx = Math.cos(a) * Math.cos(v) * sp;
+            p.vy = Math.sin(v) * sp + 1.5;
+            p.vz = Math.sin(a) * Math.cos(v) * sp;
+          }
+        };
+        // Black ash particles (used by ship explosions).
+        const ASH_N = 96;
+        const ashMat = new THREE.MeshBasicMaterial({ color: 0x070708, transparent: true, opacity: 0.9, depthWrite: false });
+        const ash = new THREE.InstancedMesh(new THREE.SphereGeometry(0.05, 5, 4), ashMat, ASH_N);
+        ash.frustumCulled = false;
+        const ashS = [];
+        for (let i = 0; i < ASH_N; i++) { ashS.push({ life: 0, age: 0, x: 0, y: 0, z: 0, vy: 0 }); ash.setMatrixAt(i, _zM); }
+        ash.instanceMatrix.needsUpdate = true;
+        group.add(ash);
+        let aCur = 0;
+        const spawnAsh = (x, y, z, n) => {
+          for (let k = 0; k < n; k++) {
+            const i = aCur; aCur = (aCur + 1) % ASH_N;
+            const p = ashS[i];
+            p.life = 1.0 + Math.random() * 0.9;
+            p.age = 0;
+            p.x = x + (Math.random() - 0.5) * 0.3;
+            p.y = y + (Math.random() - 0.3) * 0.3;
+            p.z = z + (Math.random() - 0.5) * 0.3;
+            p.vy = 0.5 + Math.random() * 0.9;
+          }
+        };
+        // Shared black-hole disc that appears under a respawning ship.
+        const holeMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, transparent: true, opacity: 0 });
+        const hole = new THREE.Mesh(new THREE.CircleGeometry(0.45, 20), holeMat);
+        hole.rotation.x = -Math.PI / 2;
+        hole.visible = false;
+        group.add(hole);
         let dCur = 0;
         const spawnDust = (s) => {
           const i = dCur; dCur = (dCur + 1) % DUST_N;
@@ -746,16 +822,38 @@ export function buildScene(opts) {
           d.z = s.wrap.position.z - (s.vz / sp) * 0.35 + (Math.random() - 0.5) * 0.12;
           d.y = HOVER_Y - 0.22;
         };
-        // Find a Mesh inside ship 0 to drive ticks (Group.onBeforeRender never fires).
-        let driver = null;
-        ships[0].wrap.traverse(o => { if (!driver && o.isMesh) driver = o; });
-        if (!driver) { resolve(); return; }
-        driver.frustumCulled = false; // keep ticking even when the ship leaves the view
+        // Drive ticks from the dust InstancedMesh (always-rendered, frustum-cull off).
+        // Hooking on a child of a ship would freeze when that ship explodes and hides.
         let _last = performance.now();
-        driver.onBeforeRender = () => {
+        dust.onBeforeRender = () => {
           const now = performance.now();
           const dt = Math.min(0.06, (now - _last) / 1000); _last = now;
           for (const s of ships) {
+            if (s.ph !== 'alive') {
+              s.phT += dt;
+              if (s.ph === 'gone' && s.phT > 2.0) {
+                // Pick a new spot and start rising out of a black hole.
+                const aa = Math.random() * Math.PI * 2;
+                const rr = Math.random() * ROOM_R * 0.7;
+                s.wrap.position.set(ROOM_CX + Math.cos(aa) * rr, -0.5, ROOM_CZ + Math.sin(aa) * rr);
+                s.wrap.scale.setScalar(0.001);
+                s.wrap.visible = true;
+                hole.position.set(s.wrap.position.x, 0.02, s.wrap.position.z);
+                hole.visible = true; holeMat.opacity = 1;
+                s.ph = 'rise'; s.phT = 0;
+              } else if (s.ph === 'rise') {
+                const t = Math.min(1, s.phT / 1.2);
+                s.wrap.position.y = -0.5 * (1 - t) + HOVER_Y * t;
+                s.wrap.scale.setScalar(t);
+                holeMat.opacity = 1 - t;
+                if (t >= 1) {
+                  s.ph = 'alive'; s.expT = 22 + Math.random() * 35;
+                  hole.visible = false;
+                  s.wrap.scale.setScalar(1);
+                }
+              }
+              continue;
+            }
             s.phase += dt * 2.5;
             // Steer velocity toward a loose orbital path around the room centre.
             {
@@ -767,9 +865,12 @@ export function buildScene(opts) {
               const dgX = tx - (rx / r) * radErr * 0.4;
               const dgZ = tz - (rz / r) * radErr * 0.4;
               const dMag = Math.hypot(dgX, dgZ) || 1;
-              const sp = Math.hypot(s.vx, s.vz);
-              s.vx = s.vx * 0.94 + (dgX / dMag) * sp * 0.06;
-              s.vz = s.vz * 0.94 + (dgZ / dMag) * sp * 0.06;
+              const sp = s.speed; // hold target speed; don't decay through the 94/6 blend
+              const nvx = s.vx * 0.94 + (dgX / dMag) * sp * 0.06;
+              const nvz = s.vz * 0.94 + (dgZ / dMag) * sp * 0.06;
+              const nMag = Math.hypot(nvx, nvz) || 1;
+              s.vx = nvx / nMag * sp;
+              s.vz = nvz / nMag * sp;
             }
             s.wrap.position.x += s.vx * dt;
             s.wrap.position.z += s.vz * dt;
@@ -797,7 +898,7 @@ export function buildScene(opts) {
             s.flutterT -= dt;
             if (s.flutterT <= 0) {
               s.vy = 2.0 + Math.random() * 1.6;
-              s.flutterT = 4 + Math.random() * 2; // 5:1 driving:jumping ratio (jump ≈ 1 s)
+              s.flutterT = 10 + Math.random() * 8; // mostly driving (~15:1 ratio)
             }
             s.vy -= 8 * dt;
             let y = s.wrap.position.y + s.vy * dt;
@@ -809,6 +910,14 @@ export function buildScene(opts) {
             s.wrap.rotation.z = (Math.random() - 0.5) * 0.07 * sh;
             // Spawn dust behind grounded ships.
             if (s.wrap.position.y < HOVER_Y + 0.12 && Math.random() < 0.35) spawnDust(s);
+            // Random explosion → black ash → ship hidden → respawns later.
+            s.expT -= dt;
+            if (s.expT <= 0) {
+              spawnFlame(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 22);
+              spawnAsh(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 16);
+              s.wrap.visible = false;
+              s.ph = 'gone'; s.phT = 0;
+            }
           }
           // Advance dust particles + write matrices.
           for (let i = 0; i < DUST_N; i++) {
@@ -826,6 +935,41 @@ export function buildScene(opts) {
             dust.setMatrixAt(i, _dM);
           }
           dust.instanceMatrix.needsUpdate = true;
+          // Advance ash particles (rise + fade via triangular scale).
+          for (let i = 0; i < ASH_N; i++) {
+            const p = ashS[i];
+            let sc = 0;
+            if (p.age < p.life) {
+              p.age += dt;
+              const t = p.age / p.life;
+              sc = t < 0.25 ? t * 4 : 1 - (t - 0.25) / 0.75;
+              p.y += p.vy * dt;
+              p.vy -= 0.5 * dt;
+            }
+            _dV.set(p.x, p.y, p.z);
+            _dSc.set(sc, sc, sc);
+            _dM.compose(_dV, _dQ, _dSc);
+            ash.setMatrixAt(i, _dM);
+          }
+          ash.instanceMatrix.needsUpdate = true;
+          // Advance flame particles (burst out then quickly fade).
+          for (let i = 0; i < FLM_N; i++) {
+            const p = flmS[i];
+            let sc = 0;
+            if (p.age < p.life) {
+              p.age += dt;
+              const t = p.age / p.life;
+              sc = (t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85) * (1.0 + (1 - t) * 1.0);
+              p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+              p.vy -= 5 * dt;
+              p.vx *= 0.92; p.vz *= 0.92;
+            }
+            _dV.set(p.x, p.y, p.z);
+            _dSc.set(sc, sc, sc);
+            _dM.compose(_dV, _dQ, _dSc);
+            flm.setMatrixAt(i, _dM);
+          }
+          flm.instanceMatrix.needsUpdate = true;
         };
         resolve();
       }, undefined, err => { console.warn('[hallway2] eskleoship-01.glb failed', err); resolve(); });

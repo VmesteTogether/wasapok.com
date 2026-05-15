@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=41';
+import { buildScene } from '../hallway2/scene.js?v=48';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
