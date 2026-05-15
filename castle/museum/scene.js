@@ -20,6 +20,9 @@ export function buildScene(layout, opts) {
   scene.background = new THREE.Color(0x040e08);
   scene.fog = new THREE.Fog(0x000000, 3, opts.fogDistance ?? 14);
 
+  // Async loads tracked here; `ready` in the returned object resolves when all complete.
+  const pendingLoads = [];
+
   scene.add(new THREE.AmbientLight(0x020402, 0.15));
   scene.add(new THREE.HemisphereLight(0x060e08, 0x020402, 0.08));
 
@@ -1860,23 +1863,26 @@ export function buildScene(layout, opts) {
     diamondGroup.add(innerLight);
     diamondGroup.userData.innerLight = innerLight;
 
-    new OBJLoader().load('museum/WasaDiminds-02.obj', (loaded) => {
-      const bbox = new THREE.Box3().setFromObject(loaded);
-      const size = bbox.getSize(new THREE.Vector3());
-      const maxD = Math.max(size.x, size.y, size.z);
-      const TARGET = 1.8;
-      const s = maxD > 0 ? TARGET / maxD : 1;
-      const MIN_RATIO = 0.7;
-      loaded.scale.set(
-        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
-        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
-        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
-      );
-      const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
-      loaded.position.sub(ctr);
-      loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
-      diamondGroup.add(loaded);
-    }, undefined, err => console.warn('[museum] WasaDiminds-02.obj failed', err));
+    pendingLoads.push(new Promise((resolve) => {
+      new OBJLoader().load('museum/WasaDiminds-02.obj', (loaded) => {
+        const bbox = new THREE.Box3().setFromObject(loaded);
+        const size = bbox.getSize(new THREE.Vector3());
+        const maxD = Math.max(size.x, size.y, size.z);
+        const TARGET = 1.8;
+        const s = maxD > 0 ? TARGET / maxD : 1;
+        const MIN_RATIO = 0.7;
+        loaded.scale.set(
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
+        );
+        const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+        loaded.position.sub(ctr);
+        loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+        diamondGroup.add(loaded);
+        resolve();
+      }, undefined, err => { console.warn('[museum] WasaDiminds-02.obj failed', err); resolve(); });
+    }));
   }
 
   // ===== TRIGGER PADS — red glowing teleport tiles =====
@@ -1928,5 +1934,6 @@ export function buildScene(layout, opts) {
     diamondGroup, diamondBaseY,
     triggerTiles, triggerPadGroup,
     CELL, WALL_H: STD_CEIL,
+    ready: Promise.all(pendingLoads),
   };
 }

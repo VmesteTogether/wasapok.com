@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=7';
+import { buildScene } from '../hallway2/scene.js?v=30';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -15,6 +15,10 @@ const opts = {
   chamber: false, // hallway 4 has no central object
   floor: 'grass',  // rolling grassy knoll instead of glass-over-water
   daylight: true,  // warm radial daylight at room center, dim corners
+  chandelier: 'eskleohell', // swap the procedural ring-of-orbs for eskleohell-01.glb
+  spikyMountains: true, // Adventure-Time style mountains hugging the interior perimeter
+  sandDunes: true, // low sand mounds scattered across the rolling grass
+  roomShape: 'circle', // carve a circular floor plan instead of the default square
 };
 
 // ---- Renderer ----
@@ -164,6 +168,16 @@ if (sprintBtn) {
 // ===========================================================
 // LOOP
 // ===========================================================
+// Chandelier rotation cycle: wait 15s (timer begins the moment the user spawns),
+// then perform one full revolution at the existing 0.18 rad/s speed (~35s), repeat.
+const CHAND_SPEED = 0.18;
+const CHAND_WAIT  = 15;
+const CHAND_FULL  = Math.PI * 2;
+const CHAND_DUR   = CHAND_FULL / CHAND_SPEED;
+const chandT0     = performance.now() / 1000;
+let chandPhase    = 'wait';
+let chandPhaseT0  = chandT0;
+
 function animate() {
   requestAnimationFrame(animate);
   const now = performance.now();
@@ -178,6 +192,19 @@ function animate() {
     built.playerLight.position.set(camera.position.x, 1.6, camera.position.z);
   }
   if (built.waterMat) built.waterMat.uniforms.uTime.value = t;
+  if (built.chandelier && built.chandelier.obj) {
+    const e = t - chandPhaseT0;
+    if (chandPhase === 'wait') {
+      if (e >= CHAND_WAIT) { chandPhase = 'spin'; chandPhaseT0 = t; }
+    } else {
+      if (e >= CHAND_DUR) {
+        built.chandelier.obj.rotation.y = 0;
+        chandPhase = 'wait'; chandPhaseT0 = t;
+      } else {
+        built.chandelier.obj.rotation.y = e * CHAND_SPEED;
+      }
+    }
+  }
 
   for (let i = 0; i < built.torchLights.length; i++) {
     const tl = built.torchLights[i];
@@ -195,9 +222,16 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-document.getElementById('loading').style.transition = 'opacity 0.4s';
-document.getElementById('loading').style.opacity = '0';
-setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 500);
+{
+  const loadingEl = document.getElementById('loading');
+  loadingEl.style.transition = 'opacity 0.4s';
+  const dismiss = () => {
+    loadingEl.style.opacity = '0';
+    setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
+  };
+  const safety = setTimeout(dismiss, 10000);
+  (built.ready || Promise.resolve()).then(() => { clearTimeout(safety); dismiss(); });
+}
 
 animate();
 window.__hallway4 = { layout, built, player, opts };

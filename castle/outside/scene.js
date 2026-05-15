@@ -23,6 +23,9 @@ const GROUND_NAMES = ['ocean texture 1', 'ocean texture 2', 'ocean texture 3', '
 export async function buildScene() {
   const scene = new THREE.Scene();
 
+  // Async loads tracked here; `ready` in the returned object resolves when all complete.
+  const pendingLoads = [];
+
   // ----- Cool daylight sky -----
   scene.background = new THREE.Color(0x8aaabf);
 
@@ -390,23 +393,26 @@ export async function buildScene() {
     vaseGroup.add(innerLight);
     vaseGroup.userData.innerLight = innerLight;
 
-    new OBJLoader().load('outside/Eskleo-Vase-01.obj', (loaded) => {
-      const bbox = new THREE.Box3().setFromObject(loaded);
-      const size = bbox.getSize(new THREE.Vector3());
-      const maxD = Math.max(size.x, size.y, size.z);
-      const TARGET = 5.4; // 3× the base 1.8 size
-      const s = maxD > 0 ? TARGET / maxD : 1;
-      const MIN_RATIO = 0.7;
-      loaded.scale.set(
-        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
-        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
-        s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
-      );
-      const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
-      loaded.position.sub(ctr);
-      loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
-      vaseGroup.add(loaded);
-    }, undefined, err => console.warn('[outside] Eskleo-Vase-01.obj failed', err));
+    pendingLoads.push(new Promise((resolve) => {
+      new OBJLoader().load('outside/Eskleo-Vase-01.obj', (loaded) => {
+        const bbox = new THREE.Box3().setFromObject(loaded);
+        const size = bbox.getSize(new THREE.Vector3());
+        const maxD = Math.max(size.x, size.y, size.z);
+        const TARGET = 5.4; // 3× the base 1.8 size
+        const s = maxD > 0 ? TARGET / maxD : 1;
+        const MIN_RATIO = 0.7;
+        loaded.scale.set(
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
+        );
+        const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+        loaded.position.sub(ctr);
+        loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+        vaseGroup.add(loaded);
+        resolve();
+      }, undefined, err => { console.warn('[outside] Eskleo-Vase-01.obj failed', err); resolve(); });
+    }));
 
     const ringGeom = new THREE.TorusGeometry(0.85, 0.09, 16, 64);
     ringGeom.attributes.position.usage = THREE.DynamicDrawUsage;
@@ -456,5 +462,6 @@ export async function buildScene() {
     fog: null,
     sun, hemi,
     vaseGroup, vaseBaseY,
+    ready: Promise.all(pendingLoads),
   };
 }

@@ -11,6 +11,7 @@
 //   Spawn:     (0,4) facing east
 import * as THREE from 'three';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import {
   getWallTexture, getFloorTexture, getCeilingTexture,
 } from '../museum/textures.js?v=33';
@@ -20,16 +21,26 @@ const STD_CEIL = 3.6;
 const ROOM_CEIL = 5.6; // tall like the main hub
 
 // ---- Layout (handcrafted, no procedural carving) ----
-function buildLayout() {
+// opts.roomShape === 'circle' carves a circular room inscribed in the 9x9 area
+// instead of the default square; the west hallway entrance is preserved either way.
+function buildLayout(opts) {
   const W = 11, H = 9;
   const grid = [];
   const ceilH = [];
+  const circle = opts && opts.roomShape === 'circle';
+  const cx = 6, cy = 4, R = 4.0, R2 = R * R;
   for (let y = 0; y < H; y++) {
     grid[y] = new Array(W).fill(1);
     ceilH[y] = new Array(W).fill(STD_CEIL);
     for (let x = 0; x < W; x++) {
       const inHall = (y === 4 && x <= 1);
-      const inRoom = (x >= 2 && x <= 10);
+      let inRoom;
+      if (circle) {
+        const dx = x - cx, dy = y - cy;
+        inRoom = x >= 2 && (dx * dx + dy * dy) <= R2;
+      } else {
+        inRoom = (x >= 2 && x <= 10);
+      }
       if (inHall || inRoom) {
         grid[y][x] = 0;
         ceilH[y][x] = inHall ? STD_CEIL : ROOM_CEIL;
@@ -47,6 +58,9 @@ export function buildScene(opts) {
   scene.background = new THREE.Color(0x040e08);
   scene.fog = new THREE.Fog(0x000000, 3, opts.fogDistance ?? 20);
 
+  // Async loads collected here; `ready` in the returned object resolves when they all complete.
+  const pendingLoads = [];
+
   scene.add(new THREE.AmbientLight(0x020402, 0.15));
   scene.add(new THREE.HemisphereLight(0x060e08, 0x020402, 0.08));
 
@@ -55,7 +69,7 @@ export function buildScene(opts) {
   playerLight.position.set(0, 1.6, 0);
   scene.add(playerLight);
 
-  const layout = buildLayout();
+  const layout = buildLayout(opts);
   const W = layout.width * CELL;
   const H = layout.height * CELL;
   const group = new THREE.Group();
@@ -147,19 +161,28 @@ export function buildScene(opts) {
   // ---- FLOOR ----
   let floor;
   if (opts.floor === 'grass') {
-    // Small rolling grassy knoll: subdivided plane with sine-wave hills.
-    const g = new THREE.PlaneGeometry(W, H, 28, 24);
+    // Rolling grassy hills: subdivided plane with stacked sine-wave octaves
+    // to create many overlapping ridges and dips across the room.
+    const g = new THREE.PlaneGeometry(W, H, 64, 56);
     g.rotateX(-Math.PI / 2);
     const pa = g.attributes.position.array;
     for (let i = 0; i < pa.length; i += 3) {
       const x = pa[i], z = pa[i + 2];
-      pa[i + 1] = Math.sin(x * 0.55) * 0.16
-                + Math.cos(z * 0.50) * 0.12
-                + Math.sin((x + z) * 0.30) * 0.07;
+      // Big rolling base waves
+      let h = Math.sin(x * 0.55) * 0.22
+            + Math.cos(z * 0.50) * 0.18
+            + Math.sin((x + z) * 0.30) * 0.10;
+      // Mid-frequency cross-hatched hills
+      h += Math.sin(x * 1.10 + z * 0.7) * 0.10
+         + Math.cos(z * 1.25 - x * 0.4) * 0.08;
+      // Small bumps and dips to break up the surface
+      h += Math.sin(x * 2.30 + z * 1.9) * 0.05
+         + Math.cos((x - z) * 2.05) * 0.04;
+      pa[i + 1] = h;
     }
     g.computeVertexNormals();
     const grassMat = new THREE.MeshStandardMaterial({
-      color: 0x3f7a36, roughness: 0.95, metalness: 0,
+      color: 0xd9b87a, roughness: 0.95, metalness: 0,
     });
     floor = new THREE.Mesh(g, grassMat);
     floor.position.set(W/2 - CELL/2, 0, H/2 - CELL/2);
@@ -222,9 +245,8 @@ export function buildScene(opts) {
   walls.instanceMatrix.needsUpdate = true;
   group.add(walls);
 
-  // ===== OCEAN VIEW WALLS (player's N/E/W — world E/N/S of the room) =====
-  // Faux-glass walls showing an endless ocean horizon. Shares uTime with the
-  // floor water shader so animation is free.
+  // ===== OCEAN VIEW WALLS — animated water/sky planes facing inward into the room.
+  // Shares uTime with the floor water shader so animation is free.
   {
     const oceanMat = new THREE.ShaderMaterial({
       uniforms: { uTime: waterMat.uniforms.uTime },
@@ -240,10 +262,8 @@ export function buildScene(opts) {
           return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y); }
         float fbm(vec2 p){ float v=0., a=0.5; for(int i=0;i<4;i++){ v+=vn(p)*a; p=p*2.1; a*=0.5; } return v; }
         void main() {
-          float H = 0.30; // horizon (uv.y where sea meets sky)
-          // sky: cool blue gradient toward zenith
+          float H = 0.30;
           vec3 sky = mix(vec3(0.55,0.66,0.78), vec3(0.32,0.46,0.66), smoothstep(H, 1.0, vUv.y));
-          // sea: animated noise, perspective compression near horizon
           float depth = max(0.001, H - vUv.y);
           vec2 suv = vec2(vUv.x * 5.0, depth * 10.0 + 1.0/depth * 0.04);
           float w = fbm(suv + vec2(uTime*0.15, uTime*0.08));
@@ -253,7 +273,6 @@ export function buildScene(opts) {
           vec3 sea = mix(deep, mid, smoothstep(0.25, 0.60, w));
           sea = mix(sea, crest, smoothstep(0.60, 0.85, w) * 0.7);
           vec3 col = vUv.y > H ? sky : sea;
-          // soft horizon haze
           col = mix(col, vec3(0.55,0.62,0.72), exp(-abs(vUv.y - H) * 35.0) * 0.5);
           gl_FragColor = vec4(col, 0.94);
         }
@@ -262,24 +281,59 @@ export function buildScene(opts) {
       side: THREE.DoubleSide,
       depthWrite: false,
     });
-    const ROOM_W_M = 9 * CELL;            // x=2..10 → 9 tiles
-    const ROOM_D_M = 9 * CELL;            // y=0..8 → 9 tiles
-    const cx = 6 * CELL, cz = 4 * CELL;   // room center in world coords
-    const yMid = ROOM_CEIL / 2;
-    // World EAST wall (player "north", facing west)
-    const wE = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_D_M, ROOM_CEIL), oceanMat);
-    wE.position.set(10 * CELL + CELL/2 - 0.01, yMid, cz);
-    wE.rotation.y = -Math.PI / 2;
-    group.add(wE);
-    // World NORTH wall (player "west", facing south)
-    const wN = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W_M, ROOM_CEIL), oceanMat);
-    wN.position.set(cx, yMid, -CELL/2 + 0.01);
-    group.add(wN);
-    // World SOUTH wall (player "east", facing north)
-    const wS = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W_M, ROOM_CEIL), oceanMat);
-    wS.position.set(cx, yMid, 8 * CELL + CELL/2 - 0.01);
-    wS.rotation.y = Math.PI;
-    group.add(wS);
+    if (opts.roomShape === 'circle') {
+      // Curved room — drop an ocean plane on every wall face that borders a
+      // room floor tile, skipping the wall cells that flank the west hallway.
+      const isNextToHallway = (wx, wy) => {
+        // Treat (0,4), (1,4) hallway tiles plus (2,4) room-entrance tile as
+        // "corridor", so the wall cells flanking the doorway stay non-ocean.
+        for (const [ddx, ddy] of [[0,-1],[1,0],[0,1],[-1,0]]) {
+          const nx = wx + ddx, ny = wy + ddy;
+          if (ny === 4 && nx <= 2) return true;
+        }
+        return false;
+      };
+      const planeGeom = new THREE.PlaneGeometry(CELL, ROOM_CEIL);
+      for (let y = 0; y < layout.height; y++) for (let x = 0; x < layout.width; x++) {
+        if (layout.grid[y][x] !== 1) continue;
+        if (isNextToHallway(x, y)) continue;
+        for (const [dx, dy, yaw] of [
+          [ 0, -1, 0],          // floor north of wall → face -z
+          [ 1,  0, Math.PI/2],  // floor east of wall  → face +x
+          [ 0,  1, Math.PI],    // floor south of wall → face +z
+          [-1,  0, -Math.PI/2], // floor west of wall  → face -x
+        ]) {
+          const nx = x + dx, ny = y + dy;
+          if (nx < 0 || ny < 0 || nx >= layout.width || ny >= layout.height) continue;
+          if (layout.grid[ny][nx] !== 0) continue;
+          const pl = new THREE.Mesh(planeGeom, oceanMat);
+          pl.position.set(
+            x * CELL + dx * (CELL/2 + 0.01),
+            ROOM_CEIL / 2,
+            y * CELL + dy * (CELL/2 + 0.01),
+          );
+          pl.rotation.y = yaw;
+          group.add(pl);
+        }
+      }
+    } else {
+      // Square room — three large planes along the player's N/E/W (world E/N/S).
+      const ROOM_W_M = 9 * CELL;
+      const ROOM_D_M = 9 * CELL;
+      const cx = 6 * CELL, cz = 4 * CELL;
+      const yMid = ROOM_CEIL / 2;
+      const wE = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_D_M, ROOM_CEIL), oceanMat);
+      wE.position.set(10 * CELL + CELL/2 - 0.01, yMid, cz);
+      wE.rotation.y = -Math.PI / 2;
+      group.add(wE);
+      const wN = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W_M, ROOM_CEIL), oceanMat);
+      wN.position.set(cx, yMid, -CELL/2 + 0.01);
+      group.add(wN);
+      const wS = new THREE.Mesh(new THREE.PlaneGeometry(ROOM_W_M, ROOM_CEIL), oceanMat);
+      wS.position.set(cx, yMid, 8 * CELL + CELL/2 - 0.01);
+      wS.rotation.y = Math.PI;
+      group.add(wS);
+    }
   }
 
   // ===== TORCHES (neon-green orb sconces) =====
@@ -371,7 +425,88 @@ export function buildScene(opts) {
     torchLights.push({ light: pl, baseIntensity: intensity, kind: 'chandelier' });
   }
   // Room center (x=6, y=4) — tall ceiling
-  addChandelier(6 * CELL, 4 * CELL, ROOM_CEIL);
+  const chandelier = { obj: null };
+  if (opts.chandelier === 'eskleohell') {
+    // Visual replacement: hang the eskleohell GLB from the ceiling instead of
+    // building the procedural orb-ring chandelier. The GLB owns its own
+    // materials/textures; we only scale + position it.
+    const ANCHOR_X = 6 * CELL, ANCHOR_Z = 4 * CELL;
+    pendingLoads.push(new Promise((resolve) => {
+      new GLTFLoader().load('hallway4/eskleohell-01.glb', (gltf) => {
+        const obj = gltf.scene;
+        // Give the dark meshes some volume: clone each as a slightly inflated
+        // back-faced shell so the silhouette stays visible when rotating edge-on.
+        // Also enable DoubleSide on every material so thin polys don't vanish.
+        const shells = [];
+        obj.traverse(o => {
+          if (!o.isMesh || !o.material) return;
+          o.material.side = THREE.DoubleSide;
+          const c = o.material.color;
+          const lum = c ? c.r * 0.299 + c.g * 0.587 + c.b * 0.114 : 1;
+          if (lum < 0.40) {
+            const sh = o.clone();
+            sh.material = o.material.clone();
+            sh.material.side = THREE.BackSide;
+            sh.scale.multiplyScalar(1.05);
+            shells.push([o.parent, sh]);
+          }
+        });
+        shells.forEach(([p, sh]) => p.add(sh));
+        const bbox = new THREE.Box3().setFromObject(obj);
+        const size = bbox.getSize(new THREE.Vector3());
+        const maxD = Math.max(size.x, size.y, size.z);
+        const TARGET = 4.48; // 7/6 of the prior 3.84 m
+        const s = maxD > 0 ? TARGET / maxD : 1;
+        obj.scale.setScalar(s);
+        const sb = new THREE.Box3().setFromObject(obj);
+        const sc = sb.getCenter(new THREE.Vector3());
+        const ss = sb.getSize(new THREE.Vector3());
+        // Pivot wraps both GLB and corkscrew so they rotate together in place.
+        const pivot = new THREE.Group();
+        pivot.position.set(ANCHOR_X, ROOM_CEIL - 0.08 - ss.y / 2, ANCHOR_Z);
+        obj.position.set(-sc.x, -sc.y, -sc.z);
+        pivot.add(obj);
+
+        // ---- Rainbow corkscrew at the middle of the darker geometry ----
+        const corkH = ss.y * 0.85;
+        const corkR = Math.max(0.06, Math.min(ss.x, ss.z) * 0.18);
+        const turns = 5;
+        const segs  = 240;
+        const pts = [];
+        for (let i = 0; i <= segs; i++) {
+          const tt = i / segs;
+          const a = tt * turns * Math.PI * 2;
+          pts.push(new THREE.Vector3(Math.cos(a) * corkR, (tt - 0.5) * corkH, Math.sin(a) * corkR));
+        }
+        const corkCurve = new THREE.CatmullRomCurve3(pts);
+        const corkGeom  = new THREE.TubeGeometry(corkCurve, segs, 0.05, 10, false);
+        // Horizontal rainbow texture that tiles along the spiral and scrolls
+        // "downward" along the path over time.
+        const rcv = document.createElement('canvas');
+        rcv.width = 256; rcv.height = 1;
+        const rctx = rcv.getContext('2d');
+        for (let i = 0; i < 256; i++) {
+          const c = new THREE.Color().setHSL(i / 256, 1.0, 0.55);
+          rctx.fillStyle = `rgb(${(c.r*255)|0},${(c.g*255)|0},${(c.b*255)|0})`;
+          rctx.fillRect(i, 0, 1, 1);
+        }
+        const rtex = new THREE.CanvasTexture(rcv);
+        rtex.wrapS = THREE.RepeatWrapping;
+        rtex.repeat.x = 20;
+        const corkMat = new THREE.MeshBasicMaterial({ map: rtex, toneMapped: false });
+        const cork = new THREE.Mesh(corkGeom, corkMat);
+        const corkT0 = performance.now() / 1000;
+        cork.onBeforeRender = () => { rtex.offset.x = (performance.now() / 1000 - corkT0) * 0.20; };
+        pivot.add(cork); // local origin = pivot origin, so corkscrew sits dead-center
+        group.add(pivot);
+        chandelier.obj = pivot;
+
+        resolve();
+      }, undefined, err => { console.warn('[hallway2/scene] eskleohell-01.glb failed', err); resolve(); });
+    }));
+  } else {
+    addChandelier(6 * CELL, 4 * CELL, ROOM_CEIL);
+  }
 
   // ===== ESKLEO CHAMBER (center of room) =====
   // Loaded once from OBJ; we apply a placeholder material (aesthetics later).
@@ -444,22 +579,25 @@ export function buildScene(opts) {
       color: 0xffffff, roughness: 0.28, metalness: 0.55,
       side: THREE.DoubleSide,
     });
-    new OBJLoader().load('hallway2/eskleo-chamber-01.obj', (loaded) => {
-      // Scale so longest axis ≈ TARGET m (life-sized, one rider can lie in cockpit)
-      const bbox = new THREE.Box3().setFromObject(loaded);
-      const size = bbox.getSize(new THREE.Vector3());
-      const TARGET = 6.0; // metres — long axis
-      const maxD = Math.max(size.x, size.y, size.z);
-      const s = maxD > 0 ? TARGET / maxD : 1;
-      loaded.scale.setScalar(s);
-      // Re-measure after scaling, then center on chamberGroup and sit on floor
-      const b2 = new THREE.Box3().setFromObject(loaded);
-      const ctr = b2.getCenter(new THREE.Vector3());
-      loaded.position.sub(ctr);
-      loaded.position.y -= b2.min.y - ctr.y; // bottom -> y=0
-      loaded.traverse(o => { if (o.isMesh) o.material = placeholderMat; });
-      chamberGroup.add(loaded);
-    }, undefined, err => console.warn('[hallway2] eskleo-chamber-01.obj failed', err));
+    pendingLoads.push(new Promise((resolve) => {
+      new OBJLoader().load('hallway2/eskleo-chamber-01.obj', (loaded) => {
+        // Scale so longest axis ≈ TARGET m (life-sized, one rider can lie in cockpit)
+        const bbox = new THREE.Box3().setFromObject(loaded);
+        const size = bbox.getSize(new THREE.Vector3());
+        const TARGET = 6.0; // metres — long axis
+        const maxD = Math.max(size.x, size.y, size.z);
+        const s = maxD > 0 ? TARGET / maxD : 1;
+        loaded.scale.setScalar(s);
+        // Re-measure after scaling, then center on chamberGroup and sit on floor
+        const b2 = new THREE.Box3().setFromObject(loaded);
+        const ctr = b2.getCenter(new THREE.Vector3());
+        loaded.position.sub(ctr);
+        loaded.position.y -= b2.min.y - ctr.y; // bottom -> y=0
+        loaded.traverse(o => { if (o.isMesh) o.material = placeholderMat; });
+        chamberGroup.add(loaded);
+        resolve();
+      }, undefined, err => { console.warn('[hallway2] eskleo-chamber-01.obj failed', err); resolve(); });
+    }));
   }
   } // end chamber block
 
@@ -470,11 +608,77 @@ export function buildScene(opts) {
     group.add(dl);
   }
 
+  // ===== ADVENTURE-TIME SPIKY MOUNTAINS along interior perimeter =====
+  if (opts.spikyMountains) {
+    const W2 = layout.width, H2 = layout.height;
+    const perim = [];
+    for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+      if (layout.grid[y][x] !== 0 || x < 2) continue;
+      let dx = 0, dz = 0, touch = false;
+      for (const [ddx, ddy] of [[0,-1],[1,0],[0,1],[-1,0]]) {
+        const nx = x + ddx, ny = y + ddy;
+        if (nx < 0 || ny < 0 || nx >= W2 || ny >= H2 || layout.grid[ny][nx] === 1) {
+          touch = true; dx = ddx; dz = ddy; break;
+        }
+      }
+      if (touch) perim.push({ x, y, dx, dz });
+    }
+    let seed = 0xa1ce;
+    const rng = () => { seed = (seed * 1664525 + 1013904223) | 0; return ((seed >>> 0) / 4294967296); };
+    const mats = [0x4a3a5e, 0x5a4d7a, 0x3a5570, 0x4a6a78, 0x6a4f78].map(c =>
+      new THREE.MeshStandardMaterial({ color: c, roughness: 0.95, metalness: 0, flatShading: true })
+    );
+    const coneGeom = new THREE.ConeGeometry(1, 1, 5);
+    const mtns = new THREE.Group();
+    for (const p of perim) {
+      const n = 2 + ((rng() * 2) | 0);
+      for (let i = 0; i < n; i++) {
+        const h = 1.4 + rng() * 3.0;
+        const r = 0.45 + rng() * 0.55;
+        const cone = new THREE.Mesh(coneGeom, mats[(rng() * mats.length) | 0]);
+        cone.scale.set(r, h, r);
+        const off = 0.30 + rng() * 0.40;
+        const lat = (rng() - 0.5) * (CELL - 0.5);
+        const lx = p.dx ? p.dx * off : lat;
+        const lz = p.dz ? p.dz * off : lat;
+        cone.position.set(p.x * CELL + lx, h / 2, p.y * CELL + lz);
+        cone.rotation.y = rng() * Math.PI * 2;
+        mtns.add(cone);
+      }
+    }
+    group.add(mtns);
+  }
+
+  // ===== SAND DUNES scattered across the rolling grass =====
+  if (opts.sandDunes) {
+    let sd = 0xd0e5a;
+    const sR = () => { sd = (sd * 1664525 + 1013904223) | 0; return ((sd >>> 0) / 4294967296); };
+    const sandMat = new THREE.MeshStandardMaterial({
+      color: 0x3f7a36, roughness: 0.95, metalness: 0, flatShading: true,
+    });
+    const dGeom = new THREE.SphereGeometry(1, 14, 7, 0, Math.PI * 2, 0, Math.PI / 2);
+    for (let i = 0; i < 16; i++) {
+      const tx = 3 + ((sR() * 6) | 0);
+      const ty = 1 + ((sR() * 7) | 0);
+      if (!layout.grid[ty] || layout.grid[ty][tx] !== 0) continue;
+      const dune = new THREE.Mesh(dGeom, sandMat);
+      dune.scale.set(0.8 + sR() * 1.5, 0.18 + sR() * 0.22, 0.5 + sR() * 1.0);
+      dune.position.set(
+        tx * CELL + (sR() - 0.5) * (CELL - 0.5), 0,
+        ty * CELL + (sR() - 0.5) * (CELL - 0.5),
+      );
+      dune.rotation.y = sR() * Math.PI * 2;
+      group.add(dune);
+    }
+  }
+
   return {
     scene, group, layout,
     walls, floorMesh: floor, ceilMesh: ceilInst,
     torchLights, playerLight,
     waterMat,
     CELL, WALL_H: ROOM_CEIL,
+    chandelier,
+    ready: Promise.all(pendingLoads),
   };
 }

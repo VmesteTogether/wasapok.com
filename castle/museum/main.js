@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=14';
-import { buildScene } from './scene.js?v=88';
+import { buildScene } from './scene.js?v=89';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 import { setupSceneNav, consumeLoadingMsg } from '../nav.js?v=6';
@@ -452,9 +452,17 @@ function animate() {
   renderer.render(scene, camera);
 }
 
-document.getElementById('loading').style.transition = 'opacity 0.4s';
-document.getElementById('loading').style.opacity = '0';
-setTimeout(() => { document.getElementById('loading').style.display = 'none'; }, 500);
+{
+  const loadingEl = document.getElementById('loading');
+  loadingEl.style.transition = 'opacity 0.4s';
+  const dismiss = () => {
+    loadingEl.style.opacity = '0';
+    setTimeout(() => { loadingEl.style.display = 'none'; }, 500);
+  };
+  // Wait for async sculpture loads to complete; safety fallback after 8s.
+  const safety = setTimeout(dismiss, 8000);
+  (built.ready || Promise.resolve()).then(() => { clearTimeout(safety); dismiss(); });
+}
 
 animate();
 window.__museum = { layout, built, player, opts };

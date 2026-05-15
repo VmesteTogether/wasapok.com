@@ -4,7 +4,7 @@
 // fades and navigates to main-hall.html.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=49';
+import { buildScene } from './scene.js?v=50';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -183,12 +183,16 @@ if (sprintBtn) {
     }
     resize();
 
-    // Hide loading screen
+    // Hide loading screen — wait for async sculpture (vase) load; 8s safety fallback.
     const loading = document.getElementById('loading');
     if (loading) {
       loading.style.transition = 'opacity 0.5s';
-      loading.style.opacity = '0';
-      setTimeout(() => { loading.style.display = 'none'; }, 600);
+      const dismiss = () => {
+        loading.style.opacity = '0';
+        setTimeout(() => { loading.style.display = 'none'; }, 600);
+      };
+      const safety = setTimeout(dismiss, 8000);
+      (built.ready || Promise.resolve()).then(() => { clearTimeout(safety); dismiss(); });
     }
 
     booted = true;
