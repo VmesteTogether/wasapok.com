@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=14';
-import { buildScene } from './scene.js?v=79';
+import { buildScene } from './scene.js?v=88';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 import { setupSceneNav } from '../nav.js?v=5';
@@ -301,6 +301,9 @@ function updatePortalTransition() {
 // ===========================================================
 // LOOP
 // ===========================================================
+const vignetteEl = document.getElementById('vignette');
+const _vignVec = new THREE.Vector3();
+let vignetteX = 50, vignetteY = 50, lastVX = -1, lastVY = -1;
 let lastTime = performance.now();
 function animate() {
   requestAnimationFrame(animate);
@@ -398,6 +401,40 @@ function animate() {
     built.diamondGroup.position.y = built.diamondBaseY + Math.sin(t * 1.1) * 0.14;
     const il = built.diamondGroup.userData.innerLight;
     if (il) il.intensity = 2.0 + Math.sin(t * 1.8) * 0.6 + Math.sin(t * 4.7) * 0.15;
+  }
+
+  // Vignette follows the floating diamonds (radial center tracks their screen position).
+  // The target position is lerped smoothly to dampen any swing during turn animations,
+  // and only pushed to the DOM when the rounded value actually changes, to avoid
+  // flutter from rapid CSS gradient re-evaluations.
+  if (vignetteEl && built.diamondGroup) {
+    let targetX = 50, targetY = 50;
+    built.diamondGroup.getWorldPosition(_vignVec);
+    const dx = _vignVec.x - camera.position.x;
+    const dz = _vignVec.z - camera.position.z;
+    const distSq = dx * dx + dz * dz;
+    const INSIDE_R = 2.2;
+    if (distSq >= INSIDE_R * INSIDE_R) {
+      _vignVec.project(camera);
+      if (_vignVec.z < 1) {
+        targetX = (_vignVec.x + 1) * 50;
+        targetY = (1 - _vignVec.y) * 50;
+      }
+    }
+    // While turning, hold the vignette at its current position so it doesn't sweep.
+    const turning = player.state.anim && player.state.anim.type === 'turn';
+    if (!turning) {
+      const k = 0.06;
+      vignetteX += (targetX - vignetteX) * k;
+      vignetteY += (targetY - vignetteY) * k;
+    }
+    const rx = Math.round(vignetteX);
+    const ry = Math.round(vignetteY);
+    if (rx !== lastVX || ry !== lastVY) {
+      vignetteEl.style.setProperty('--vx', rx + '%');
+      vignetteEl.style.setProperty('--vy', ry + '%');
+      lastVX = rx; lastVY = ry;
+    }
   }
 
   // Minimap

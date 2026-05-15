@@ -145,10 +145,30 @@ export function buildScene(opts) {
   group.add(waterMesh);
 
   // ---- FLOOR ----
-  const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, H), floorMat);
-  floor.rotation.x = -Math.PI / 2;
-  floor.position.set(W/2 - CELL/2, 0, H/2 - CELL/2);
-  floor.renderOrder = 1;
+  let floor;
+  if (opts.floor === 'grass') {
+    // Small rolling grassy knoll: subdivided plane with sine-wave hills.
+    const g = new THREE.PlaneGeometry(W, H, 28, 24);
+    g.rotateX(-Math.PI / 2);
+    const pa = g.attributes.position.array;
+    for (let i = 0; i < pa.length; i += 3) {
+      const x = pa[i], z = pa[i + 2];
+      pa[i + 1] = Math.sin(x * 0.55) * 0.16
+                + Math.cos(z * 0.50) * 0.12
+                + Math.sin((x + z) * 0.30) * 0.07;
+    }
+    g.computeVertexNormals();
+    const grassMat = new THREE.MeshStandardMaterial({
+      color: 0x3f7a36, roughness: 0.95, metalness: 0,
+    });
+    floor = new THREE.Mesh(g, grassMat);
+    floor.position.set(W/2 - CELL/2, 0, H/2 - CELL/2);
+  } else {
+    floor = new THREE.Mesh(new THREE.PlaneGeometry(W, H), floorMat);
+    floor.rotation.x = -Math.PI / 2;
+    floor.position.set(W/2 - CELL/2, 0, H/2 - CELL/2);
+    floor.renderOrder = 1;
+  }
   group.add(floor);
 
   // ---- CEILING (instanced, per-cell flipped plane) ----
@@ -442,6 +462,13 @@ export function buildScene(opts) {
     }, undefined, err => console.warn('[hallway2] eskleo-chamber-01.obj failed', err));
   }
   } // end chamber block
+
+  // Centered warm daylight point light — natural radial falloff vignettes the corners.
+  if (opts.daylight) {
+    const dl = new THREE.PointLight(0xfff0c8, 45, 16, 1.8);
+    dl.position.set(6 * CELL, ROOM_CEIL - 0.3, 4 * CELL);
+    group.add(dl);
+  }
 
   return {
     scene, group, layout,

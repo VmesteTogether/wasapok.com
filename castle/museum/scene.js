@@ -216,6 +216,102 @@ export function buildScene(layout, opts) {
     group.add(stalInst);
   }
 
+  // ICY-ORANGE PIXEL DROPLETS — tiny blinking cubes fall from stalactite tips
+  {
+    const N = 90;
+    const dGeom = new THREE.BoxGeometry(0.05, 0.05, 0.05);
+    const dMat = new THREE.MeshBasicMaterial({
+      color: 0xffaa55, toneMapped: false,
+      transparent: true, opacity: 0.45, depthWrite: false,
+    });
+    const drops = new THREE.InstancedMesh(dGeom, dMat, N);
+    drops.frustumCulled = false;
+    const dropCells = floorCells.filter(c => !((layout.rooms || []).some(r => r.cx === c.x && r.cy === c.y)));
+    const LAND_FRAC = 0.30; // ~30% of drops land on the floor
+    const LAND_FADE = 3.5;  // seconds of color-flutter + fade after landing
+    const ds = [];
+    const pick = (warm) => {
+      const c = dropCells[(Math.random() * dropCells.length) | 0] || floorCells[0];
+      const ceilTipY = c.ceilH - 0.4 - Math.random() * 0.9;
+      const s = {
+        bx: c.x * CELL + (Math.random() - 0.5) * (CELL - 0.3),
+        bz: c.y * CELL + (Math.random() - 0.5) * (CELL - 0.3),
+        y: ceilTipY,
+        vy: -0.35 - Math.random() * 0.45,
+        phase: Math.random() * 6.28,
+        speed: 7 + Math.random() * 6,
+        // flutter
+        ax: 0.08 + Math.random() * 0.10,
+        az: 0.08 + Math.random() * 0.10,
+        fx: 1.6 + Math.random() * 2.2,
+        fz: 1.4 + Math.random() * 2.4,
+        px: Math.random() * 6.28,
+        pz: Math.random() * 6.28,
+        // landing state
+        state: 'falling',
+        land: Math.random() < LAND_FRAC,
+        landT: 0,
+      };
+      if (warm) {
+        const r = Math.random();
+        if (r < 0.75) {
+          // mid-fall at a random height between floor and ceiling tip
+          s.y = 0.06 + Math.random() * (ceilTipY - 0.06);
+        } else {
+          // already landed, partway through fade
+          s.state = 'landed';
+          s.y = 0.06;
+          s.land = true;
+          s.landT = (performance.now() / 1000) - Math.random() * LAND_FADE;
+        }
+      }
+      return s;
+    };
+    for (let n = 0; n < N; n++) ds.push(pick(true));
+    const dCol = new THREE.Color();
+    drops.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(N * 3), 3);
+    let _last = performance.now();
+    drops.onBeforeRender = () => {
+      const now = performance.now();
+      const dt = Math.min(0.05, (now - _last) / 1000); _last = now;
+      const t = now / 1000;
+      for (let n = 0; n < N; n++) {
+        const s = ds[n];
+        let fadeMul = 1, posX = s.bx, posZ = s.bz;
+        if (s.state === 'falling') {
+          s.y += s.vy * dt;
+          posX = s.bx + Math.sin(t * s.fx + s.px) * s.ax + Math.sin(t * s.fx * 2.3 + s.px) * (s.ax * 0.35);
+          posZ = s.bz + Math.cos(t * s.fz + s.pz) * s.az + Math.cos(t * s.fz * 1.9 + s.pz) * (s.az * 0.35);
+          if (s.y <= 0.06) {
+            if (s.land) {
+              s.state = 'landed';
+              s.y = 0.06;
+              s.bx = posX; s.bz = posZ; // freeze landing position
+              s.landT = t;
+            } else {
+              Object.assign(s, pick());
+            }
+          }
+        } else {
+          const elapsed = t - s.landT;
+          fadeMul = Math.max(0, 1 - elapsed / LAND_FADE);
+          if (elapsed >= LAND_FADE) Object.assign(s, pick());
+        }
+        const blink = Math.sin(t * s.speed + s.phase);
+        const on = blink > 0.1 ? 1 : 0.18;
+        const k = on * fadeMul;
+        dCol.setRGB(1.0 * k, 0.62 * k, 0.30 * k);
+        drops.setColorAt(n, dCol);
+        v3.set(posX, s.y, posZ);
+        m4.compose(v3, q, sc);
+        drops.setMatrixAt(n, m4);
+      }
+      drops.instanceMatrix.needsUpdate = true;
+      if (drops.instanceColor) drops.instanceColor.needsUpdate = true;
+    };
+    group.add(drops);
+  }
+
   // WALLS as boxes — height = max ceiling of any adjacent floor
   const wallCells = [];
   for (let y = 0; y < layout.height; y++) for (let x = 0; x < layout.width; x++) {

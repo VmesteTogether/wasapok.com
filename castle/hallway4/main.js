@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=4';
+import { buildScene } from '../hallway2/scene.js?v=7';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -13,6 +13,8 @@ const opts = {
   headbob: true,
   sprintFov: true,
   chamber: false, // hallway 4 has no central object
+  floor: 'grass',  // rolling grassy knoll instead of glass-over-water
+  daylight: true,  // warm radial daylight at room center, dim corners
 };
 
 // ---- Renderer ----
