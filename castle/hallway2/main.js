@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
 import { buildScene } from './scene.js?v=3';
-import { setupSceneNav } from '../nav.js?v=2';
+import { setupSceneNav } from '../nav.js?v=3';
 
 const opts = {
   pixelation: 3,
@@ -38,6 +38,7 @@ const nav = setupSceneNav({
   player, camera,
   spawnTile: layout.spawn,
   forwardTriggers: [], // no forward triggers in this room
+  defaultReturnScene: 'main-hall.html',
 });
 
 function resize() {

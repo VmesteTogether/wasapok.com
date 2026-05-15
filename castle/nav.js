@@ -72,6 +72,7 @@ export function setupSceneNav({
   player, camera,
   spawnTile,
   forwardTriggers = [],
+  defaultReturnScene = null, // fallback target when the return stack is empty (deep-link / refresh)
 }) {
   applyArrival(player, camera);
 
@@ -93,6 +94,12 @@ export function setupSceneNav({
           setArrival(ret.tile, ret.dir);
           transitioning = true;
           window.location.href = ret.scene;
+          return;
+        } else if (defaultReturnScene) {
+          // Stack empty (likely deep-linked into this scene). Send the player
+          // to the fallback without an arrival override → that scene's default spawn.
+          transitioning = true;
+          window.location.href = defaultReturnScene;
           return;
         }
       }

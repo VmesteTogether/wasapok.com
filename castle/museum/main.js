@@ -5,7 +5,7 @@ import { buildLayout } from './layout.js?v=14';
 import { buildScene } from './scene.js?v=79';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
-import { setupSceneNav } from '../nav.js?v=2';
+import { setupSceneNav } from '../nav.js?v=3';
 
 const layout = buildLayout();
 
@@ -38,6 +38,7 @@ const nav = setupSceneNav({
   player, camera,
   spawnTile: layout.spawn,
   forwardTriggers: built.triggerTiles || [],
+  defaultReturnScene: 'index.html',
 });
 
 function resize() {
