@@ -1667,8 +1667,8 @@ export function buildScene(layout, opts) {
     }
   }
 
-  // Floating corridor number labels: N=1, E=2, S=3, W=4
-  {
+  // Floating corridor number labels: N=1, E=2, S=3, W=4 (hidden — reference only).
+  if (false) {
     const hubR = layout.rooms.find(r => r.kind === 'hub');
     const labels = [
       [1, hubR.cx * CELL,                        (hubR.y0 - 1.5) * CELL          ], // N → throne
