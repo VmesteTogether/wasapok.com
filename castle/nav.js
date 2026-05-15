@@ -33,6 +33,7 @@
 
 const STACK_KEY   = 'castle:returnStack';
 const ARRIVAL_KEY = 'castle:arrivalOverride';
+const LOADING_KEY = 'castle:loadingMsg';
 const YAW = [0, -Math.PI / 2, Math.PI, Math.PI / 2];
 
 // ---- Stack + arrival primitives (also exported for advanced use) ----
@@ -55,6 +56,11 @@ export function popReturn() {
 }
 export function setArrival(tile, dir) {
   sessionStorage.setItem(ARRIVAL_KEY, JSON.stringify({ tile, dir }));
+}
+export function consumeLoadingMsg() {
+  const m = sessionStorage.getItem(LOADING_KEY);
+  if (m) sessionStorage.removeItem(LOADING_KEY);
+  return m;
 }
 export function applyArrival(player, camera) {
   const v = sessionStorage.getItem(ARRIVAL_KEY);
@@ -79,6 +85,7 @@ export function setupSceneNav({
   forwardTriggers = [],
   holdTriggers = [],
   defaultReturnScene = null, // fallback target when the return stack is empty (deep-link / refresh)
+  returnLoadingMsg = null,   // optional loading-screen label shown on the destination after the return tile fires
 }) {
   applyArrival(player, camera);
 
@@ -98,6 +105,7 @@ export function setupSceneNav({
       if (!returnArmed && (tx !== RETURN_TILE.x || ty !== RETURN_TILE.y)) returnArmed = true;
       if (returnArmed && tx === RETURN_TILE.x && ty === RETURN_TILE.y) {
         const ret = popReturn();
+        if (returnLoadingMsg) sessionStorage.setItem(LOADING_KEY, returnLoadingMsg);
         if (ret) {
           setArrival(ret.tile, ret.dir);
           transitioning = true;

@@ -5,7 +5,16 @@ import { buildLayout } from './layout.js?v=14';
 import { buildScene } from './scene.js?v=88';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
-import { setupSceneNav } from '../nav.js?v=5';
+import { setupSceneNav, consumeLoadingMsg } from '../nav.js?v=6';
+
+// Override the loading label if the previous scene set a custom message (e.g. return from a sub-room).
+{
+  const msg = consumeLoadingMsg();
+  if (msg) {
+    const el = document.querySelector('#loading .label');
+    if (el) el.textContent = msg;
+  }
+}
 
 const layout = buildLayout();
 
