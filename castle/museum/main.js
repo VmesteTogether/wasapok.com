@@ -59,8 +59,12 @@ function showVeins() {
   _veinEl.classList.remove('active');
   void _veinEl.offsetWidth; // restart animation
   _veinEl.classList.add('active');
+  document.body.classList.add('shake');
 }
-function hideVeins() { if (_veinEl) _veinEl.classList.remove('active'); }
+function hideVeins() {
+  if (_veinEl) _veinEl.classList.remove('active');
+  document.body.classList.remove('shake');
+}
 
 const nav = setupSceneNav({
   sceneUrl: 'main-hall.html',

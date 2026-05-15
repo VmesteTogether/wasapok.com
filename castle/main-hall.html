@@ -107,6 +107,16 @@
     45%  { transform: scale(1.005); opacity: 0.82; }
     100% { transform: scale(1.00); opacity: 0.78; }
   }
+  /* Damage-jitter screen shake — runs only while the bleed overlay is active. */
+  @keyframes dmg-jitter {
+    0%   { transform: translate(0, 0); }
+    20%  { transform: translate(-2px, 1px); }
+    40%  { transform: translate(2px, -2px); }
+    60%  { transform: translate(-1px, 2px); }
+    80%  { transform: translate(2px, 1px); }
+    100% { transform: translate(0, 0); }
+  }
+  body.shake #game { animation: dmg-jitter 0.09s linear infinite; }
 
   /* ========== TITLE BAR ========== */
   #title {
@@ -476,6 +486,6 @@
 }
 </script>
 
-<script type="module" src="museum/main.js?v=106"></script>
+<script type="module" src="museum/main.js?v=107"></script>
 </body>
 </html>
