@@ -268,6 +268,127 @@ export async function buildScene() {
   }
   if (triggerTiles.length) scene.add(triggerMarkerGroup);
 
+  // ===== 3-TILE PORTAL DOOR on Building 1 — replica of the main-hall door =====
+  if (triggerTile) {
+    // Door dimensions: 2 trigger tiles wide (was 3, shortened by one tile on the right),
+    // human-scale height.
+    const PW = 2 * CELL;
+    const PH = 2.2;
+    const FT = 0.18;
+    const fDx = [0, 1, 0, -1][spawn.dir];
+    const fDy = [-1, 0, 1, 0][spawn.dir];
+    // Player-relative perpendicular axis: perp(+1) is the player's left.
+    const pDx = fDy, pDy = -fDx;
+    // Anchor the door directly on the invisible trigger tiles, with a
+    // +0.5-tile left offset so the 2-tile-wide door covers the centre +
+    // right-of-centre trigger tiles.
+    const wallX = (triggerTile.x + 0.5) * CELL + pDx * 0.85 * CELL;
+    const wallZ = (triggerTile.y + 0.5) * CELL + pDy * 0.85 * CELL;
+    console.log('[outside] portal door:', { spawn, triggerTile, wallX, wallZ });
+    const portalMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: { value: 0 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float uTime; varying vec2 vUv;
+        void main(){
+          vec2 p = vUv - 0.5;
+          float r = length(p);
+          float a = atan(p.y, p.x);
+          float ripple = sin(r * 18.0 - uTime * 1.1) * 0.22 + 0.5;
+          float swirl  = sin(a * 4.0 + uTime * 0.40 - r * 8.0) * 0.18 + 0.5;
+          float n = mix(ripple, swirl, 0.55);
+          vec3 col = mix(vec3(0.25,0.50,1.00), vec3(0.61,0.84,1.00), n);
+          col = mix(col, vec3(0.92,0.97,1.00), smoothstep(0.62, 0.88, n));
+          float edge = clamp(min(min(vUv.x, 1.-vUv.x), min(vUv.y, 1.-vUv.y)) * 8.0, 0.0, 1.0);
+          gl_FragColor = vec4(col, 0.88 * edge);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide, depthWrite: false,
+    });
+    const chromeMat = new THREE.MeshStandardMaterial({
+      color: 0xd6dadf, roughness: 0.18, metalness: 0.95,
+    });
+    const pivot = new THREE.Group();
+    pivot.position.set(wallX - fDx * 0.05, PH / 2, wallZ - fDy * 0.05);
+    pivot.rotation.y = [0, -Math.PI / 2, Math.PI, Math.PI / 2][spawn.dir];
+    const portalMesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), portalMat);
+    portalMesh.onBeforeRender = (_r, _s, cam) => {
+      portalMat.uniforms.uTime.value = performance.now() / 1000;
+      const dx = cam.position.x - pivot.position.x;
+      const dz = cam.position.z - pivot.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const open = Math.max(0, Math.min(1, (10.0 - dist) / 5.0));
+      portalMesh.scale.y = Math.max(0.001, 1 - open);
+      portalMesh.position.y = (PH / 2) * open;
+      // Fade the vanishing lines in with the door so they don't paint over
+      // foreground geometry (e.g. the vase sculpture) before the door opens.
+      lineMat.opacity = 0.8 * open;
+    };
+    pivot.add(portalMesh);
+    const topBar = new THREE.Mesh(new THREE.BoxGeometry(PW + FT, FT, FT), chromeMat);
+    topBar.position.set(0, PH / 2 + FT / 2, 0);
+    pivot.add(topBar);
+    const sideGeom = new THREE.BoxGeometry(FT, PH + FT, FT);
+    const lBar = new THREE.Mesh(sideGeom, chromeMat);
+    lBar.position.set(-PW / 2 - FT / 2, FT / 2, 0);
+    pivot.add(lBar);
+    const rBar = new THREE.Mesh(sideGeom, chromeMat);
+    rBar.position.set(PW / 2 + FT / 2, FT / 2, 0);
+    pivot.add(rBar);
+
+    // Faux interior hallway behind the door. Rendered with renderOrder + no
+    // depthTest so any building mesh between the camera and the tunnel pixels
+    // is overwritten, simulating a window onto the main hall beyond.
+    const tMat = new THREE.MeshBasicMaterial({
+      color: 0x0c0d10, side: THREE.DoubleSide,
+      fog: false, depthTest: false, depthWrite: false,
+    });
+    const tBackMat = new THREE.MeshBasicMaterial({
+      color: 0x020204, side: THREE.DoubleSide,
+      fog: false, depthTest: false, depthWrite: false,
+    });
+    // Cross-section matches the door opening exactly so the tunnel never
+    // pokes outside the chrome U-frame.
+    const TDP = 6.0;
+    const tunnelPanels = [
+      [PW, TDP, [0, -PH/2, -TDP/2], [-Math.PI/2, 0, 0], tMat], // floor
+      [PW, TDP, [0,  PH/2, -TDP/2], [ Math.PI/2, 0, 0], tMat], // ceiling
+      [TDP, PH, [-PW/2, 0, -TDP/2], [0,  Math.PI/2, 0], tMat], // left
+      [TDP, PH, [ PW/2, 0, -TDP/2], [0, -Math.PI/2, 0], tMat], // right
+      [PW, PH, [0, 0, -TDP], [0, 0, 0], tBackMat],             // far wall (darker)
+    ];
+    for (const [w, h, p, r, mat] of tunnelPanels) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      m.position.set(p[0], p[1], p[2]);
+      m.rotation.set(r[0], r[1], r[2]);
+      m.renderOrder = 10;
+      pivot.add(m);
+    }
+    // One-point-perspective "vanishing" lines from each front corner to the
+    // matching back-wall corner — the four long edges of the tunnel box.
+    const lineMat = new THREE.LineBasicMaterial({
+      color: 0x1c1e22, fog: false, depthTest: false, depthWrite: false,
+      transparent: true, opacity: 0, // ramps with portal animation
+    });
+    const lineGeom = new THREE.BufferGeometry();
+    lineGeom.setAttribute('position', new THREE.Float32BufferAttribute([
+      -PW/2,  PH/2, 0,   -PW/2,  PH/2, -TDP, // top-left
+       PW/2,  PH/2, 0,    PW/2,  PH/2, -TDP, // top-right
+      -PW/2, -PH/2, 0,   -PW/2, -PH/2, -TDP, // bottom-left
+       PW/2, -PH/2, 0,    PW/2, -PH/2, -TDP, // bottom-right
+    ], 3));
+    const vlines = new THREE.LineSegments(lineGeom, lineMat);
+    vlines.renderOrder = 15;
+    pivot.add(vlines);
+    // Keep portal + chrome frame on top of the tunnel.
+    portalMesh.renderOrder = 20;
+    topBar.renderOrder = 20;
+    lBar.renderOrder = 20;
+    rBar.renderOrder = 20;
+
+    scene.add(pivot);
+  }
+
   console.log('[outside] walkable bbox', walkableBox);
   console.log('[outside] spawn=', spawn, ' triggerTile=', triggerTile);
 

@@ -468,9 +468,9 @@ export function buildScene(opts) {
         pivot.add(obj);
 
         // ---- Rainbow corkscrew at the middle of the darker geometry ----
-        const corkH = ss.y * 0.85;
+        const corkH = ss.y * 0.65;
         const corkR = Math.max(0.06, Math.min(ss.x, ss.z) * 0.18);
-        const turns = 5;
+        const turns = 12;
         const segs  = 240;
         const pts = [];
         for (let i = 0; i <= segs; i++) {
@@ -492,7 +492,7 @@ export function buildScene(opts) {
         }
         const rtex = new THREE.CanvasTexture(rcv);
         rtex.wrapS = THREE.RepeatWrapping;
-        rtex.repeat.x = 20;
+        rtex.repeat.x = 60;
         const corkMat = new THREE.MeshBasicMaterial({ map: rtex, toneMapped: false });
         const cork = new THREE.Mesh(corkGeom, corkMat);
         const corkT0 = performance.now() / 1000;
@@ -670,6 +670,156 @@ export function buildScene(opts) {
       dune.rotation.y = sR() * Math.PI * 2;
       group.add(dune);
     }
+  }
+
+  // ===== HOVER SHIPS — miniature eskleoship GLB roaming the rolling hills =====
+  if (opts.hoverShips) {
+    const ROOM_CX = 6 * CELL, ROOM_CZ = 4 * CELL, ROOM_R = 6.0;
+    const SHIP_N = 6, HOVER_Y = 0.45;
+    pendingLoads.push(new Promise((resolve) => {
+      new GLTFLoader().load('hallway4/eskleoship-01.glb', (gltf) => {
+        const proto = gltf.scene;
+        const bb = new THREE.Box3().setFromObject(proto);
+        const sz = bb.getSize(new THREE.Vector3());
+        const maxD = Math.max(sz.x, sz.y, sz.z);
+        proto.scale.setScalar(maxD > 0 ? 0.32 / maxD : 1); // miniature ~0.32 m
+        const whiteMat = new THREE.MeshStandardMaterial({
+          color: 0xeeeae2, roughness: 0.95, metalness: 0.0,
+        });
+        proto.traverse(o => { if (o.isMesh) o.material = whiteMat; });
+        const sb = new THREE.Box3().setFromObject(proto);
+        const sc = sb.getCenter(new THREE.Vector3());
+        const ships = [];
+        let sd = 0xb1a5;
+        const sR = () => { sd = (sd * 1664525 + 1013904223) | 0; return ((sd >>> 0) / 4294967296); };
+        for (let i = 0; i < SHIP_N; i++) {
+          const ship = proto.clone(true);
+          ship.position.set(-sc.x, -sc.y, -sc.z); // recentre on wrapper
+          const wrap = new THREE.Group();
+          wrap.add(ship);
+          const a = sR() * Math.PI * 2;
+          const r = sR() * ROOM_R * 0.7;
+          wrap.position.set(ROOM_CX + Math.cos(a) * r, HOVER_Y, ROOM_CZ + Math.sin(a) * r);
+          const heading = sR() * Math.PI * 2;
+          const speed = 0.75 + sR() * 0.85;
+          wrap.rotation.y = heading;
+          ships.push({
+            wrap,
+            vx: Math.sin(heading) * speed, vz: Math.cos(heading) * speed,
+            vy: 0, flutterT: 3 + sR() * 3, driftT: 3 + sR() * 5, phase: sR() * 6.28,
+            orbitDir: sR() < 0.5 ? 1 : -1,
+            targetR: ROOM_R * (0.45 + sR() * 0.35),
+          });
+          group.add(wrap);
+        }
+        // Dust trail — shared InstancedMesh, ring-buffer spawned behind grounded ships.
+        const DUST_N = 32;
+        const dustMat = new THREE.MeshBasicMaterial({
+          color: 0x8a7a52, transparent: true, opacity: 0.42, depthWrite: false,
+        });
+        const dust = new THREE.InstancedMesh(new THREE.SphereGeometry(0.07, 6, 4), dustMat, DUST_N);
+        dust.frustumCulled = false;
+        const dustS = [];
+        const _zM = new THREE.Matrix4().makeScale(0, 0, 0);
+        for (let i = 0; i < DUST_N; i++) { dustS.push({ life: 0, age: 0, x: 0, y: 0, z: 0 }); dust.setMatrixAt(i, _zM); }
+        dust.instanceMatrix.needsUpdate = true;
+        group.add(dust);
+        const _dV = new THREE.Vector3(), _dQ = new THREE.Quaternion(), _dSc = new THREE.Vector3(), _dM = new THREE.Matrix4();
+        let dCur = 0;
+        const spawnDust = (s) => {
+          const i = dCur; dCur = (dCur + 1) % DUST_N;
+          const d = dustS[i];
+          d.life = 0.7 + Math.random() * 0.4;
+          d.age = 0;
+          const sp = Math.hypot(s.vx, s.vz) || 1;
+          d.x = s.wrap.position.x - (s.vx / sp) * 0.35 + (Math.random() - 0.5) * 0.12;
+          d.z = s.wrap.position.z - (s.vz / sp) * 0.35 + (Math.random() - 0.5) * 0.12;
+          d.y = HOVER_Y - 0.22;
+        };
+        // Find a Mesh inside ship 0 to drive ticks (Group.onBeforeRender never fires).
+        let driver = null;
+        ships[0].wrap.traverse(o => { if (!driver && o.isMesh) driver = o; });
+        if (!driver) { resolve(); return; }
+        driver.frustumCulled = false; // keep ticking even when the ship leaves the view
+        let _last = performance.now();
+        driver.onBeforeRender = () => {
+          const now = performance.now();
+          const dt = Math.min(0.06, (now - _last) / 1000); _last = now;
+          for (const s of ships) {
+            s.phase += dt * 2.5;
+            // Steer velocity toward a loose orbital path around the room centre.
+            {
+              const rx = s.wrap.position.x - ROOM_CX;
+              const rz = s.wrap.position.z - ROOM_CZ;
+              const r = Math.hypot(rx, rz) || 0.001;
+              const tx = -rz / r * s.orbitDir, tz = rx / r * s.orbitDir;
+              const radErr = (r - s.targetR) / s.targetR;
+              const dgX = tx - (rx / r) * radErr * 0.4;
+              const dgZ = tz - (rz / r) * radErr * 0.4;
+              const dMag = Math.hypot(dgX, dgZ) || 1;
+              const sp = Math.hypot(s.vx, s.vz);
+              s.vx = s.vx * 0.94 + (dgX / dMag) * sp * 0.06;
+              s.vz = s.vz * 0.94 + (dgZ / dMag) * sp * 0.06;
+            }
+            s.wrap.position.x += s.vx * dt;
+            s.wrap.position.z += s.vz * dt;
+            // Bounce off the circular room boundary.
+            const ox = s.wrap.position.x - ROOM_CX, oz = s.wrap.position.z - ROOM_CZ;
+            const d = Math.sqrt(ox * ox + oz * oz);
+            if (d > ROOM_R) {
+              const nx = ox / d, nz = oz / d, dot = s.vx * nx + s.vz * nz;
+              if (dot > 0) { s.vx -= 2 * dot * nx; s.vz -= 2 * dot * nz; }
+              s.wrap.position.x = ROOM_CX + nx * ROOM_R;
+              s.wrap.position.z = ROOM_CZ + nz * ROOM_R;
+            }
+            s.wrap.rotation.y = Math.atan2(s.vx, s.vz) + Math.PI;
+            // Random handbrake drift — rotate velocity by ±~60° once in a while.
+            s.driftT -= dt;
+            if (s.driftT <= 0) {
+              const a = (Math.random() - 0.5) * Math.PI * 0.7;
+              const c = Math.cos(a), si = Math.sin(a);
+              const nvx = s.vx * c - s.vz * si;
+              const nvz = s.vx * si + s.vz * c;
+              s.vx = nvx; s.vz = nvz;
+              s.driftT = 5 + Math.random() * 7;
+            }
+            // Occasional upward flutter, gravity returns the ship to hover height.
+            s.flutterT -= dt;
+            if (s.flutterT <= 0) {
+              s.vy = 2.0 + Math.random() * 1.6;
+              s.flutterT = 4 + Math.random() * 2; // 5:1 driving:jumping ratio (jump ≈ 1 s)
+            }
+            s.vy -= 8 * dt;
+            let y = s.wrap.position.y + s.vy * dt;
+            if (y < HOVER_Y) { y = HOVER_Y; if (s.vy < 0) s.vy = 0; }
+            s.wrap.position.y = y + Math.sin(s.phase) * 0.04;
+            // Off-road shake while grounded.
+            const sh = s.wrap.position.y < HOVER_Y + 0.06 ? 1 : 0;
+            s.wrap.rotation.x = (Math.random() - 0.5) * 0.07 * sh;
+            s.wrap.rotation.z = (Math.random() - 0.5) * 0.07 * sh;
+            // Spawn dust behind grounded ships.
+            if (s.wrap.position.y < HOVER_Y + 0.12 && Math.random() < 0.35) spawnDust(s);
+          }
+          // Advance dust particles + write matrices.
+          for (let i = 0; i < DUST_N; i++) {
+            const d = dustS[i];
+            let sc = 0;
+            if (d.age < d.life) {
+              d.age += dt;
+              const t = d.age / d.life;
+              sc = t < 0.5 ? t * 2 : 2 * (1 - t);
+              d.y += dt * 0.15;
+            }
+            _dV.set(d.x, d.y, d.z);
+            _dSc.set(sc, sc, sc);
+            _dM.compose(_dV, _dQ, _dSc);
+            dust.setMatrixAt(i, _dM);
+          }
+          dust.instanceMatrix.needsUpdate = true;
+        };
+        resolve();
+      }, undefined, err => { console.warn('[hallway2] eskleoship-01.glb failed', err); resolve(); });
+    }));
   }
 
   return {

@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=30';
+import { buildScene } from '../hallway2/scene.js?v=39';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -19,6 +19,7 @@ const opts = {
   spikyMountains: true, // Adventure-Time style mountains hugging the interior perimeter
   sandDunes: true, // low sand mounds scattered across the rolling grass
   roomShape: 'circle', // carve a circular floor plan instead of the default square
+  hoverShips: true, // eskleoship-01 minis roaming + fluttering across the hills
 };
 
 // ---- Renderer ----

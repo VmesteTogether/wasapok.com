@@ -9,6 +9,7 @@ import {
 } from './textures.js?v=33';
 import { GATE_W, GATE_H, GATE_PIXELS } from './gnominium-data.js?v=1';
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 RectAreaLightUniformsLib.init();
 
@@ -315,10 +316,19 @@ export function buildScene(layout, opts) {
     group.add(drops);
   }
 
-  // WALLS as boxes — height = max ceiling of any adjacent floor
+  // WALLS as boxes — height = max ceiling of any adjacent floor.
+  // Hide the wall block behind each teleport portal so the dark tunnel is visible.
+  const doorWallKeys = new Set();
+  {
+    const _lib = layout.rooms.find(r => r.id === 'library');
+    const _hub = layout.rooms.find(r => r.id === 'hub');
+    if (_lib) doorWallKeys.add(`${_lib.x0 - 1},${_lib.cy}`);
+    if (_hub) doorWallKeys.add(`${_hub.cx},${_hub.y0 - 3}`);
+  }
   const wallCells = [];
   for (let y = 0; y < layout.height; y++) for (let x = 0; x < layout.width; x++) {
     if (layout.grid[y][x] !== 1) continue;
+    if (doorWallKeys.has(`${x},${y}`)) continue;
     let near = false, maxH = STD_CEIL;
     for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
       const nx = x+dx, ny = y+dy;
@@ -1918,6 +1928,104 @@ export function buildScene(layout, opts) {
       triggerPadGroup.add(pad);
     }
     if (triggerTiles.length) group.add(triggerPadGroup);
+  }
+
+  // ===== RIPPLING BLUE GLASS PORTALS — flat shader planes at the end of
+  // the east corridor (hallway 2) and the north corridor (hallway 1).
+  {
+    const portalMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: waterMat.uniforms.uTime },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float uTime; varying vec2 vUv;
+        void main(){
+          vec2 p = vUv - 0.5;
+          float r = length(p);
+          float a = atan(p.y, p.x);
+          float ripple = sin(r * 18.0 - uTime * 1.1) * 0.22 + 0.5;
+          float swirl  = sin(a * 4.0 + uTime * 0.40 - r * 8.0) * 0.18 + 0.5;
+          float n = mix(ripple, swirl, 0.55);
+          // Crystal palette — matches the floating diamond/vase sculpture.
+          vec3 col = mix(vec3(0.25,0.50,1.00), vec3(0.61,0.84,1.00), n);
+          col = mix(col, vec3(0.92,0.97,1.00), smoothstep(0.62, 0.88, n));
+          float edge = clamp(min(min(vUv.x, 1.-vUv.x), min(vUv.y, 1.-vUv.y)) * 8.0, 0.0, 1.0);
+          gl_FragColor = vec4(col, 0.88 * edge);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide, depthWrite: false,
+    });
+    const hubR = layout.rooms.find(r => r.id === 'hub');
+    const doors = [];
+    if (triggerTiles.length > 0) {
+      const t = triggerTiles[0];
+      doors.push({ tx: t.x, ty: t.y, dx: 1, dy: 0, yaw: -Math.PI / 2 });
+    }
+    if (hubR) {
+      doors.push({ tx: hubR.cx, ty: hubR.y0 - 2, dx: 0, dy: -1, yaw: 0 });
+    }
+    const portalGeom = new THREE.PlaneGeometry(1.6, 2.8);
+    const chromeMat = new THREE.MeshStandardMaterial({
+      color: 0xd6dadf, roughness: 0.18, metalness: 0.95,
+    });
+    const topGeom  = new THREE.BoxGeometry(1.76, 0.16, 0.16);
+    const sideGeom = new THREE.BoxGeometry(0.16, 2.96, 0.16);
+    // Dark-grey "we're loading the next area" tunnel — five planes forming an
+    // open-faced corridor behind each portal. Scene fog fades the far end.
+    const tunnelMat = new THREE.MeshStandardMaterial({
+      color: 0x16181b, roughness: 1, metalness: 0, side: THREE.DoubleSide,
+    });
+    const TDP = 1.6; // tunnel depth (metres)
+    const tunnelPlanes = [
+      // [w, h, [px,py,pz], [rx,ry,rz]]
+      [CELL, TDP, [0, -1.40, -TDP/2], [-Math.PI/2, 0, 0]],   // floor
+      [CELL, TDP, [0,  2.20, -TDP/2], [ Math.PI/2, 0, 0]],   // ceiling
+      [TDP, STD_CEIL, [-CELL/2, 0.40, -TDP/2], [0,  Math.PI/2, 0]], // left
+      [TDP, STD_CEIL, [ CELL/2, 0.40, -TDP/2], [0, -Math.PI/2, 0]], // right
+      [CELL, STD_CEIL, [0, 0.40, -TDP], [0, 0, 0]],          // back
+    ];
+    for (const d of doors) {
+      const pivot = new THREE.Group();
+      pivot.position.set(
+        d.tx * CELL + d.dx * (CELL / 2 - 0.04),
+        1.40,
+        d.ty * CELL + d.dy * (CELL / 2 - 0.04),
+      );
+      pivot.rotation.y = d.yaw;
+      // Tunnel first (renders behind portal naturally — local -z direction).
+      for (const [w, h, [px, py, pz], [rx, ry, rz]] of tunnelPlanes) {
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), tunnelMat);
+        m.position.set(px, py, pz);
+        m.rotation.set(rx, ry, rz);
+        pivot.add(m);
+      }
+      // Sliding glass portal — anchored at the top of the frame; scales toward 0
+      // as the player approaches. Capped below 1.0 so the slide never finishes
+      // before the scene transition fires.
+      const portalMesh = new THREE.Mesh(portalGeom, portalMat);
+      portalMesh.onBeforeRender = (_r, _s, cam) => {
+        const dx = cam.position.x - pivot.position.x;
+        const dz = cam.position.z - pivot.position.z;
+        const dist = Math.sqrt(dx * dx + dz * dz);
+        // Fully closed at >=4.5m, fully open by ~1.5m away (player is still ~1m
+        // from the pivot when standing on the trigger tile due to the wall inset).
+        const open = Math.max(0, Math.min(1, (4.5 - dist) / 3.0));
+        const s = 1 - open;
+        portalMesh.scale.y = Math.max(0.001, s);
+        portalMesh.position.y = 1.4 * open;
+      };
+      pivot.add(portalMesh);
+      // Chrome U-frame
+      const top = new THREE.Mesh(topGeom, chromeMat);
+      top.position.set(0, 1.48, 0);
+      pivot.add(top);
+      const left = new THREE.Mesh(sideGeom, chromeMat);
+      left.position.set(-0.88, 0.08, 0);
+      pivot.add(left);
+      const right = new THREE.Mesh(sideGeom, chromeMat);
+      right.position.set(0.88, 0.08, 0);
+      pivot.add(right);
+      group.add(pivot);
+    }
   }
 
   return {
