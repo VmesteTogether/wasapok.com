@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
 import { buildScene } from './scene.js?v=49';
+import { setupSceneNav } from '../nav.js?v=2';
 
 const opts = {
   pixelation: 3,
@@ -30,6 +31,7 @@ let triggerTiles = [];
 let booted = false;
 let vaseGroup = null;
 let vaseBaseY = 1.8;
+let nav = null;
 
 const camPreview = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
 
@@ -54,9 +56,8 @@ resize();
 // INPUT — keyboard + on-screen D-pad (mirrors museum/main.js)
 // ===========================================================
 const keyDown = {};
-let transitioning = false;
 function handleAction(act) {
-  if (transitioning || !player) return;
+  if (!player || (nav && nav.isTransitioning())) return;
   switch (act) {
     case 'forward': player.tryMove(0); break;
     case 'back':    player.tryMove(2); break;
@@ -96,7 +97,7 @@ document.addEventListener('visibilitychange', () => { if (document.hidden) clear
 // Hold-to-walk
 let lastMoveAttempt = 0;
 function tickHold(now) {
-  if (transitioning || !player || player.state.anim) return;
+  if (!player || player.state.anim || (nav && nav.isTransitioning())) return;
   if (now - lastMoveAttempt < 140) return;
   if (keyDown['w'] || keyDown['arrowup'] || dpadHeld.forward)     { handleAction('forward'); lastMoveAttempt = now; }
   else if (keyDown['s'] || keyDown['arrowdown'] || dpadHeld.back) { handleAction('back'); lastMoveAttempt = now; }
@@ -140,27 +141,8 @@ if (sprintBtn) {
 }
 
 // ===========================================================
-// TRIGGER → main hall
-// The red pad on the walkable plane is the trigger. Stepping onto its tile
-// navigates immediately to main-hall.html.
+// TRIGGER → main hall  (wired via setupSceneNav in the boot block)
 // ===========================================================
-function triggerMainHallTransition() {
-  if (transitioning) return;
-  transitioning = true;
-  window.location.href = 'main-hall.html';
-}
-
-function checkTrigger() {
-  if (!player || transitioning || triggerTiles.length === 0) return;
-  const tx = player.state.tx, ty = player.state.ty;
-  for (let i = 0; i < triggerTiles.length; i++) {
-    const t = triggerTiles[i];
-    if (t.x === tx && t.y === ty) {
-      triggerMainHallTransition();
-      return;
-    }
-  }
-}
 
 // ===========================================================
 // BOOT
@@ -177,6 +159,28 @@ function checkTrigger() {
     camera = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
     player = createPlayer(built.layout, CELL);
     player.applyToCamera(camera);
+    nav = setupSceneNav({
+      sceneUrl: 'index.html',
+      player, camera,
+      spawnTile: built.layout.spawn,
+      forwardTriggers: triggerTiles.map(t => ({ x: t.x, y: t.y, target: 'main-hall.html' })),
+    });
+    // One-off polish: if we arrived back here from main hall, the override
+    // landed the player on the forward trigger tile facing the gate. Nudge
+    // them one tile forward (toward the gate) so they're not standing on it.
+    {
+      const onTrigger = triggerTiles.some(t => t.x === player.state.tx && t.y === player.state.ty);
+      if (onTrigger) {
+        const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
+        const nx = player.state.tx + DX[player.state.dir];
+        const ny = player.state.ty + DY[player.state.dir];
+        if (built.layout.grid[ny] && built.layout.grid[ny][nx] === 0) {
+          player.state.tx = nx; player.state.ty = ny;
+          player.state.x  = nx; player.state.y  = ny;
+          player.applyToCamera(camera);
+        }
+      }
+    }
     resize();
 
     // Hide loading screen
@@ -217,7 +221,7 @@ function animate() {
   tickHold(now);
   player.update(now);
   player.applyToCamera(camera, { bobEnabled: opts.headbob, fovEnabled: opts.sprintFov, baseFov: 72 });
-  checkTrigger();
+  if (nav) nav.check();
 
   if (vaseGroup) {
     const t = now * 0.001;

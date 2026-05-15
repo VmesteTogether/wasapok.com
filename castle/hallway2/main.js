@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
 import { buildScene } from './scene.js?v=3';
+import { setupSceneNav } from '../nav.js?v=2';
 
 const opts = {
   pixelation: 3,
@@ -31,6 +32,13 @@ const layout = built.layout;
 const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 200);
 const player = createPlayer(layout, built.CELL);
 player.applyToCamera(camera);
+
+const nav = setupSceneNav({
+  sceneUrl: 'hallway-2-room.html',
+  player, camera,
+  spawnTile: layout.spawn,
+  forwardTriggers: [], // no forward triggers in this room
+});
 
 function resize() {
   const w = window.innerWidth, h = window.innerHeight;
@@ -165,6 +173,7 @@ function animate() {
   tickHold(now);
   player.update(now);
   player.applyToCamera(camera, { bobEnabled: opts.headbob, fovEnabled: opts.sprintFov, baseFov: 72 });
+  nav.check();
 
   if (built.playerLight) {
     built.playerLight.position.set(camera.position.x, 1.6, camera.position.z);
