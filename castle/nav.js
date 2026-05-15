@@ -7,6 +7,11 @@
 //     player, camera,
 //     spawnTile: layout.spawn,                // optional; used as the return tile
 //     forwardTriggers: built.triggerTiles,    // [{ x, y, target: 'other-scene.html' }, ...]
+//     holdTriggers: [                          // [{ x, y, target, holdMs, returnTile?, returnDir? }]
+//       // Stand on (x,y) for holdMs and you're transported to target.
+//       // On return, you land at returnTile (defaults to the trigger tile)
+//       // facing returnDir (defaults to (player.dir+2)%4 at the moment of trigger).
+//     ],
 //   });
 //
 //   // gate input:
@@ -72,6 +77,7 @@ export function setupSceneNav({
   player, camera,
   spawnTile,
   forwardTriggers = [],
+  holdTriggers = [],
   defaultReturnScene = null, // fallback target when the return stack is empty (deep-link / refresh)
 }) {
   applyArrival(player, camera);
@@ -79,6 +85,8 @@ export function setupSceneNav({
   const RETURN_TILE = spawnTile ? { x: spawnTile.x, y: spawnTile.y } : null;
   let returnArmed = false;
   const armedForward = new Set();
+  const armedHold = new Set();
+  let holdState = null; // { key, startedAt }
   let transitioning = false;
 
   function check() {
@@ -118,6 +126,40 @@ export function setupSceneNav({
         transitioning = true;
         window.location.href = t.target;
         return;
+      }
+    }
+
+    // Hold triggers — stand on the tile for holdMs ms continuously to fire.
+    // Each trigger may declare onEnter()/onLeave() callbacks that fire on
+    // tile entry/exit, useful for UI such as fade-in animations.
+    for (const h of holdTriggers) {
+      const k = `${h.x},${h.y}`;
+      if (!armedHold.has(k) && (h.x !== tx || h.y !== ty)) armedHold.add(k);
+    }
+    let active = null;
+    for (const h of holdTriggers) {
+      if (h.x === tx && h.y === ty && armedHold.has(`${h.x},${h.y}`)) { active = h; break; }
+    }
+    const now = performance.now();
+    if (active) {
+      const key = `${active.x},${active.y}`;
+      if (!holdState || holdState.key !== key) {
+        holdState = { key, startedAt: now, trigger: active };
+        if (typeof active.onEnter === 'function') active.onEnter();
+      } else if (now - holdState.startedAt >= (active.holdMs || 4000)) {
+        if (!active.target) { console.warn('[nav] hold trigger missing target', active); return; }
+        const arrivalTile = active.returnTile || { x: active.x, y: active.y };
+        const arrivalDir = active.returnDir != null ? active.returnDir : (player.state.dir + 2) % 4;
+        pushReturn(sceneUrl, arrivalTile, arrivalDir);
+        transitioning = true;
+        window.location.href = active.target;
+        return;
+      }
+    } else {
+      if (holdState) {
+        const prev = holdState.trigger;
+        holdState = null;
+        if (prev && typeof prev.onLeave === 'function') prev.onLeave();
       }
     }
   }

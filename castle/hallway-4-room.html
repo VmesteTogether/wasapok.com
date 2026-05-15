@@ -3,17 +3,17 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#8aaabf">
+<meta name="theme-color" content="#0a0806">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title>Wasapok Castle — Grounds</title>
+<title>Wasapok Castle — Hallway 4 Room</title>
 <style>
   @import url('https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700;900&family=MedievalSharp&family=VT323&display=swap');
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; -webkit-user-select: none; user-select: none; }
   html, body {
     width: 100%; height: 100%; overflow: hidden;
-    background: #8aaabf;
+    background: #0a0806;
     color: #d8c896;
     font-family: 'VT323', monospace;
     overscroll-behavior: none;
@@ -24,7 +24,7 @@
 
   #vignette {
     position: fixed; inset: 0; pointer-events: none; z-index: 5;
-    background: radial-gradient(ellipse at center, transparent 55%, rgba(0,0,0,0.35) 100%);
+    background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.55) 100%);
   }
 
   /* ========== TITLE BAR ========== */
@@ -33,15 +33,28 @@
     text-align: center; padding: 12px 16px 8px;
     font-family: 'Cinzel', serif; font-weight: 700;
     font-size: 14px; letter-spacing: 0.35em; text-transform: uppercase;
-    color: #f0e0b0;
+    color: #d4a64c;
     text-shadow: 0 2px 8px rgba(0,0,0,0.9);
     pointer-events: none;
   }
   #title small {
     display: block; margin-top: 2px;
     font-family: 'MedievalSharp', cursive;
-    font-size: 11px; letter-spacing: 0.15em; color: #e2d29c; text-transform: none;
+    font-size: 11px; letter-spacing: 0.15em; color: #b8945a; text-transform: none;
   }
+
+  /* ========== CHAMBER PROXIMITY MESSAGE ========== */
+  #chamber-msg {
+    position: fixed; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 12; pointer-events: none;
+    font-family: 'VT323', monospace; font-size: 30px;
+    color: #ffc24a; text-shadow: 0 0 12px rgba(255,140,30,0.45), 0 2px 6px rgba(0,0,0,0.9);
+    letter-spacing: 0.08em; opacity: 0;
+    transition: opacity 0.45s ease;
+    white-space: nowrap;
+  }
+  #chamber-msg.show { opacity: 0.72; }
 
   /* ========== 3D NAV CROSS ========== */
   #nav-wrapper {
@@ -159,8 +172,8 @@
     #help-desk {
       position: fixed; bottom: 18px; left: 18px; z-index: 11;
       padding: 8px 12px; font-family: 'Cinzel', serif; font-size: 11px;
-      letter-spacing: 0.15em; color: #2a3548;
-      background: rgba(255,255,255,0.55); border: 1px solid #6a7888;
+      letter-spacing: 0.15em; color: #b8945a;
+      background: rgba(10,8,6,0.7); border: 1px solid #4a3a28;
     }
     #nav-wrapper, #sprint-wrap { pointer-events: none; }
   }
@@ -172,14 +185,15 @@
 <body>
   <div id="game"></div>
   <div id="vignette"></div>
+  <div id="chamber-msg">you aren&rsquo;t ready to strap in yet</div>
 
   <div id="title">
-    Wasapok Castle
-    <small>The Grounds</small>
+    Hallway 4 Room
+    <small>Beyond the Armory</small>
   </div>
 
   <div id="help-desk">
-    W/S walk · A/D turn · Q/E strafe · SHIFT sprint · approach the door
+    W/S walk · A/D turn · Q/E strafe · SHIFT sprint
   </div>
 
   <svg style="display:none"><defs>
@@ -189,12 +203,10 @@
     </radialGradient>
   </defs></svg>
 
-  <!-- 3D perspective nav cross — bottom center -->
+  <!-- 3D perspective nav cross -->
   <div id="nav-wrapper">
     <div id="nav-glow"></div>
     <div id="nav-cross">
-
-      <!-- row 1: up arrow -->
       <div></div>
       <button class="nav-arrow" id="dpad-up" aria-label="Forward">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
@@ -207,7 +219,6 @@
       </button>
       <div></div>
 
-      <!-- row 2: left · center · right -->
       <button class="nav-arrow" id="dpad-left" aria-label="Turn left">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
           <circle cx="32" cy="32" r="18" fill="url(#ag)"/>
@@ -228,7 +239,6 @@
         </svg>
       </button>
 
-      <!-- row 3: down arrow -->
       <div></div>
       <button class="nav-arrow" id="dpad-down" aria-label="Back">
         <svg viewBox="0 0 64 64" xmlns="http://www.w3.org/2000/svg">
@@ -240,18 +250,17 @@
         </svg>
       </button>
       <div></div>
-
     </div>
   </div>
 
-  <!-- Sprint button — bottom right -->
+  <!-- Sprint button -->
   <div id="sprint-wrap">
     <button class="action-btn" id="dpad-sprint">RUN</button>
   </div>
 
   <div id="loading">
     <div class="crest">W</div>
-    <div class="label">Approaching the castle…</div>
+    <div class="label">Entering the chamber…</div>
   </div>
 
 <script type="importmap">
@@ -263,6 +272,6 @@
 }
 </script>
 
-<script type="module" src="outside/main.js?v=56"></script>
+<script type="module" src="hallway4/main.js?v=2"></script>
 </body>
 </html>

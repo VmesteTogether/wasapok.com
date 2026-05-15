@@ -27,6 +27,20 @@
     background: radial-gradient(ellipse at center, transparent 45%, rgba(0,0,0,0.55) 100%);
   }
 
+  /* ========== HALLWAY-4 HOLD TRANSITION (orange veins) ========== */
+  #vein-overlay {
+    position: fixed; inset: 0; pointer-events: none; z-index: 25;
+    opacity: 0; transition: opacity 180ms ease-out;
+  }
+  #vein-overlay svg { width: 100%; height: 100%; display: block; }
+  #vein-overlay path {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+  }
+  #vein-overlay.active { opacity: 1; }
+  #vein-overlay.active path { animation: vein-draw 4s linear forwards; }
+  @keyframes vein-draw { to { stroke-dashoffset: 0; } }
+
   /* ========== TITLE BAR ========== */
   #title {
     position: fixed; top: env(safe-area-inset-top, 0); left: 0; right: 0; z-index: 10;
@@ -274,6 +288,36 @@
   <div id="game"></div>
   <div id="vignette"></div>
 
+  <!-- Hallway-4 hold transition: orange veins growing from edges over 4s -->
+  <div id="vein-overlay">
+    <svg viewBox="0 0 100 100" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <filter id="vein-glow" x="-20%" y="-20%" width="140%" height="140%">
+          <feGaussianBlur stdDeviation="0.6"/>
+          <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g fill="none" stroke="#ff6610" stroke-width="0.9" stroke-linecap="round" filter="url(#vein-glow)">
+        <!-- top edge -->
+        <path pathLength="100" d="M18,0 Q20,14 28,24 Q34,30 38,40"/>
+        <path pathLength="100" d="M44,0 Q42,12 48,22 Q52,28 50,38"/>
+        <path pathLength="100" d="M70,0 Q68,16 60,28 Q56,32 54,42"/>
+        <!-- right edge -->
+        <path pathLength="100" d="M100,22 Q84,24 74,32 Q68,36 62,40"/>
+        <path pathLength="100" d="M100,52 Q82,52 68,52 Q62,52 58,50"/>
+        <path pathLength="100" d="M100,78 Q86,76 76,68 Q70,62 64,58"/>
+        <!-- bottom edge -->
+        <path pathLength="100" d="M82,100 Q80,86 72,76 Q66,70 62,60"/>
+        <path pathLength="100" d="M56,100 Q58,88 52,78 Q48,72 50,62"/>
+        <path pathLength="100" d="M30,100 Q32,84 40,72 Q44,66 46,58"/>
+        <!-- left edge -->
+        <path pathLength="100" d="M0,78 Q16,76 26,68 Q32,62 38,58"/>
+        <path pathLength="100" d="M0,48 Q18,48 32,48 Q38,48 42,50"/>
+        <path pathLength="100" d="M0,22 Q14,24 24,32 Q30,38 36,42"/>
+      </g>
+    </svg>
+  </div>
+
   <div id="title">
     Wasapok Castle
     <small>A medieval crawl</small>
@@ -386,6 +430,6 @@
 }
 </script>
 
-<script type="module" src="museum/main.js?v=84"></script>
+<script type="module" src="museum/main.js?v=86"></script>
 </body>
 </html>

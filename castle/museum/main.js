@@ -5,7 +5,7 @@ import { buildLayout } from './layout.js?v=14';
 import { buildScene } from './scene.js?v=79';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
-import { setupSceneNav } from '../nav.js?v=3';
+import { setupSceneNav } from '../nav.js?v=5';
 
 const layout = buildLayout();
 
@@ -33,11 +33,40 @@ const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 200);
 const player = createPlayer(layout, built.CELL);
 player.applyToCamera(camera);
 
+// Hallway 4 hold trigger: stand on the last west-corridor tile for 4s to
+// transport to hallway 4 room. Return arrival lands one tile east of it
+// (one tile closer to the hub / hallway 2).
+const _hubR = layout.rooms.find(r => r.id === 'hub');
+const _CORR_LEN = 2;
+const hallway4TriggerTile = _hubR
+  ? { x: _hubR.x0 - _CORR_LEN, y: _hubR.cy }
+  : null;
+
+// Vein overlay control — fades in and re-runs the path-draw animation each
+// time the player steps onto the hold tile; aborts on early exit.
+const _veinEl = document.getElementById('vein-overlay');
+function showVeins() {
+  if (!_veinEl) return;
+  _veinEl.classList.remove('active');
+  void _veinEl.offsetWidth; // restart animation
+  _veinEl.classList.add('active');
+}
+function hideVeins() { if (_veinEl) _veinEl.classList.remove('active'); }
+
 const nav = setupSceneNav({
   sceneUrl: 'main-hall.html',
   player, camera,
   spawnTile: layout.spawn,
   forwardTriggers: built.triggerTiles || [],
+  holdTriggers: hallway4TriggerTile ? [{
+    x: hallway4TriggerTile.x,
+    y: hallway4TriggerTile.y,
+    target: 'hallway-4-room.html',
+    holdMs: 4000,
+    returnTile: { x: hallway4TriggerTile.x + 1, y: hallway4TriggerTile.y },
+    onEnter: showVeins,
+    onLeave: hideVeins,
+  }] : [],
   defaultReturnScene: 'index.html',
 });
 

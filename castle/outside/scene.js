@@ -1,6 +1,6 @@
 // Wasapok Castle — OUTSIDE scene.
 // Loads Temmys-Castle-01.glb, derives a tile-based layout from the
-// "Walkable_Plane" mesh, treats "Wall L", "Wall R", "Gate 1", and
+// "Walkable_Plane" mesh, treats "Wall L", "Wall R", "Gate_1", and
 // "Building 1" as solid boundary hitboxes, and emits a list of trigger
 // tiles on the walkable plane directly in front of "Building 1". Stepping
 // onto any of those tiles loads main hall.
@@ -98,6 +98,7 @@ export async function buildScene() {
   const walkableBox = bboxOf(walkable);
   const boundaryBoxes = boundaries.map(b => ({ name: b.name, box: bboxOf(b.obj) }));
   const building1Box = boundaryBoxes.find(b => b.name === 'Building 1')?.box || null;
+
 
   // ----- Replace Gate_1 mesh with procedural portcullis -----
   const gateObj = find('Gate_1');
