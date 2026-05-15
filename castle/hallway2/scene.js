@@ -452,8 +452,8 @@ export function buildScene(opts) {
             o.material.metalness = 1.0;
             o.material.roughness = 0.12;
             if ('emissive' in o.material) {
-              o.material.emissive = new THREE.Color(0xa040ff);
-              o.material.emissiveIntensity = 0.3;
+              o.material.emissive = new THREE.Color(0xc060ff);
+              o.material.emissiveIntensity = 0.4;
               sparkleMats.push(o.material);
             }
             const sh = o.clone();
@@ -475,8 +475,9 @@ export function buildScene(opts) {
             twDr.onBeforeRender = () => {
               const t = (performance.now() - _twT0) / 1000;
               for (let i = 0; i < sparkleMats.length; i++) {
-                const f = 0.5 + 0.5 * Math.sin(t * 4.0 + i * 1.7) * Math.sin(t * 6.5 + i * 0.9);
-                sparkleMats[i].emissiveIntensity = 0.15 + f * 1.05;
+                const f = 0.5 + 0.5 * Math.sin(t * 7.0 + i * 1.7) * Math.sin(t * 11.0 + i * 0.9);
+                const flash = Math.pow(Math.max(0, Math.sin(t * 13 + i * 2.1)), 12) * 1.5;
+                sparkleMats[i].emissiveIntensity = 0.25 + f * 2.0 + flash;
               }
             };
           }
@@ -495,6 +496,56 @@ export function buildScene(opts) {
         pivot.position.set(ANCHOR_X, ROOM_CEIL - 0.08 - ss.y / 2, ANCHOR_Z);
         obj.position.set(-sc.x, -sc.y, -sc.z);
         pivot.add(obj);
+
+        // Star-shaped blinking sparkles — billboarded Sprites with a canvas
+        // cross-ray texture. Parented to the pivot so they spin with the
+        // chandelier.
+        const starCv = document.createElement('canvas');
+        starCv.width = 64; starCv.height = 64;
+        const sCtx = starCv.getContext('2d');
+        const cg = sCtx.createRadialGradient(32, 32, 0, 32, 32, 28);
+        cg.addColorStop(0, 'rgba(255,255,255,1)');
+        cg.addColorStop(0.2, 'rgba(255,255,255,0.5)');
+        cg.addColorStop(1, 'rgba(255,255,255,0)');
+        sCtx.fillStyle = cg; sCtx.fillRect(0, 0, 64, 64);
+        const hg = sCtx.createLinearGradient(0, 32, 64, 32);
+        hg.addColorStop(0, 'rgba(255,255,255,0)');
+        hg.addColorStop(0.5, 'rgba(255,255,255,1)');
+        hg.addColorStop(1, 'rgba(255,255,255,0)');
+        sCtx.fillStyle = hg; sCtx.fillRect(0, 30, 64, 4);
+        const vg = sCtx.createLinearGradient(32, 0, 32, 64);
+        vg.addColorStop(0, 'rgba(255,255,255,0)');
+        vg.addColorStop(0.5, 'rgba(255,255,255,1)');
+        vg.addColorStop(1, 'rgba(255,255,255,0)');
+        sCtx.fillStyle = vg; sCtx.fillRect(30, 0, 4, 64);
+        const starTex = new THREE.CanvasTexture(starCv);
+        const spkMat = new THREE.SpriteMaterial({
+          map: starTex, color: 0xffffff, transparent: true, depthWrite: false,
+          blending: THREE.AdditiveBlending, toneMapped: false,
+        });
+        const SPK_N = 22;
+        const spkS = [];
+        for (let i = 0; i < SPK_N; i++) {
+          const sp = new THREE.Sprite(spkMat);
+          sp.position.set(
+            (Math.random() - 0.5) * ss.x * 0.85,
+            (Math.random() - 0.5) * ss.y * 0.85,
+            (Math.random() - 0.5) * ss.z * 0.85,
+          );
+          sp.scale.setScalar(0.001);
+          if (i === 0) sp.frustumCulled = false;
+          pivot.add(sp);
+          spkS.push({ sprite: sp, phase: Math.random() * 6.28, freq: 1.6 + Math.random() * 2.4 });
+        }
+        let _spkT0 = performance.now();
+        spkS[0].sprite.onBeforeRender = () => {
+          const tt = (performance.now() - _spkT0) / 1000;
+          for (let i = 0; i < SPK_N; i++) {
+            const p = spkS[i];
+            const blink = Math.pow(Math.max(0, Math.sin(tt * p.freq + p.phase)), 16);
+            p.sprite.scale.setScalar(Math.max(0.0005, blink * 0.42));
+          }
+        };
 
         // ---- Rainbow corkscrew at the middle of the darker geometry ----
         const corkH = ss.y * 0.65;
