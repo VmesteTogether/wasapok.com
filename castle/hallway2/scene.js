@@ -139,14 +139,21 @@ export function buildScene(opts) {
         float w2 = sin(uv.y * 2.2 - t * 0.75 + n * 4.0) * 0.5 + 0.5;
         float w3 = sin((uv.x - uv.y) * 2.0 + t * 1.3 + q.x * 4.0) * 0.5 + 0.5;
         float wave = n * 0.45 + w1 * 0.22 + w2 * 0.20 + w3 * 0.13;
+        ${opts.floorOrange ? `
+        vec3 deep  = vec3(0.28, 0.08, 0.02);
+        vec3 mid   = vec3(0.55, 0.20, 0.04);
+        vec3 crest = vec3(0.80, 0.40, 0.08);
+        vec3 foam  = vec3(0.85, 0.62, 0.28);
+        ` : `
         vec3 deep  = vec3(0.01, 0.04, 0.11);
         vec3 mid   = vec3(0.04, 0.11, 0.24);
         vec3 crest = vec3(0.13, 0.24, 0.40);
         vec3 foam  = vec3(0.30, 0.40, 0.55);
+        `}
         vec3 col = mix(deep, mid,   smoothstep(0.20, 0.58, wave));
         col       = mix(col, crest, smoothstep(0.50, 0.76, wave));
         col       = mix(col, foam,  smoothstep(0.73, 0.92, wave) * 0.55);
-        col += vec3(0.4, 0.5, 0.6) * pow(max(0.0, wave - 0.85), 2.0) * 6.0;
+        col += ${opts.floorOrange ? 'vec3(0.6, 0.5, 0.4)' : 'vec3(0.4, 0.5, 0.6)'} * pow(max(0.0, wave - 0.85), 2.0) * 6.0;
         gl_FragColor = vec4(col, 1.0);
       }
     `,
@@ -166,6 +173,9 @@ export function buildScene(opts) {
     const g = new THREE.PlaneGeometry(W, H, 64, 56);
     g.rotateX(-Math.PI / 2);
     const pa = g.attributes.position.array;
+    // Plaza-flatten mask: when a city sculpture is centred at (6*CELL, 4*CELL),
+    // hills are damped to zero within an inner radius so the city's base reads.
+    const PCX = 6 * CELL, PCZ = 4 * CELL, PR_IN = 2.4, PR_OUT = 3.6;
     for (let i = 0; i < pa.length; i += 3) {
       const x = pa[i], z = pa[i + 2];
       // Big rolling base waves
@@ -178,6 +188,12 @@ export function buildScene(opts) {
       // Small bumps and dips to break up the surface
       h += Math.sin(x * 2.30 + z * 1.9) * 0.05
          + Math.cos((x - z) * 2.05) * 0.04;
+      if (opts.eskleocity) {
+        const dxC = x - PCX, dzC = z - PCZ;
+        const d = Math.sqrt(dxC * dxC + dzC * dzC);
+        const k = Math.max(0, Math.min(1, (d - PR_IN) / (PR_OUT - PR_IN)));
+        h *= k * k * (3 - 2 * k); // smoothstep ramp; flat at d<PR_IN, full at d>PR_OUT
+      }
       pa[i + 1] = h;
     }
     g.computeVertexNormals();
@@ -230,8 +246,7 @@ export function buildScene(opts) {
     if (!near) continue;
     wallCells.push({ x, y, h: maxH });
   }
-  // Seal the west end of the hallway (no grid tile exists at x=-1)
-  wallCells.push({ x: -1, y: 4, h: STD_CEIL });
+  // (west-end seal removed — the portal-door faux hallway now occupies that gap)
   const wallGeom = new THREE.BoxGeometry(CELL, 1, CELL);
   const walls = new THREE.InstancedMesh(wallGeom, wallMat, wallCells.length);
   const idQ = new THREE.Quaternion();
@@ -485,7 +500,7 @@ export function buildScene(opts) {
         const bbox = new THREE.Box3().setFromObject(obj);
         const size = bbox.getSize(new THREE.Vector3());
         const maxD = Math.max(size.x, size.y, size.z);
-        const TARGET = 4.48; // 7/6 of the prior 3.84 m
+        const TARGET = 3.0; // shortened to leave clearance above the eskleocity sculpture
         const s = maxD > 0 ? TARGET / maxD : 1;
         obj.scale.setScalar(s);
         const sb = new THREE.Box3().setFromObject(obj);
@@ -548,7 +563,7 @@ export function buildScene(opts) {
         };
 
         // ---- Rainbow corkscrew at the middle of the darker geometry ----
-        const corkH = ss.y * 0.65;
+        const corkH = ss.y * 0.4225; // 65% of the prior 0.65
         const corkR = Math.max(0.06, Math.min(ss.x, ss.z) * 0.18);
         const turns = 12;
         const segs  = 240;
@@ -743,10 +758,14 @@ export function buildScene(opts) {
       if (!layout.grid[ty] || layout.grid[ty][tx] !== 0) continue;
       const dune = new THREE.Mesh(dGeom, sandMat);
       dune.scale.set(0.8 + sR() * 1.5, 0.18 + sR() * 0.22, 0.5 + sR() * 1.0);
-      dune.position.set(
-        tx * CELL + (sR() - 0.5) * (CELL - 0.5), 0,
-        ty * CELL + (sR() - 0.5) * (CELL - 0.5),
-      );
+      const dx_ = tx * CELL + (sR() - 0.5) * (CELL - 0.5);
+      const dz_ = ty * CELL + (sR() - 0.5) * (CELL - 0.5);
+      // Keep a clear central plaza for the eskleocity sculpture.
+      if (opts.eskleocity) {
+        const cdx = dx_ - 6 * CELL, cdz = dz_ - 4 * CELL;
+        if (cdx * cdx + cdz * cdz < 2.8 * 2.8) continue;
+      }
+      dune.position.set(dx_, 0, dz_);
       dune.rotation.y = sR() * Math.PI * 2;
       group.add(dune);
     }
@@ -1025,6 +1044,226 @@ export function buildScene(opts) {
         resolve();
       }, undefined, err => { console.warn('[hallway2] eskleoship-01.glb failed', err); resolve(); });
     }));
+  }
+
+  // ===== EXHIBIT LIGHTING — crossing spotlights aim at the chandelier + city.
+  if (opts.eskleocity) {
+    for (const p of [
+      { x: 6 * CELL + 3.0, z: 4 * CELL + 3.0 },
+      { x: 6 * CELL - 3.0, z: 4 * CELL - 3.0 },
+    ]) {
+      const sl = new THREE.SpotLight(0xfff2c8, 6, 14, Math.PI / 5, 0.45, 1.2);
+      sl.position.set(p.x, ROOM_CEIL - 0.15, p.z);
+      sl.target.position.set(6 * CELL, 1.6, 4 * CELL);
+      group.add(sl); group.add(sl.target);
+    }
+  }
+
+  // ===== Roads + roundabout into the eskleocity (N / E / W approach).
+  if (opts.eskleocity) {
+    const RW = 0.5;             // road width (~one ship)
+    const RIN = 1.8, ROUT = RIN + RW;
+    const CX_ = 6 * CELL, CZ_ = 4 * CELL;
+    const roadMat = new THREE.MeshStandardMaterial({ color: 0xa0b4c8, roughness: 0.85, metalness: 0.06 });
+    const dashMat = new THREE.MeshStandardMaterial({ color: 0xffd700, roughness: 0.7, metalness: 0.0 });
+    // Each spoke: world-axis ('x' or 'z') from a far wall coord to ROUT from centre.
+    const spokes = [
+      { axis: 'z', from: 0,  to: CZ_ - ROUT }, // N → +z
+      { axis: 'x', from: 20, to: CX_ + ROUT }, // E → -x
+      { axis: 'z', from: 16, to: CZ_ + ROUT }, // S ("right" wall) → -z, replacing the W/hallway road
+    ];
+    for (const s of spokes) {
+      const lo = Math.min(s.from, s.to), hi = Math.max(s.from, s.to);
+      const len = hi - lo, mid = (lo + hi) / 2;
+      const dW = s.axis === 'x' ? len : RW;
+      const dD = s.axis === 'x' ? RW : len;
+      const px = s.axis === 'x' ? mid : CX_;
+      const pz = s.axis === 'x' ? CZ_ : mid;
+      const road = new THREE.Mesh(new THREE.BoxGeometry(dW, 0.02, dD), roadMat);
+      road.position.set(px, 0.01, pz);
+      group.add(road);
+      // Yellow centre-line dashes.
+      const n = Math.floor(len / 0.55);
+      for (let i = 0; i < n; i += 2) {
+        const t = (i + 0.5) / n;
+        const dx = s.axis === 'x' ? lo + t * len : CX_;
+        const dz = s.axis === 'x' ? CZ_ : lo + t * len;
+        const dw = s.axis === 'x' ? 0.22 : 0.05;
+        const dd = s.axis === 'x' ? 0.05 : 0.22;
+        const d = new THREE.Mesh(new THREE.BoxGeometry(dw, 0.025, dd), dashMat);
+        d.position.set(dx, 0.02, dz);
+        group.add(d);
+      }
+    }
+    // Roundabout ring around the city.
+    const ring = new THREE.Mesh(new THREE.RingGeometry(RIN, ROUT, 64), roadMat);
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(CX_, 0.012, CZ_);
+    group.add(ring);
+    const rMid = (RIN + ROUT) / 2;
+    for (let i = 0; i < 24; i += 2) {
+      const a = (i / 24) * Math.PI * 2;
+      const d = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.025, 0.22), dashMat);
+      d.position.set(CX_ + Math.cos(a) * rMid, 0.02, CZ_ + Math.sin(a) * rMid);
+      d.rotation.y = -a;
+      group.add(d);
+    }
+  }
+
+  // ===== Skyscraper-window canvas texture shared by the city + pillar ring.
+  let winTex = null;
+  if (opts.eskleocity) {
+    const wc = document.createElement('canvas');
+    wc.width = 128; wc.height = 128;
+    const wcx = wc.getContext('2d');
+    wcx.fillStyle = '#fde910'; wcx.fillRect(0, 0, 128, 128);
+    wcx.fillStyle = '#ffffe0';
+    let wSd = 0xc17;
+    const wR = () => { wSd = (wSd * 1664525 + 1013904223) | 0; return ((wSd >>> 0) / 4294967296); };
+    for (let i = 0; i < 220; i++) wcx.fillRect((wR() * 128) | 0, (wR() * 128) | 0, 2, 2);
+    winTex = new THREE.CanvasTexture(wc);
+    winTex.wrapS = winTex.wrapT = THREE.RepeatWrapping;
+  }
+
+  // ===== Yellow low-poly pillar ring around the eskleocity base.
+  if (opts.eskleocity) {
+    const pillarMat = new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.55, metalness: 0.15,
+      emissive: 0xffffff, emissiveIntensity: 0.55,
+      map: winTex, emissiveMap: winTex,
+    });
+    const pillarGeom = new THREE.BoxGeometry(1, 1, 1);
+    // Override BoxGeometry UVs so the window texture tiles densely on each pillar.
+    {
+      const pp = pillarGeom.attributes.position;
+      const uv = new Float32Array(pp.count * 2);
+      for (let i = 0; i < pp.count; i++) {
+        uv[i * 2]     = pp.getX(i) * 6;
+        uv[i * 2 + 1] = pp.getY(i) * 6;
+      }
+      pillarGeom.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    }
+    let pSd = 0xea71;
+    const pR = () => { pSd = (pSd * 1664525 + 1013904223) | 0; return ((pSd >>> 0) / 4294967296); };
+    for (let i = 0; i < 36; i++) {
+      const a = (i / 36) * Math.PI * 2 + (pR() - 0.5) * 0.20;
+      for (const dr of [-0.10, 0.10]) {
+        const r = 1.35 + pR() * 0.65 + dr;
+        const h = 0.30 + pR() * 0.95;
+        const w = 0.055 + pR() * 0.075;
+        const m = new THREE.Mesh(pillarGeom, pillarMat);
+        m.scale.set(w, h, w);
+        m.position.set(6 * CELL + Math.cos(a) * r, h / 2, 4 * CELL + Math.sin(a) * r);
+        m.rotation.y = a + (pR() - 0.5) * 0.4;
+        group.add(m);
+      }
+    }
+  }
+
+  // ===== ESKLEOCITY sculpture — yellow tiled cybertronian city centred under the chandelier.
+  if (opts.eskleocity) {
+    pendingLoads.push(new Promise((resolve) => {
+      new GLTFLoader().load('hallway4/eskleocity-01.glb', (gltf) => {
+        const obj = gltf.scene;
+        const cityMat = new THREE.MeshStandardMaterial({
+          color: 0xffffff, roughness: 0.55, metalness: 0.15,
+          emissive: 0xffffff, emissiveIntensity: 0.55,
+          map: winTex, emissiveMap: winTex,
+        });
+        // GLB usually lacks suitable UVs for repeat tiling — synthesise per-vertex
+        // UVs from local position so windows actually map across faces.
+        obj.traverse(o => {
+          if (!o.isMesh) return;
+          o.material = cityMat;
+          const pos = o.geometry.attributes.position;
+          const uv = new Float32Array(pos.count * 2);
+          for (let i = 0; i < pos.count; i++) {
+            uv[i * 2]     = pos.getX(i) * 1.8;
+            uv[i * 2 + 1] = pos.getY(i) * 1.8;
+          }
+          o.geometry.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+        });
+        const bb = new THREE.Box3().setFromObject(obj);
+        const sz = bb.getSize(new THREE.Vector3());
+        const maxD = Math.max(sz.x, sz.y, sz.z);
+        const TARGET = 3.0; // max bbox dim (city tends to be wider than tall)
+        obj.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
+        const sb = new THREE.Box3().setFromObject(obj);
+        const sc = sb.getCenter(new THREE.Vector3());
+        // Centre horizontally on (6*CELL, 4*CELL) and sit the bbox bottom on the floor.
+        obj.position.set(6 * CELL - sc.x, -sb.min.y, 4 * CELL - sc.z);
+        group.add(obj);
+        resolve();
+      }, undefined, err => { console.warn('[hallway2] eskleocity-01.glb failed', err); resolve(); });
+    }));
+  }
+
+  // ===== PORTAL DOOR at the hallway-end return tile (mirrors the main-hall doors).
+  {
+    const portalMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: waterMat.uniforms.uTime },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform float uTime; varying vec2 vUv;
+        void main(){
+          vec2 p = vUv - 0.5;
+          float r = length(p);
+          float a = atan(p.y, p.x);
+          float ripple = sin(r * 18.0 - uTime * 1.1) * 0.22 + 0.5;
+          float swirl  = sin(a * 4.0 + uTime * 0.40 - r * 8.0) * 0.18 + 0.5;
+          float n = mix(ripple, swirl, 0.55);
+          vec3 col = mix(vec3(0.25,0.50,1.00), vec3(0.61,0.84,1.00), n);
+          col = mix(col, vec3(0.92,0.97,1.00), smoothstep(0.62, 0.88, n));
+          float edge = clamp(min(min(vUv.x, 1.-vUv.x), min(vUv.y, 1.-vUv.y)) * 8.0, 0.0, 1.0);
+          gl_FragColor = vec4(col, 0.88 * edge);
+        }
+      `,
+      transparent: true, side: THREE.DoubleSide, depthWrite: false,
+    });
+    const chromeMat = new THREE.MeshStandardMaterial({
+      color: 0xd6dadf, roughness: 0.18, metalness: 0.95,
+    });
+    const tunnelMat = new THREE.MeshStandardMaterial({
+      color: 0x16181b, roughness: 1, metalness: 0, side: THREE.DoubleSide,
+    });
+    const portalGeom = new THREE.PlaneGeometry(1.6, 2.8);
+    const topGeom  = new THREE.BoxGeometry(1.76, 0.16, 0.16);
+    const sideGeom = new THREE.BoxGeometry(0.16, 2.96, 0.16);
+    const TDP = 8.0; // long enough to read as a hallway receding back to the hub
+    // Cross-section matches the corridor — CELL wide x STD_CEIL tall — same as
+    // the main-hall portal tunnels.
+    const tunnelPlanes = [
+      [CELL, TDP, [0, -1.40, -TDP/2], [-Math.PI/2, 0, 0]],
+      [CELL, TDP, [0,  2.20, -TDP/2], [ Math.PI/2, 0, 0]],
+      [TDP, STD_CEIL, [-CELL/2, 0.40, -TDP/2], [0,  Math.PI/2, 0]],
+      [TDP, STD_CEIL, [ CELL/2, 0.40, -TDP/2], [0, -Math.PI/2, 0]],
+      [CELL, STD_CEIL, [0, 0.40, -TDP], [0, 0, 0]],
+    ];
+    // Spawn tile = west end of the hallway; wall is one tile west.
+    // Pivot sits on that wall face, facing +X back toward the player.
+    const pivot = new THREE.Group();
+    pivot.position.set(layout.spawn.x * CELL - (CELL/2 - 0.04), 1.40, layout.spawn.y * CELL);
+    pivot.rotation.y = Math.PI / 2;
+    for (const [w, h, [px, py, pz], [rx, ry, rz]] of tunnelPlanes) {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), tunnelMat);
+      m.position.set(px, py, pz);
+      m.rotation.set(rx, ry, rz);
+      pivot.add(m);
+    }
+    const portalMesh = new THREE.Mesh(portalGeom, portalMat);
+    portalMesh.onBeforeRender = (_r, _s, cam) => {
+      const dx = cam.position.x - pivot.position.x;
+      const dz = cam.position.z - pivot.position.z;
+      const dist = Math.sqrt(dx * dx + dz * dz);
+      const open = Math.max(0, Math.min(1, (4.5 - dist) / 3.0));
+      portalMesh.scale.y = Math.max(0.001, 1 - open);
+      portalMesh.position.y = 1.4 * open;
+    };
+    pivot.add(portalMesh);
+    const tb = new THREE.Mesh(topGeom, chromeMat);  tb.position.set(0, 1.48, 0); pivot.add(tb);
+    const lb = new THREE.Mesh(sideGeom, chromeMat); lb.position.set(-0.88, 0.08, 0); pivot.add(lb);
+    const rb = new THREE.Mesh(sideGeom, chromeMat); rb.position.set( 0.88, 0.08, 0); pivot.add(rb);
+    group.add(pivot);
   }
 
   return {

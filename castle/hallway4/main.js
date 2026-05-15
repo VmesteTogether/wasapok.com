@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=52';
+import { buildScene } from '../hallway2/scene.js?v=75';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -20,6 +20,8 @@ const opts = {
   sandDunes: true, // low sand mounds scattered across the rolling grass
   roomShape: 'circle', // carve a circular floor plan instead of the default square
   hoverShips: true, // eskleoship-01 minis roaming + fluttering across the hills
+  eskleocity: true, // yellow tiled cybertronian city under the chandelier
+  floorOrange: true, // shift the grass+water palette from blue/tan to warm orange
 };
 
 // ---- Renderer ----
