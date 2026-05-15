@@ -444,6 +444,16 @@ export function buildScene(opts) {
           const c = o.material.color;
           const lum = c ? c.r * 0.299 + c.g * 0.587 + c.b * 0.114 : 1;
           if (lum < 0.40) {
+            // Tint the darker meshes a dark violet obsidian and crank
+            // metalness/gloss so the rotating geometry sparkles.
+            o.material = o.material.clone();
+            o.material.color.setHex(0x2a1638);
+            o.material.metalness = 1.0;
+            o.material.roughness = 0.12;
+            if ('emissive' in o.material) {
+              o.material.emissive = new THREE.Color(0x2a1638);
+              o.material.emissiveIntensity = 0.25;
+            }
             const sh = o.clone();
             sh.material = o.material.clone();
             sh.material.side = THREE.BackSide;
