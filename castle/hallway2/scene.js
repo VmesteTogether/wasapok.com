@@ -355,6 +355,8 @@ export function buildScene(opts) {
 
   // ===== ESKLEO CHAMBER (center of room) =====
   // Loaded once from OBJ; we apply a placeholder material (aesthetics later).
+  // opts.chamber === false skips the chamber + its spotlights, fill light, and hoses.
+  if (opts.chamber !== false) {
   const chamberGroup = new THREE.Group();
   chamberGroup.position.set(7 * CELL, 0, 4 * CELL);
   for (const [dx, dz] of [[0,0],[-3,0],[3,0],[0,-3],[0,3]]) {
@@ -439,6 +441,7 @@ export function buildScene(opts) {
       chamberGroup.add(loaded);
     }, undefined, err => console.warn('[hallway2] eskleo-chamber-01.obj failed', err));
   }
+  } // end chamber block
 
   return {
     scene, group, layout,
