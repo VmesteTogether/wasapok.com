@@ -329,7 +329,48 @@ export function buildScene(opts) {
         const s = Math.sin(tt * Math.PI / b.period + b.phase);
         b.mat.opacity = s * s; // sin² fog-light bell, looping
       }
+      // Schwing comets blink forward along each ring — discrete jumps every
+      // BEAT seconds, leaving brief afterimages at recent slot positions.
+      const STEP = Math.PI * 2 / 48; // 48 slots per revolution
+      const BEATS_PER_SEC = 6;       // ~6 blinks/sec
+      for (const sw of schwings) {
+        const beat = Math.floor(tt * BEATS_PER_SEC + sw.phase) * (sw.speed >= 0 ? 1 : -1);
+        const beatFrac = (tt * BEATS_PER_SEC + sw.phase) - Math.floor(tt * BEATS_PER_SEC + sw.phase);
+        const head = beat * STEP;
+        const N = sw.sprites.length;
+        for (let i = 0; i < N; i++) {
+          const a = head - i * STEP * (sw.speed >= 0 ? 1 : -1);
+          const sp = sw.sprites[i].sp;
+          sp.position.set(
+            domeCX + Math.cos(a) * sw.rr,
+            domeBaseY + sw.yy,
+            domeCZ + Math.sin(a) * sw.rr,
+          );
+          // Head blinks bright then fades within the beat; tail slots are
+          // dimmer afterimages of recent positions.
+          const fade = Math.max(0, 1 - beatFrac);
+          const tailDim = Math.max(0, 1 - i / N);
+          sw.sprites[i].mat.opacity = (i === 0 ? 1.8 * fade : 1.4 * fade * tailDim * tailDim);
+        }
+      }
     };
+    // Schwing comets — one little blue light flies around each ring, with a
+    // trailing tail of dimmer sprites that fades off behind it.
+    const schCv = document.createElement('canvas');
+    schCv.width = 64; schCv.height = 64;
+    const scx = schCv.getContext('2d');
+    const sg = scx.createRadialGradient(32, 32, 0, 32, 32, 30);
+    sg.addColorStop(0.0, 'rgba(140,190,255,1)');
+    sg.addColorStop(0.20, 'rgba(80,140,255,0.95)');
+    sg.addColorStop(0.55, 'rgba(30,100,250,0.55)');
+    sg.addColorStop(1.0, 'rgba(10,60,210,0)');
+    scx.fillStyle = sg; scx.fillRect(0, 0, 64, 64);
+    scx.fillStyle = 'rgba(100,150,255,1)';
+    scx.beginPath(); scx.arc(32, 32, 4, 0, Math.PI * 2); scx.fill();
+    const schTex = new THREE.CanvasTexture(schCv);
+    const schwings = [];
+    const ringSpeeds = [0.9, -0.75, 1.05]; // rad/s, alternating direction
+    let ringIdx = 0;
     for (const lat of [0.20, 0.45, 0.72]) {
       const phi = lat * Math.PI / 2;
       const rr = Math.cos(phi) * (domeR - 0.04);
@@ -338,6 +379,32 @@ export function buildScene(opts) {
       torus.rotation.x = Math.PI / 2;
       torus.position.set(domeCX, domeBaseY + yy, domeCZ);
       group.add(torus);
+      // Build the head + tail sprites for this ring.
+      const TAIL_N = 14;
+      const sprites = [];
+      for (let i = 0; i < TAIL_N; i++) {
+        const mat = new THREE.SpriteMaterial({
+          map: schTex, color: 0x4a8eff, transparent: true, depthWrite: false,
+          toneMapped: false, blending: THREE.AdditiveBlending,
+          opacity: 0,
+        });
+        const sp = new THREE.Sprite(mat);
+        const headScale = 0.26;
+        const tailFrac = i / (TAIL_N - 1);
+        sp.scale.setScalar(headScale * (1 - 0.55 * tailFrac));
+        sp.position.set(domeCX + rr, domeBaseY + yy, domeCZ);
+        if (ringIdx === 0 && i === 0) sp.frustumCulled = false;
+        group.add(sp);
+        sprites.push({ sp, mat });
+      }
+      schwings.push({
+        rr, yy,
+        sprites,
+        speed: ringSpeeds[ringIdx % ringSpeeds.length],
+        phase: Math.random() * Math.PI * 2,
+        stride: 0.07, // radians between successive tail sprites
+      });
+      ringIdx++;
     }
     // Apex disc — small bright cap at the dome's crown.
     const apex = new THREE.Mesh(
