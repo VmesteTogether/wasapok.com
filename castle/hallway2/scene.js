@@ -213,9 +213,15 @@ export function buildScene(opts) {
   // ---- CEILING (instanced, per-cell flipped plane) ----
   const ceilGeom = new THREE.PlaneGeometry(CELL, CELL);
   const ceilBacking = new THREE.MeshStandardMaterial({ color: 0x070b08, roughness: 1, metalness: 0 });
+  // When a cyber dome is requested, exclude cells under the dome footprint so
+  // the curved dome geometry shows through instead of a flat lid.
+  const DOME_CX = 6, DOME_CY = 4, DOME_TILE_R = 3.4;
+  const cellInDome = (x, y) => Math.hypot(x - DOME_CX, y - DOME_CY) <= DOME_TILE_R;
   const floorCells = [];
   for (let y = 0; y < layout.height; y++) for (let x = 0; x < layout.width; x++) {
-    if (layout.grid[y][x] === 0) floorCells.push({ x, y, ceilH: layout.ceilH[y][x] });
+    if (layout.grid[y][x] !== 0) continue;
+    if (opts.cyberDome && cellInDome(x, y)) continue;
+    floorCells.push({ x, y, ceilH: layout.ceilH[y][x] });
   }
   const ceilInst = new THREE.InstancedMesh(ceilGeom, ceilBacking, floorCells.length);
   const m4 = new THREE.Matrix4(), v3 = new THREE.Vector3();
@@ -229,6 +235,203 @@ export function buildScene(opts) {
   });
   ceilInst.instanceMatrix.needsUpdate = true;
   group.add(ceilInst);
+
+  // ---- GREY CYBERNETIC DOME (replaces the flat lid over the circular room) ----
+  if (opts.cyberDome) {
+    const domeCX = DOME_CX * CELL, domeCZ = DOME_CY * CELL;
+    const domeR = 6.4;
+    const domeBaseY = ROOM_CEIL - 0.05;
+    const domeGeom = new THREE.SphereGeometry(domeR, 48, 18, 0, Math.PI * 2, 0, Math.PI / 2);
+    const domeMat = new THREE.MeshStandardMaterial({
+      color: 0x556567, metalness: 0.35, roughness: 0.62, side: THREE.BackSide,
+    });
+    const dome = new THREE.Mesh(domeGeom, domeMat);
+    dome.position.set(domeCX, domeBaseY, domeCZ);
+    group.add(dome);
+    // Panel seams — wireframe shell slightly inside the dome.
+    const seamGeom = new THREE.SphereGeometry(domeR - 0.02, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+    const seamMat = new THREE.MeshBasicMaterial({ color: 0x2c3036, wireframe: true, transparent: true, opacity: 0.7 });
+    const seams = new THREE.Mesh(seamGeom, seamMat);
+    seams.position.copy(dome.position);
+    group.add(seams);
+    // Latitude accent rings — thin emissive cyan torii.
+    const ringMat = new THREE.MeshBasicMaterial({
+      color: 0xe8a85a, transparent: true, opacity: 0.7, toneMapped: false,
+      blending: THREE.AdditiveBlending, depthWrite: false,
+    });
+    const _ringLow = new THREE.Color(0xe8a85a);
+    const _ringHigh = new THREE.Color(0xffc070);
+    const _ringT0 = performance.now();
+    // Permanent fog-light blinkers in deep navy (#042B98) sprinkled on the dome.
+    const deepCv = document.createElement('canvas');
+    deepCv.width = 32; deepCv.height = 32;
+    const dcx = deepCv.getContext('2d');
+    const dHalo = dcx.createRadialGradient(16, 16, 3, 16, 16, 14);
+    dHalo.addColorStop(0.0, 'rgba(40,90,220,0.8)');
+    dHalo.addColorStop(1.0, 'rgba(4,43,152,0)');
+    dcx.fillStyle = dHalo; dcx.fillRect(0, 0, 32, 32);
+    dcx.fillStyle = 'rgba(80,140,255,1)';
+    dcx.beginPath(); dcx.arc(16, 16, 2.6, 0, Math.PI * 2); dcx.fill();
+    const deepTex = new THREE.CanvasTexture(deepCv);
+    const DEEP_N = 6;
+    const deepBlinks = [];
+    for (let i = 0; i < DEEP_N; i++) {
+      const u = Math.random();
+      const phi = Math.acos(u);
+      const theta = Math.random() * Math.PI * 2;
+      const R = domeR - 0.045;
+      const mat = new THREE.SpriteMaterial({
+        map: deepTex, color: 0xffffff, transparent: true, depthWrite: false,
+        toneMapped: false, opacity: 0,
+        blending: THREE.AdditiveBlending,
+      });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.setScalar(0.13 + Math.random() * 0.08);
+      sp.position.set(
+        domeCX + Math.sin(phi) * Math.cos(theta) * R,
+        domeBaseY + Math.cos(phi) * R,
+        domeCZ + Math.sin(phi) * Math.sin(theta) * R,
+      );
+      group.add(sp);
+      deepBlinks.push({
+        mat,
+        period: 1.1 + Math.random() * 0.6, // ~1.1–1.7s — faster than the pale-blue blinks
+        phase: Math.random() * Math.PI * 2,
+      });
+    }
+    // One deterministic blinker on the west face of the dome, in line with the
+    // player's east-facing spawn so they see it the moment they load in.
+    {
+      const phi = 0.5;     // ~28° from the apex
+      const theta = Math.PI; // west side of the dome → closest to spawn
+      const R = domeR - 0.045;
+      const mat = new THREE.SpriteMaterial({
+        map: deepTex, color: 0xffffff, transparent: true, depthWrite: false,
+        toneMapped: false, opacity: 0,
+        blending: THREE.AdditiveBlending,
+      });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.setScalar(0.18);
+      sp.position.set(
+        domeCX + Math.sin(phi) * Math.cos(theta) * R,
+        domeBaseY + Math.cos(phi) * R,
+        domeCZ + Math.sin(phi) * Math.sin(theta) * R,
+      );
+      group.add(sp);
+      deepBlinks.push({ mat, period: 1.25, phase: Math.PI * 0.35 });
+    }
+    dome.onBeforeRender = () => {
+      const tt = (performance.now() - _ringT0) / 1000;
+      const k = 0.5 - 0.5 * Math.cos(tt * Math.PI / 2.2); // ~4.4s breath cycle
+      ringMat.color.copy(_ringLow).lerp(_ringHigh, k);
+      ringMat.opacity = 0.7 + 0.3 * k;
+      for (const b of deepBlinks) {
+        const s = Math.sin(tt * Math.PI / b.period + b.phase);
+        b.mat.opacity = s * s; // sin² fog-light bell, looping
+      }
+    };
+    for (const lat of [0.20, 0.45, 0.72]) {
+      const phi = lat * Math.PI / 2;
+      const rr = Math.cos(phi) * (domeR - 0.04);
+      const yy = Math.sin(phi) * (domeR - 0.04);
+      const torus = new THREE.Mesh(new THREE.TorusGeometry(rr, 0.025, 6, 96), ringMat);
+      torus.rotation.x = Math.PI / 2;
+      torus.position.set(domeCX, domeBaseY + yy, domeCZ);
+      group.add(torus);
+    }
+    // Apex disc — small bright cap at the dome's crown.
+    const apex = new THREE.Mesh(
+      new THREE.CircleGeometry(0.45, 32),
+      new THREE.MeshBasicMaterial({ color: 0xd8e0e6, transparent: true, opacity: 0.7, toneMapped: false })
+    );
+    apex.rotation.x = Math.PI / 2;
+    apex.position.set(domeCX, domeBaseY + domeR - 0.06, domeCZ);
+    group.add(apex);
+
+    // ===== R2-D2 pale-blue blinking panel lights scattered on the dome interior.
+    const blinkCv = document.createElement('canvas');
+    blinkCv.width = 32; blinkCv.height = 32;
+    const bctx = blinkCv.getContext('2d');
+    // Soft halo — neutral stone tint, falling off to transparent.
+    const bg = bctx.createRadialGradient(16, 16, 3, 16, 16, 14);
+    bg.addColorStop(0.0, 'rgba(140,158,176,0.45)');
+    bg.addColorStop(1.0, 'rgba(140,158,176,0)');
+    bctx.fillStyle = bg; bctx.fillRect(0, 0, 32, 32);
+    // Solid matte centre — saturated icy stone blue grey (#74A2C6).
+    bctx.fillStyle = 'rgba(116,162,198,1)';
+    bctx.beginPath();
+    bctx.arc(16, 16, 2.2, 0, Math.PI * 2);
+    bctx.fill();
+    const blinkTex = new THREE.CanvasTexture(blinkCv);
+    const BLINK_N = 12;
+    const blinks = [];
+    for (let i = 0; i < BLINK_N; i++) {
+      // Per-sprite material clone so each blink can fade its own opacity.
+      const mat = new THREE.SpriteMaterial({
+        map: blinkTex, color: 0xffffff, transparent: true, depthWrite: false,
+        toneMapped: false, opacity: 0,
+      });
+      const sp = new THREE.Sprite(mat);
+      sp.scale.setScalar(0.0001);
+      sp.position.set(domeCX, domeBaseY, domeCZ); // placeholder until first activation
+      if (i === 0) sp.frustumCulled = false;
+      group.add(sp);
+      blinks.push({ sprite: sp, mat, alive: false, age: 0, life: 0, scaleMax: 0.3 });
+    }
+    let nextBlinkIn = 0.35; // seconds until the next spawn becomes eligible
+    let _blinkLast = performance.now();
+    const _blinkProbe = new THREE.Vector3();
+    const pickDomePoint = (cam) => {
+      const R = domeR - 0.05;
+      let fallback = null;
+      const TRIES = 10;
+      for (let i = 0; i < TRIES; i++) {
+        const u = Math.random();
+        const phi = Math.acos(u);
+        const theta = Math.random() * Math.PI * 2;
+        const x = domeCX + Math.sin(phi) * Math.cos(theta) * R;
+        const y = domeBaseY + Math.cos(phi) * R;
+        const z = domeCZ + Math.sin(phi) * Math.sin(theta) * R;
+        if (!cam) return { x, y, z };
+        _blinkProbe.set(x, y, z).project(cam);
+        const inView =
+          _blinkProbe.z < 1 &&
+          _blinkProbe.x > -1 && _blinkProbe.x < 1 &&
+          _blinkProbe.y > -1 && _blinkProbe.y < 1;
+        if (inView) return { x, y, z };
+        if (!fallback) fallback = { x, y, z };
+      }
+      return fallback;
+    };
+    blinks[0].sprite.onBeforeRender = (renderer, _sceneRef, cam) => {
+      const now = performance.now();
+      const dt = Math.min(0.08, (now - _blinkLast) / 1000); _blinkLast = now;
+      // Spawn one new blink when the staggered cooldown elapses.
+      nextBlinkIn -= dt;
+      if (nextBlinkIn <= 0) {
+        const slot = blinks.find(b => !b.alive);
+        if (slot) {
+          const p = pickDomePoint(cam);
+          slot.sprite.position.set(p.x, p.y, p.z);
+          slot.alive = true;
+          slot.age = 0;
+          slot.life = 1.6 + Math.random() * 1.2; // gradual fog-light bell
+          slot.scaleMax = 0.085 + Math.random() * 0.09;
+          slot.sprite.scale.setScalar(slot.scaleMax);
+        }
+        nextBlinkIn = 0.30 + Math.random() * 0.55;
+      }
+      // Tick all active blinks: smooth bell-curve fade — gradual on, gradual off.
+      for (const b of blinks) {
+        if (!b.alive) { b.mat.opacity = 0; continue; }
+        b.age += dt;
+        const t = b.age / b.life;
+        if (t >= 1) { b.alive = false; b.mat.opacity = 0; continue; }
+        const s = Math.sin(Math.PI * t);
+        b.mat.opacity = s * s; // sin²(π·t): fog-light ramp up & down
+      }
+    };
+  }
 
   // ---- WALLS ----
   const wallCells = [];
@@ -474,7 +677,7 @@ export function buildScene(opts) {
             const sh = o.clone();
             sh.material = o.material.clone();
             sh.material.side = THREE.BackSide;
-            sh.scale.multiplyScalar(1.05);
+            sh.scale.multiplyScalar(1.22);
             if ('emissive' in sh.material) sparkleMats.push(sh.material);
             shells.push([o.parent, sh]);
           }
@@ -500,7 +703,7 @@ export function buildScene(opts) {
         const bbox = new THREE.Box3().setFromObject(obj);
         const size = bbox.getSize(new THREE.Vector3());
         const maxD = Math.max(size.x, size.y, size.z);
-        const TARGET = 3.0; // shortened to leave clearance above the eskleocity sculpture
+        const TARGET = opts.cyberDome ? 6.0 : 3.0; // epic scale inside the dome
         const s = maxD > 0 ? TARGET / maxD : 1;
         obj.scale.setScalar(s);
         const sb = new THREE.Box3().setFromObject(obj);
@@ -508,7 +711,12 @@ export function buildScene(opts) {
         const ss = sb.getSize(new THREE.Vector3());
         // Pivot wraps both GLB and corkscrew so they rotate together in place.
         const pivot = new THREE.Group();
-        pivot.position.set(ANCHOR_X, ROOM_CEIL - 0.08 - ss.y / 2, ANCHOR_Z);
+        // Under a dome, push the chandelier up so its top sits ~3m into the
+        // dome (epic hang); otherwise tuck it against the flat ceiling.
+        const pivotY = opts.cyberDome
+          ? (ROOM_CEIL + 3.0) - ss.y / 2
+          : ROOM_CEIL - 0.08 - ss.y / 2;
+        pivot.position.set(ANCHOR_X, pivotY, ANCHOR_Z);
         obj.position.set(-sc.x, -sc.y, -sc.z);
         pivot.add(obj);
 
@@ -574,7 +782,7 @@ export function buildScene(opts) {
           pts.push(new THREE.Vector3(Math.cos(a) * corkR, (tt - 0.5) * corkH, Math.sin(a) * corkR));
         }
         const corkCurve = new THREE.CatmullRomCurve3(pts);
-        const corkGeom  = new THREE.TubeGeometry(corkCurve, segs, 0.05, 10, false);
+        const corkGeom  = new THREE.TubeGeometry(corkCurve, segs, 0.085, 10, false);
         // Horizontal rainbow texture that tiles along the spiral and scrolls
         // "downward" along the path over time.
         const rcv = document.createElement('canvas');
@@ -774,14 +982,14 @@ export function buildScene(opts) {
   // ===== HOVER SHIPS — miniature eskleoship GLB roaming the rolling hills =====
   if (opts.hoverShips) {
     const ROOM_CX = 6 * CELL, ROOM_CZ = 4 * CELL, ROOM_R = 6.0;
-    const SHIP_N = 6, HOVER_Y = 0.45;
+    const SHIP_N = 9, HOVER_Y = 0.45;
     pendingLoads.push(new Promise((resolve) => {
       new GLTFLoader().load('hallway4/eskleoship-01.glb', (gltf) => {
         const proto = gltf.scene;
         const bb = new THREE.Box3().setFromObject(proto);
         const sz = bb.getSize(new THREE.Vector3());
         const maxD = Math.max(sz.x, sz.y, sz.z);
-        proto.scale.setScalar(maxD > 0 ? 0.32 / maxD : 1); // miniature ~0.32 m
+        proto.scale.setScalar(maxD > 0 ? 0.208 / maxD : 1); // miniature ~0.208 m (65% of prior 0.32)
         const whiteMat = new THREE.MeshStandardMaterial({
           color: 0xeeeae2, roughness: 0.95, metalness: 0.0,
         });
@@ -875,6 +1083,32 @@ export function buildScene(opts) {
             p.vy = 0.5 + Math.random() * 0.9;
           }
         };
+        // Fine blood-red dust — lingers ~1s longer than the blast/ash.
+        const RED_N = 128;
+        const redMat = new THREE.MeshBasicMaterial({ color: 0x6a0410, transparent: true, opacity: 0.8, depthWrite: false });
+        const red = new THREE.InstancedMesh(new THREE.SphereGeometry(0.018, 4, 3), redMat, RED_N);
+        red.frustumCulled = false;
+        const redS = [];
+        for (let i = 0; i < RED_N; i++) { redS.push({ life: 0, age: 0, x: 0, y: 0, z: 0, vx: 0, vy: 0, vz: 0 }); red.setMatrixAt(i, _zM); }
+        red.instanceMatrix.needsUpdate = true;
+        group.add(red);
+        let rCur = 0;
+        const spawnRed = (x, y, z, n) => {
+          for (let k = 0; k < n; k++) {
+            const i = rCur; rCur = (rCur + 1) % RED_N;
+            const p = redS[i];
+            p.life = 2.6 + Math.random() * 0.5; // ash max ~1.9s → red lives ~1s longer
+            p.age = 0;
+            p.x = x + (Math.random() - 0.5) * 0.4;
+            p.y = y + (Math.random() - 0.3) * 0.25;
+            p.z = z + (Math.random() - 0.5) * 0.4;
+            const a = Math.random() * Math.PI * 2;
+            const sp = 0.7 + Math.random() * 1.1;
+            p.vx = Math.cos(a) * sp;
+            p.vz = Math.sin(a) * sp;
+            p.vy = 0.6 + Math.random() * 0.5; // small upward kick, gravity takes over fast
+          }
+        };
         // Shared black-hole disc that appears under a respawning ship.
         const holeMat = new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, transparent: true, opacity: 0 });
         const hole = new THREE.Mesh(new THREE.CircleGeometry(0.45, 20), holeMat);
@@ -895,10 +1129,47 @@ export function buildScene(opts) {
         // Drive ticks from the dust InstancedMesh (always-rendered, frustum-cull off).
         // Hooking on a child of a ship would freeze when that ship explodes and hides.
         let _last = performance.now();
+        let kamikazeT = 25 + Math.random() * 35; // seconds until next chandelier strike attempt
+        const _chandWorldPos = new THREE.Vector3();
         dust.onBeforeRender = () => {
           const now = performance.now();
           const dt = Math.min(0.06, (now - _last) / 1000); _last = now;
+          kamikazeT -= dt;
+          if (kamikazeT <= 0 && chandelier.obj) {
+            const candidates = ships.filter(s => s.ph === 'alive');
+            if (candidates.length) {
+              const pick = candidates[(Math.random() * candidates.length) | 0];
+              pick.ph = 'kamikaze'; pick.phT = 0;
+            }
+            kamikazeT = 25 + Math.random() * 35;
+          }
           for (const s of ships) {
+            if (s.ph === 'kamikaze') {
+              chandelier.obj.getWorldPosition(_chandWorldPos);
+              const dx = _chandWorldPos.x - s.wrap.position.x;
+              const dy = _chandWorldPos.y - s.wrap.position.y;
+              const dz = _chandWorldPos.z - s.wrap.position.z;
+              const d = Math.hypot(dx, dy, dz);
+              if (d < 2.5) {
+                spawnFlame(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 32);
+                spawnAsh(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 22);
+                spawnRed(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 40);
+                s.wrap.visible = false;
+                s.ph = 'gone'; s.phT = 0;
+                continue;
+              }
+              const STRIKE_SPEED = 7.5;
+              const inv = STRIKE_SPEED / Math.max(0.001, d);
+              const tvx = dx * inv, tvy = dy * inv, tvz = dz * inv;
+              s.vx = s.vx * 0.82 + tvx * 0.18;
+              s.vy = s.vy * 0.82 + tvy * 0.18;
+              s.vz = s.vz * 0.82 + tvz * 0.18;
+              s.wrap.position.x += s.vx * dt;
+              s.wrap.position.y += s.vy * dt;
+              s.wrap.position.z += s.vz * dt;
+              s.wrap.rotation.y = Math.atan2(s.vx, s.vz) + Math.PI;
+              continue;
+            }
             if (s.ph !== 'alive') {
               s.phT += dt;
               if (s.ph === 'gone' && s.phT > 2.0) {
@@ -985,6 +1256,7 @@ export function buildScene(opts) {
             if (s.expT <= 0) {
               spawnFlame(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 22);
               spawnAsh(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 16);
+              spawnRed(s.wrap.position.x, s.wrap.position.y, s.wrap.position.z, 32);
               s.wrap.visible = false;
               s.ph = 'gone'; s.phT = 0;
             }
@@ -1040,6 +1312,24 @@ export function buildScene(opts) {
             flm.setMatrixAt(i, _dM);
           }
           flm.instanceMatrix.needsUpdate = true;
+          // Advance red dust (slow rise + outward drift, long gentle fade).
+          for (let i = 0; i < RED_N; i++) {
+            const p = redS[i];
+            let sc = 0;
+            if (p.age < p.life) {
+              p.age += dt;
+              const t = p.age / p.life;
+              sc = t < 0.15 ? t / 0.15 : 1 - (t - 0.15) / 0.85;
+              p.x += p.vx * dt; p.y += p.vy * dt; p.z += p.vz * dt;
+              p.vx *= 0.94; p.vz *= 0.94;
+              p.vy -= 2.2 * dt; // sprinkle downward — gravity-dominated
+            }
+            _dV.set(p.x, p.y, p.z);
+            _dSc.set(sc, sc, sc);
+            _dM.compose(_dV, _dQ, _dSc);
+            red.setMatrixAt(i, _dM);
+          }
+          red.instanceMatrix.needsUpdate = true;
         };
         resolve();
       }, undefined, err => { console.warn('[hallway2] eskleoship-01.glb failed', err); resolve(); });
@@ -1127,11 +1417,6 @@ export function buildScene(opts) {
 
   // ===== Yellow low-poly pillar ring around the eskleocity base.
   if (opts.eskleocity) {
-    const pillarMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, roughness: 0.55, metalness: 0.15,
-      emissive: 0xffffff, emissiveIntensity: 0.55,
-      map: winTex, emissiveMap: winTex,
-    });
     const pillarGeom = new THREE.BoxGeometry(1, 1, 1);
     // Override BoxGeometry UVs so the window texture tiles densely on each pillar.
     {
@@ -1143,6 +1428,12 @@ export function buildScene(opts) {
       }
       pillarGeom.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
     }
+    // Distance-driven palette: edge pillars stay white-yellow, inner pillars get
+    // increasingly gold + metallic, blending toward the central eskleocity GLB.
+    const _outerR = 2.10, _innerR = 1.25;
+    const _edgeColor = new THREE.Color(0xffffff);
+    const _goldColor = new THREE.Color(0xffc850);
+    const _tmpColor = new THREE.Color();
     let pSd = 0xea71;
     const pR = () => { pSd = (pSd * 1664525 + 1013904223) | 0; return ((pSd >>> 0) / 4294967296); };
     for (let i = 0; i < 36; i++) {
@@ -1151,6 +1442,16 @@ export function buildScene(opts) {
         const r = 1.35 + pR() * 0.65 + dr;
         const h = 0.30 + pR() * 0.95;
         const w = 0.055 + pR() * 0.075;
+        const k = Math.max(0, Math.min(1, (_outerR - r) / (_outerR - _innerR)));
+        _tmpColor.copy(_edgeColor).lerp(_goldColor, k);
+        const pillarMat = new THREE.MeshStandardMaterial({
+          color: _tmpColor.clone(),
+          roughness: 0.55 - k * 0.30,
+          metalness: 0.15 + k * 0.65,
+          emissive: _tmpColor.clone(),
+          emissiveIntensity: 0.55 + k * 0.20,
+          map: winTex, emissiveMap: winTex,
+        });
         const m = new THREE.Mesh(pillarGeom, pillarMat);
         m.scale.set(w, h, w);
         m.position.set(6 * CELL + Math.cos(a) * r, h / 2, 4 * CELL + Math.sin(a) * r);
@@ -1165,9 +1466,10 @@ export function buildScene(opts) {
     pendingLoads.push(new Promise((resolve) => {
       new GLTFLoader().load('hallway4/eskleocity-01.glb', (gltf) => {
         const obj = gltf.scene;
+        // Eskleocity is the center of the entity — fully golden, polished metallic.
         const cityMat = new THREE.MeshStandardMaterial({
-          color: 0xffffff, roughness: 0.55, metalness: 0.15,
-          emissive: 0xffffff, emissiveIntensity: 0.55,
+          color: 0xffc850, roughness: 0.22, metalness: 0.85,
+          emissive: 0xffc850, emissiveIntensity: 0.75,
           map: winTex, emissiveMap: winTex,
         });
         // GLB usually lacks suitable UVs for repeat tiling — synthesise per-vertex
@@ -1193,6 +1495,68 @@ export function buildScene(opts) {
         // Centre horizontally on (6*CELL, 4*CELL) and sit the bbox bottom on the floor.
         obj.position.set(6 * CELL - sc.x, -sb.min.y, 4 * CELL - sc.z);
         group.add(obj);
+        // Promote the tallest near-center mesh to solid polished gold.
+        obj.updateMatrixWorld(true);
+        const _meshBox = new THREE.Box3();
+        const _meshCtr = new THREE.Vector3();
+        const cityCenterX = 6 * CELL, cityCenterZ = 4 * CELL;
+        let tallest = null, tallestTop = -Infinity;
+        obj.traverse(o => {
+          if (!o.isMesh) return;
+          _meshBox.setFromObject(o);
+          _meshBox.getCenter(_meshCtr);
+          const horiz = Math.hypot(_meshCtr.x - cityCenterX, _meshCtr.z - cityCenterZ);
+          if (horiz > 0.6) return; // restrict to near-center meshes
+          if (_meshBox.max.y > tallestTop) { tallestTop = _meshBox.max.y; tallest = o; }
+        });
+        if (tallest) {
+          tallest.material = new THREE.MeshStandardMaterial({
+            color: 0xffd366, roughness: 0.22, metalness: 1.0,
+            emissive: 0xffd366, emissiveIntensity: 0.95,
+            toneMapped: false,
+          });
+          // Tiny gold sparklings sprinkled across the tower's surface.
+          const sparkCv = document.createElement('canvas');
+          sparkCv.width = 32; sparkCv.height = 32;
+          const sx = sparkCv.getContext('2d');
+          const sg = sx.createRadialGradient(16, 16, 0, 16, 16, 14);
+          sg.addColorStop(0.0, 'rgba(255,240,180,1)');
+          sg.addColorStop(0.35, 'rgba(255,200,90,0.55)');
+          sg.addColorStop(1.0, 'rgba(255,200,90,0)');
+          sx.fillStyle = sg; sx.fillRect(0, 0, 32, 32);
+          const sparkTex = new THREE.CanvasTexture(sparkCv);
+          const sparkMat = new THREE.SpriteMaterial({
+            map: sparkTex, color: 0xffe080, transparent: true, depthWrite: false,
+            blending: THREE.AdditiveBlending, toneMapped: false,
+          });
+          // Build sparkles in the tower's local frame so they stick to it.
+          tallest.updateMatrixWorld(true);
+          const localBox = tallest.geometry.boundingBox || tallest.geometry.computeBoundingBox() || tallest.geometry.boundingBox;
+          const lb = tallest.geometry.boundingBox;
+          const SP_N = 36;
+          const spkArr = [];
+          for (let i = 0; i < SP_N; i++) {
+            const sp = new THREE.Sprite(sparkMat);
+            sp.position.set(
+              lb.min.x + Math.random() * (lb.max.x - lb.min.x),
+              lb.min.y + Math.random() * (lb.max.y - lb.min.y),
+              lb.min.z + Math.random() * (lb.max.z - lb.min.z),
+            );
+            sp.scale.setScalar(0.0001);
+            if (i === 0) sp.frustumCulled = false;
+            tallest.add(sp);
+            spkArr.push({ sprite: sp, phase: Math.random() * 6.28, freq: 1.8 + Math.random() * 2.6 });
+          }
+          const _spkT0 = performance.now();
+          spkArr[0].sprite.onBeforeRender = () => {
+            const tt = (performance.now() - _spkT0) / 1000;
+            for (let i = 0; i < SP_N; i++) {
+              const p = spkArr[i];
+              const blink = Math.pow(Math.max(0, Math.sin(tt * p.freq + p.phase)), 18);
+              p.sprite.scale.setScalar(Math.max(0.00005, blink * 0.06));
+            }
+          };
+        }
         resolve();
       }, undefined, err => { console.warn('[hallway2] eskleocity-01.glb failed', err); resolve(); });
     }));

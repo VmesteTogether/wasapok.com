@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=75';
+import { buildScene } from '../hallway2/scene.js?v=117';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -22,6 +22,7 @@ const opts = {
   hoverShips: true, // eskleoship-01 minis roaming + fluttering across the hills
   eskleocity: true, // yellow tiled cybertronian city under the chandelier
   floorOrange: true, // shift the grass+water palette from blue/tan to warm orange
+  cyberDome: true, // grey cybernetic dome replaces the flat ceiling over the room
 };
 
 // ---- Renderer ----
