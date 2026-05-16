@@ -649,6 +649,98 @@ export function buildScene(layout, opts) {
     else addTorch(l);
   }
 
+  // ===== Art-nouveau batwing pendant lights at the last tile of every hub corridor =====
+  function addCorridorPendant(wx, wz, ceilY) {
+    const SHADE_BOTTOM_Y = 2.7; // hold the shade well above eye height (~1.55)
+    const grp = new THREE.Group();
+    grp.position.set(wx, ceilY, wz);
+    const brassMat = new THREE.MeshStandardMaterial({ color: 0x7a4a14, metalness: 0.75, roughness: 0.32 });
+    const ironMatLocal = new THREE.MeshStandardMaterial({ color: 0x3a2614, metalness: 0.65, roughness: 0.4 });
+    // Ceiling cap
+    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.10, 0.085, 0.06, 12), brassMat);
+    cap.position.y = -0.03;
+    grp.add(cap);
+    // Down-rod (sized so the shade bottom lands at SHADE_BOTTOM_Y)
+    const SHADE_DEPTH = 0.49; // max profile drop at scallop petals
+    const rodLen = Math.max(0.4, ceilY - 0.06 - 0.08 - SHADE_DEPTH - SHADE_BOTTOM_Y);
+    const rod = new THREE.Mesh(new THREE.CylinderGeometry(0.022, 0.022, rodLen, 8), ironMatLocal);
+    rod.position.y = -0.06 - rodLen / 2;
+    grp.add(rod);
+    // Brass connector at bottom of rod
+    const conn = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.045, 0.07, 10), brassMat);
+    conn.position.y = -0.06 - rodLen - 0.035;
+    grp.add(conn);
+    // Art-nouveau scalloped tulip — flared bell with 6 petal scallops on the rim.
+    const shadeGeom = (() => {
+      const profile = [
+        [0.056, 0],
+        [0.090, -0.06],
+        [0.156, -0.14],
+        [0.265, -0.25],
+        [0.383, -0.35],
+        [0.503, -0.44],
+      ];
+      const M = profile.length;
+      const N_ANG = 48;
+      const SCALLOP_N = 6, R_AMP = 0.05, Y_AMP = 0.05;
+      const positions = [];
+      for (let i = 0; i < M; i++) {
+        const t = i / (M - 1);
+        const [bR, bY] = profile[i];
+        for (let j = 0; j <= N_ANG; j++) {
+          const ang = (j / N_ANG) * Math.PI * 2;
+          const scallopT = Math.max(0, (t - 0.55) / 0.45);
+          const wave = Math.cos(ang * SCALLOP_N);
+          const r = bR + R_AMP * wave * scallopT;
+          const y = bY - Y_AMP * wave * scallopT;
+          positions.push(Math.cos(ang) * r, y, Math.sin(ang) * r);
+        }
+      }
+      const indices = [];
+      for (let i = 0; i < M - 1; i++) {
+        for (let j = 0; j < N_ANG; j++) {
+          const a = i * (N_ANG + 1) + j;
+          const b = a + 1;
+          const c = (i + 1) * (N_ANG + 1) + j;
+          const d = c + 1;
+          indices.push(a, c, b, b, c, d);
+        }
+      }
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      g.setIndex(indices);
+      g.computeVertexNormals();
+      return g;
+    })();
+    const shadeMat = new THREE.MeshStandardMaterial({
+      color: 0xff8830, emissive: 0xff6020, emissiveIntensity: 1.6,
+      roughness: 0.42, metalness: 0.10, side: THREE.DoubleSide,
+      transparent: true, opacity: 0.88,
+    });
+    const shade = new THREE.Mesh(shadeGeom, shadeMat);
+    shade.position.y = -0.06 - rodLen - 0.08;
+    grp.add(shade);
+    // Warm orange bulb
+    const bulb = new THREE.PointLight(0xff8030, 2.4, 7, 1.6);
+    bulb.position.y = -0.06 - rodLen - 0.25;
+    grp.add(bulb);
+    group.add(grp);
+    torchLights.push({ light: bulb, baseIntensity: 2.4, kind: 'umbrella' });
+  }
+  {
+    const hubR = layout.rooms.find(r => r.id === 'hub');
+    if (hubR) {
+      const PDX = [0, 1, 0, -1], PDY = [-1, 0, 1, 0];
+      const hwL = (hubR.w - 1) / 2, hhL = (hubR.h - 1) / 2;
+      for (let d = 0; d < 4; d++) {
+        const gx = hubR.cx + PDX[d] * (hwL + 2);
+        const gy = hubR.cy + PDY[d] * (hhL + 2);
+        const tileCeilH = (layout.ceilH[gy] && layout.ceilH[gy][gx]) || STD_CEIL;
+        addCorridorPendant(gx * CELL, gy * CELL, tileCeilH);
+      }
+    }
+  }
+
   // ===== SALOON DOORS =====
   const saloonDoors = [];
 
@@ -696,17 +788,44 @@ export function buildScene(layout, opts) {
       panelGeom.translate(0, 0, -THICK / 2);   // centre panel around z=0
       leaf.add(new THREE.Mesh(panelGeom, doorWoodMat));
 
-      // Three horizontal iron cross-braces
-      for (const [by, w] of [
-        [PANEL_BASE + 0.13,          0.88],
-        [PANEL_BASE + INNER_H * 0.52, 0.88],
-        [PANEL_BASE + INNER_H * 0.80, 0.68],
-      ]) {
-        const brace = new THREE.Mesh(
-          new THREE.BoxGeometry(leafW * w, 0.048, THICK + 0.014), doorIronMat
+      // Horizontal wooden shutter slats — typical louvered-shutter look.
+      // Top & bottom rails frame the slats; the slats fill the panel body.
+      const lighterWoodMat = new THREE.MeshStandardMaterial({
+        color: 0x6e4128, roughness: 0.86, metalness: 0.03,
+      });
+      const railTop    = PANEL_BASE + INNER_H - 0.06;
+      const railBottom = PANEL_BASE + 0.08;
+      // Top & bottom rails (slightly proud of the panel face)
+      for (const ry of [railTop, railBottom]) {
+        const rail = new THREE.Mesh(
+          new THREE.BoxGeometry(leafW * 0.94, 0.07, THICK + 0.018), doorWoodMat
         );
-        brace.position.set(sx * leafW * (w / 2), by, 0);
-        leaf.add(brace);
+        rail.position.set(sx * leafW * 0.47, ry, 0);
+        leaf.add(rail);
+      }
+      // Slat run — slats butt edge-to-edge so the darker panel never shows between.
+      const SLAT_N = 7;
+      const slatY0 = railBottom + 0.06;
+      const slatY1 = railTop - 0.06;
+      const slatStep = (slatY1 - slatY0) / (SLAT_N - 1);
+      const slatH = slatStep * 1.06; // slight overlap to kill seam bleed
+      const slatGeom = new THREE.BoxGeometry(leafW * 0.86, slatH, THICK + 0.012);
+      for (let k = 0; k < SLAT_N; k++) {
+        const sy = slatY0 + k * slatStep;
+        const slat = new THREE.Mesh(slatGeom, lighterWoodMat);
+        slat.position.set(sx * leafW * 0.47, sy, 0);
+        leaf.add(slat);
+      }
+      // Thin shadow grooves between slats (front face) to read as gaps
+      const grooveGeom = new THREE.BoxGeometry(leafW * 0.86, 0.018, 0.004);
+      for (let k = 0; k < SLAT_N - 1; k++) {
+        const gy = slatY0 + (k + 0.5) * slatStep;
+        const groove = new THREE.Mesh(grooveGeom, doorIronMat);
+        groove.position.set(sx * leafW * 0.47, gy, THICK / 2 + 0.009);
+        leaf.add(groove);
+        const groove2 = groove.clone();
+        groove2.position.z = -(THICK / 2 + 0.009);
+        leaf.add(groove2);
       }
 
       // Central iron boss medallion (octagonal) with white enamel ring accent
@@ -2018,6 +2137,25 @@ export function buildScene(layout, opts) {
       const top = new THREE.Mesh(topGeom, chromeMat);
       top.position.set(0, 1.48, 0);
       pivot.add(top);
+      // Wall panel above the portal — extends frame-top → the room's actual ceiling.
+      {
+        const tileCeil = (layout.ceilH[d.ty] && layout.ceilH[d.ty][d.tx]) || STD_CEIL;
+        const panelBottomLocal = 1.56;
+        const panelTopLocal = tileCeil - 1.40;
+        const panelH = panelTopLocal - panelBottomLocal;
+        if (panelH > 0.05) {
+          // Same textured wall material as the rest of the hall, tinted slightly
+          // grey so the LED glow reads a touch more muted on the transom.
+          const panelMat = wallMat.clone();
+          panelMat.color = new THREE.Color(0xb8bcc0);
+          panelMat.emissive = new THREE.Color(0xb8bcc0);
+          const panel = new THREE.Mesh(
+            new THREE.BoxGeometry(1.76, panelH, 0.16), panelMat
+          );
+          panel.position.set(0, (panelBottomLocal + panelTopLocal) / 2, 0);
+          pivot.add(panel);
+        }
+      }
       const left = new THREE.Mesh(sideGeom, chromeMat);
       left.position.set(-0.88, 0.08, 0);
       pivot.add(left);

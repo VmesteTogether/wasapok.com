@@ -4,7 +4,7 @@
 // fades and navigates to main-hall.html.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=68';
+import { buildScene } from './scene.js?v=78';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -31,6 +31,8 @@ let triggerTiles = [];
 let booted = false;
 let vaseGroup = null;
 let vaseBaseY = 1.8;
+let monuments = [];
+let monumentBaseY = 8;
 let nav = null;
 
 const camPreview = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
@@ -140,6 +142,49 @@ if (sprintBtn) {
   });
 }
 
+// Diagonal tilt buttons — pitch +30° + yaw ±30°. Tap → auto-locks 1.75s; hold → stays tilted while held.
+const TILT_PITCH = Math.PI / 6;
+const TILT_YAW   = Math.PI / 6;
+const TILT_TAP_MS  = 250;
+const TILT_HOLD_MS = 1750;
+let yawOffsetTarget = 0, yawOffset = 0;
+let tiltReleaseTimer = null;
+function wireTiltButton(id, sign) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let downAt = 0;
+  const release = () => {
+    if (player) player.resetPitch();
+    yawOffsetTarget = 0;
+    el.classList.remove('active');
+  };
+  const begin = e => {
+    e.preventDefault();
+    if (tiltReleaseTimer) { clearTimeout(tiltReleaseTimer); tiltReleaseTimer = null; }
+    document.querySelectorAll('.look-arrow.active').forEach(b => b.classList.remove('active'));
+    downAt = performance.now();
+    if (player) player.setPitchTarget(TILT_PITCH);
+    yawOffsetTarget = sign * TILT_YAW;
+    el.classList.add('active');
+  };
+  const end = e => {
+    if (e) e.preventDefault();
+    const dt = performance.now() - downAt;
+    if (dt < TILT_TAP_MS) {
+      if (tiltReleaseTimer) clearTimeout(tiltReleaseTimer);
+      tiltReleaseTimer = setTimeout(() => { tiltReleaseTimer = null; release(); }, TILT_HOLD_MS);
+    } else {
+      release();
+    }
+  };
+  el.addEventListener('pointerdown', begin);
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointerleave', end);
+  el.addEventListener('pointercancel', end);
+}
+wireTiltButton('dpad-upleft',  -1);
+wireTiltButton('dpad-upright',  1);
+
 // ===========================================================
 // TRIGGER → main hall  (wired via setupSceneNav in the boot block)
 // ===========================================================
@@ -155,6 +200,8 @@ if (sprintBtn) {
     triggerTiles = built.triggerTiles || [];
     vaseGroup    = built.vaseGroup || null;
     vaseBaseY    = built.vaseBaseY ?? 1.8;
+    monuments    = built.monuments || [];
+    monumentBaseY = built.monumentBaseY ?? 8;
 
     camera = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
     player = createPlayer(built.layout, CELL);
@@ -225,6 +272,8 @@ function animate() {
   tickHold(now);
   player.update(now);
   player.applyToCamera(camera, { bobEnabled: opts.headbob, fovEnabled: opts.sprintFov, baseFov: 72 });
+  yawOffset += (yawOffsetTarget - yawOffset) * 0.18;
+  if (Math.abs(yawOffset) > 0.0005) camera.rotation.y += yawOffset;
   if (nav) nav.check();
 
   if (vaseGroup) {
@@ -234,6 +283,20 @@ function animate() {
     vaseGroup.position.y = vaseBaseY + Math.sin(t * 1.1) * 0.14;
     const il = vaseGroup.userData.innerLight;
     if (il) il.intensity = 2.0 + Math.sin(t * 1.8) * 0.6 + Math.sin(t * 4.7) * 0.15;
+  }
+
+  // Mirror the same motion onto the flanking monument sculptures (slightly offset phases).
+  if (monuments.length) {
+    const t = now * 0.001;
+    for (let i = 0; i < monuments.length; i++) {
+      const m = monuments[i];
+      const ph = i * Math.PI; // mirror left/right phase
+      m.rotation.y = t * 0.32 + ph;
+      m.rotation.x = Math.sin(t * 0.6 + ph) * 0.08;
+      m.position.y = monumentBaseY + Math.sin(t * 1.1 + ph) * 0.14;
+      const il = m.userData.innerLight;
+      if (il) il.intensity = 2.6 + Math.sin(t * 1.8 + ph) * 0.7 + Math.sin(t * 4.7 + ph) * 0.18;
+    }
   }
 
   renderer.render(scene, camera);

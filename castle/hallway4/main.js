@@ -4,7 +4,7 @@
 // for several seconds.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from '../hallway2/scene.js?v=122';
+import { buildScene } from '../hallway2/scene.js?v=124';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -158,6 +158,49 @@ wireButton('dpad-up',    'forward', true);
 wireButton('dpad-down',  'back',    true);
 wireButton('dpad-left',  'left',    false);
 wireButton('dpad-right', 'right',   false);
+
+// Diagonal tilt buttons — pitch +30° + yaw ±30°. Tap → auto-locks 1.75s; hold → stays tilted while held.
+const TILT_PITCH = Math.PI / 6;
+const TILT_YAW   = Math.PI / 6;
+const TILT_TAP_MS  = 250;
+const TILT_HOLD_MS = 1750;
+let yawOffsetTarget = 0, yawOffset = 0;
+let tiltReleaseTimer = null;
+function wireTiltButton(id, sign) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  let downAt = 0;
+  const release = () => {
+    player.resetPitch();
+    yawOffsetTarget = 0;
+    el.classList.remove('active');
+  };
+  const begin = e => {
+    e.preventDefault();
+    if (tiltReleaseTimer) { clearTimeout(tiltReleaseTimer); tiltReleaseTimer = null; }
+    document.querySelectorAll('.look-arrow.active').forEach(b => b.classList.remove('active'));
+    downAt = performance.now();
+    player.setPitchTarget(TILT_PITCH);
+    yawOffsetTarget = sign * TILT_YAW;
+    el.classList.add('active');
+  };
+  const end = e => {
+    if (e) e.preventDefault();
+    const dt = performance.now() - downAt;
+    if (dt < TILT_TAP_MS) {
+      if (tiltReleaseTimer) clearTimeout(tiltReleaseTimer);
+      tiltReleaseTimer = setTimeout(() => { tiltReleaseTimer = null; release(); }, TILT_HOLD_MS);
+    } else {
+      release();
+    }
+  };
+  el.addEventListener('pointerdown', begin);
+  el.addEventListener('pointerup', end);
+  el.addEventListener('pointerleave', end);
+  el.addEventListener('pointercancel', end);
+}
+wireTiltButton('dpad-upleft',  -1);
+wireTiltButton('dpad-upright',  1);
 const sprintBtn = document.getElementById('dpad-sprint');
 if (sprintBtn) {
   let on = false;
@@ -190,6 +233,8 @@ function animate() {
   tickHold(now);
   player.update(now);
   player.applyToCamera(camera, { bobEnabled: opts.headbob, fovEnabled: opts.sprintFov, baseFov: 72 });
+  yawOffset += (yawOffsetTarget - yawOffset) * 0.18;
+  if (Math.abs(yawOffset) > 0.0005) camera.rotation.y += yawOffset;
   nav.check();
 
   if (built.playerLight) {

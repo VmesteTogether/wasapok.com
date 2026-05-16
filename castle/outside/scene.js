@@ -320,8 +320,6 @@ export async function buildScene() {
       const open = Math.max(0, Math.min(1, (10.0 - dist) / 5.0));
       portalMesh.scale.y = Math.max(0.001, 1 - open);
       portalMesh.position.y = (PH / 2) * open;
-      // Fade the vanishing lines in with the door so they don't paint over
-      // foreground geometry (e.g. the vase sculpture) before the door opens.
       lineMat.opacity = 0.8 * open;
     };
     pivot.add(portalMesh);
@@ -336,17 +334,44 @@ export async function buildScene() {
     rBar.position.set(PW / 2 + FT / 2, FT / 2, 0);
     pivot.add(rBar);
 
-    // Faux interior hallway behind the door. Rendered with renderOrder + no
-    // depthTest so any building mesh between the camera and the tunnel pixels
-    // is overwritten, simulating a window onto the main hall beyond.
+    // Faux interior hallway behind the door — masked by stencil so it only
+    // shows through the portal frame. Side-on views never see it.
+    const STENCIL_REF = 1;
+    const stencilTest = (m) => {
+      m.stencilWrite = true;
+      m.stencilFunc = THREE.EqualStencilFunc;
+      m.stencilRef = STENCIL_REF;
+      m.stencilFail = THREE.KeepStencilOp;
+      m.stencilZFail = THREE.KeepStencilOp;
+      m.stencilZPass = THREE.KeepStencilOp;
+    };
     const tMat = new THREE.MeshBasicMaterial({
       color: 0x0c0d10, side: THREE.DoubleSide,
       fog: false, depthTest: false, depthWrite: false,
     });
+    stencilTest(tMat);
     const tBackMat = new THREE.MeshBasicMaterial({
       color: 0x020204, side: THREE.DoubleSide,
       fog: false, depthTest: false, depthWrite: false,
     });
+    stencilTest(tBackMat);
+    // Invisible front-facing mask plane at the door — writes stencil=1 only
+    // where the portal opening is actually visible to the camera.
+    const maskMat = new THREE.MeshBasicMaterial({
+      colorWrite: false,
+      depthWrite: false,
+      depthTest: true,
+      side: THREE.FrontSide,
+      stencilWrite: true,
+      stencilFunc: THREE.AlwaysStencilFunc,
+      stencilRef: STENCIL_REF,
+      stencilFail: THREE.KeepStencilOp,
+      stencilZFail: THREE.KeepStencilOp,
+      stencilZPass: THREE.ReplaceStencilOp,
+    });
+    const maskMesh = new THREE.Mesh(new THREE.PlaneGeometry(PW, PH), maskMat);
+    maskMesh.renderOrder = 5; // before the tunnel (10)
+    pivot.add(maskMesh);
     // Cross-section matches the door opening exactly so the tunnel never
     // pokes outside the chrome U-frame.
     const TDP = 6.0;
@@ -357,12 +382,14 @@ export async function buildScene() {
       [TDP, PH, [ PW/2, 0, -TDP/2], [0, -Math.PI/2, 0], tMat], // right
       [PW, PH, [0, 0, -TDP], [0, 0, 0], tBackMat],             // far wall (darker)
     ];
+    const tunnelGroup = new THREE.Group();
+    pivot.add(tunnelGroup);
     for (const [w, h, p, r, mat] of tunnelPanels) {
       const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
       m.position.set(p[0], p[1], p[2]);
       m.rotation.set(r[0], r[1], r[2]);
       m.renderOrder = 10;
-      pivot.add(m);
+      tunnelGroup.add(m);
     }
     // One-point-perspective "vanishing" lines from each front corner to the
     // matching back-wall corner — the four long edges of the tunnel box.
@@ -370,6 +397,7 @@ export async function buildScene() {
       color: 0x1c1e22, fog: false, depthTest: false, depthWrite: false,
       transparent: true, opacity: 0, // ramps with portal animation
     });
+    stencilTest(lineMat);
     const lineGeom = new THREE.BufferGeometry();
     lineGeom.setAttribute('position', new THREE.Float32BufferAttribute([
       -PW/2,  PH/2, 0,   -PW/2,  PH/2, -TDP, // top-left
@@ -379,7 +407,7 @@ export async function buildScene() {
     ], 3));
     const vlines = new THREE.LineSegments(lineGeom, lineMat);
     vlines.renderOrder = 15;
-    pivot.add(vlines);
+    tunnelGroup.add(vlines);
     // Keep portal + chrome frame on top of the tunnel.
     portalMesh.renderOrder = 20;
     topBar.renderOrder = 20;
@@ -499,8 +527,8 @@ export async function buildScene() {
   const vaseGroup = new THREE.Group();
   const vaseBaseY = 2.6;
   {
-    const vaseX = wbcX;
-    const vaseZ = wbcZ;
+    const vaseX = wbcX - fwdDx * CELL;
+    const vaseZ = wbcZ - fwdDy * CELL;
     vaseGroup.position.set(vaseX, vaseBaseY, vaseZ);
     scene.add(vaseGroup);
 
@@ -562,6 +590,56 @@ export async function buildScene() {
     scene.add(baseRing);
   }
 
+  // ----- Monumental flanking vase sculptures rising from the water on either side of the path -----
+  const monuments = [];
+  const monumentBaseY = 4;
+  {
+    const fwdDist = -5 * CELL; // behind spawn — flanking the entry, away from the institute
+    const pathMidX = (spawn.x + 0.5) * CELL + fwdDx * fwdDist;
+    const pathMidZ = (spawn.y + 0.5) * CELL + fwdDy * fwdDist;
+    const perpHalf = perpDx !== 0
+      ? (walkableBox.max.x - walkableBox.min.x) * 0.5
+      : (walkableBox.max.z - walkableBox.min.z) * 0.5;
+    const monumentOffset = perpHalf + 9 * CELL; // well clear of walls/gate to avoid clipping
+    for (const sgn of [-1, 1]) {
+      const mGroup = new THREE.Group();
+      mGroup.position.set(
+        pathMidX + perpDx * monumentOffset * sgn,
+        monumentBaseY,
+        pathMidZ + perpDy * monumentOffset * sgn,
+      );
+      scene.add(mGroup);
+      const inner = new THREE.PointLight(0x6aa8ff, 4.5, 28, 1.6);
+      mGroup.add(inner);
+      mGroup.userData.innerLight = inner;
+      monuments.push(mGroup);
+    }
+    pendingLoads.push(new Promise((resolve) => {
+      new OBJLoader().load('outside/Eskleo-Vase-01.obj', (loaded) => {
+        const mat = new THREE.MeshStandardMaterial({
+          color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.4,
+          metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.65,
+          side: THREE.DoubleSide,
+        });
+        const bbox = new THREE.Box3().setFromObject(loaded);
+        const size = bbox.getSize(new THREE.Vector3());
+        const maxD = Math.max(size.x, size.y, size.z);
+        const TARGET = 12; // welcome-monument scale
+        const s = maxD > 0 ? TARGET / maxD : 1;
+        for (const mGroup of monuments) {
+          const c = loaded.clone(true);
+          c.scale.setScalar(s);
+          const cb = new THREE.Box3().setFromObject(c);
+          const cc = cb.getCenter(new THREE.Vector3());
+          c.position.sub(cc);
+          c.traverse(o => { if (o.isMesh) o.material = mat; });
+          mGroup.add(c);
+        }
+        resolve();
+      }, undefined, err => { console.warn('[outside] monument vases failed', err); resolve(); });
+    }));
+  }
+
   // Layout in the same shape as museum/layout.js so player.js consumes it directly
   const layout = {
     grid, ceilH, roomId,
@@ -583,6 +661,7 @@ export async function buildScene() {
     fog: null,
     sun, hemi,
     vaseGroup, vaseBaseY,
+    monuments, monumentBaseY,
     ready: Promise.all(pendingLoads),
   };
 }

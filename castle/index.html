@@ -153,6 +153,38 @@
     font-size: 12px; color: #d4a64c; text-transform: uppercase;
   }
 
+  /* ========== LOOK-UP TILT ARROWS (flat, floating above the cross) ========== */
+  #look-pad {
+    position: fixed;
+    bottom: 230px;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 30;
+    display: flex !important;
+    gap: 110px;
+    pointer-events: none;
+  }
+  .look-arrow {
+    width: 32px; height: 32px;
+    padding: 0;
+    border: 2px solid #6a6f78;
+    border-radius: 50%;
+    background: rgba(20,22,26,0.18);
+    cursor: pointer;
+    pointer-events: auto;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-user-select: none; user-select: none;
+    touch-action: none;
+    filter: brightness(1) drop-shadow(0 0 5px rgba(150,158,170,0.45));
+    transition: filter 55ms ease-out, transform 55ms ease-out;
+  }
+  .look-arrow:active,
+  .look-arrow.active {
+    transform: translateY(2px);
+    filter: brightness(1.60) drop-shadow(0 0 14px rgba(190,200,215,0.85));
+  }
+  .look-arrow svg { display: none; }
+
   /* Desktop: a hint line */
   @media (min-width: 800px) {
     #title { font-size: 18px; }
@@ -244,6 +276,12 @@
     </div>
   </div>
 
+  <!-- Tilt-look arrows: pitch up + slight side yaw to view ceilings/sky. -->
+  <div id="look-pad">
+    <button class="look-arrow" id="dpad-upright" aria-label="Look up-right"></button>
+    <button class="look-arrow" id="dpad-upleft" aria-label="Look up-left"></button>
+  </div>
+
   <!-- Sprint button — bottom right -->
   <div id="sprint-wrap">
     <button class="action-btn" id="dpad-sprint">RUN</button>
@@ -263,6 +301,6 @@
 }
 </script>
 
-<script type="module" src="outside/main.js?v=75"></script>
+<script type="module" src="outside/main.js?v=78"></script>
 </body>
 </html>
