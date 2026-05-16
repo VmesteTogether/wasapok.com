@@ -196,6 +196,7 @@ export function buildScene(layout, opts) {
     const rand = () => { seed = (seed * 1664525 + 1013904223) | 0; return ((seed >>> 0) / 4294967296); };
 
     const eu = new THREE.Euler();
+    const stalBase = [];
     let i = 0;
     for (const c of floorCells) {
       if (skipCells.has(`${c.x},${c.y}`)) continue;
@@ -207,17 +208,44 @@ export function buildScene(layout, opts) {
         const tiltX = (rand() - 0.5) * 0.32;
         const tiltZ = (rand() - 0.5) * 0.32;
         const yaw = rand() * Math.PI * 2;
-        v3.set(c.x * CELL + rx, c.ceilH, c.y * CELL + rz);
+        const wx = c.x * CELL + rx, wz = c.y * CELL + rz;
+        v3.set(wx, c.ceilH, wz);
         eu.set(tiltX, yaw, tiltZ);
         q.setFromEuler(eu);
         sc.set(thick, len, thick);
         m4.compose(v3, q, sc);
         stalInst.setMatrixAt(i++, m4);
+        stalBase.push({
+          x: wx, y: c.ceilH, z: wz,
+          tx: tiltX, tz: tiltZ, yaw, thick, len,
+          ph: rand() * Math.PI * 2,
+        });
       }
     }
     sc.set(1, 1, 1); // reset for the wall section below
     stalInst.instanceMatrix.needsUpdate = true;
     group.add(stalInst);
+    // Gentle wiggle — per-instance sub-degree rotation oscillation.
+    const _swV = new THREE.Vector3(), _swE = new THREE.Euler();
+    const _swQ = new THREE.Quaternion(), _swS = new THREE.Vector3(), _swM = new THREE.Matrix4();
+    stalInst.frustumCulled = false;
+    stalInst.onBeforeRender = () => {
+      const t = performance.now() * 0.001;
+      for (let k = 0; k < stalBase.length; k++) {
+        const s = stalBase[k];
+        _swV.set(s.x, s.y, s.z);
+        _swE.set(
+          s.tx + Math.sin(t * 1.1 + s.ph) * 0.022,
+          s.yaw,
+          s.tz + Math.cos(t * 0.95 + s.ph * 1.3) * 0.022,
+        );
+        _swQ.setFromEuler(_swE);
+        _swS.set(s.thick, s.len, s.thick);
+        _swM.compose(_swV, _swQ, _swS);
+        stalInst.setMatrixAt(k, _swM);
+      }
+      stalInst.instanceMatrix.needsUpdate = true;
+    };
   }
 
   // ICY-ORANGE PIXEL DROPLETS — tiny blinking cubes fall from stalactite tips
