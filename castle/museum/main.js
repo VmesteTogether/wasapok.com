@@ -2,7 +2,7 @@
 // and seamless wasapok.com iframe transition at the portal room.
 import * as THREE from 'three';
 import { buildLayout } from './layout.js?v=14';
-import { buildScene } from './scene.js?v=122';
+import { buildScene } from './scene.js?v=123';
 import { createPlayer } from './player.js?v=10';
 import { createMinimap } from './minimap.js?v=10';
 import { setupSceneNav, consumeLoadingMsg } from '../nav.js?v=6';
@@ -359,6 +359,7 @@ function updatePortalTransition() {
 // ===========================================================
 const vignetteEl = document.getElementById('vignette');
 const _vignVec = new THREE.Vector3();
+const _camFwd = new THREE.Vector3();
 let vignetteX = 50, vignetteY = 50, lastVX = -1, lastVY = -1;
 let lastTime = performance.now();
 function animate() {
@@ -469,14 +470,22 @@ function animate() {
     let targetX = 50, targetY = 50;
     built.diamondGroup.getWorldPosition(_vignVec);
     const dx = _vignVec.x - camera.position.x;
+    const dy = _vignVec.y - camera.position.y;
     const dz = _vignVec.z - camera.position.z;
     const distSq = dx * dx + dz * dz;
     const INSIDE_R = 2.2;
     if (distSq >= INSIDE_R * INSIDE_R) {
-      _vignVec.project(camera);
-      if (_vignVec.z < 1) {
-        targetX = (_vignVec.x + 1) * 50;
-        targetY = (1 - _vignVec.y) * 50;
+      // Only project if the diamond is in front of the camera; otherwise
+      // project() returns wildly off-screen NDC that flips the CSS radial
+      // gradient and reads as broken lighting.
+      _camFwd.set(0, 0, -1).applyQuaternion(camera.quaternion);
+      const facing = dx * _camFwd.x + dy * _camFwd.y + dz * _camFwd.z;
+      if (facing > 0.1) {
+        _vignVec.project(camera);
+        if (_vignVec.z > -1 && _vignVec.z < 1) {
+          targetX = Math.max(-50, Math.min(150, (_vignVec.x + 1) * 50));
+          targetY = Math.max(-50, Math.min(150, (1 - _vignVec.y) * 50));
+        }
       }
     }
     // While turning, hold the vignette at its current position so it doesn't sweep.
