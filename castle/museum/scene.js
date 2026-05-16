@@ -2002,7 +2002,8 @@ export function buildScene(layout, opts) {
       const n = pa.length / 3;
       for (let i = 0; i < n; i++) {
         const tu = (Math.floor(i / 17) / 64) * Math.PI * 2;
-        const d = Math.sin(tu * 5 - t * 3) * 0.025;
+        const d = Math.abs(Math.sin(tu * 24)) * 0.045   // tight ribs around the ring
+                + Math.sin(tu * 5 - t * 3.0) * 0.012;    // gentle living wobble
         pa[i*3]   = _rOrig[i*3]   + _rNorm[i*3]   * d;
         pa[i*3+1] = _rOrig[i*3+1] + _rNorm[i*3+1] * d;
         pa[i*3+2] = _rOrig[i*3+2] + _rNorm[i*3+2] * d;
