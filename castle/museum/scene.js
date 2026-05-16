@@ -2058,6 +2058,17 @@ export function buildScene(layout, opts) {
         triggerTiles.push({ x: tx, y: ty, target: 'hallway-2-room.html' });
       }
     }
+    // End of hallway 3 (south corridor) — red trigger pad that loads the wasapok room.
+    {
+      const _hubR = layout.rooms.find(r => r.id === 'hub');
+      if (_hubR) {
+        const tx = _hubR.cx;
+        const ty = _hubR.y0 + _hubR.h + 1; // last corridor tile south of hub
+        if (layout.grid[ty] && layout.grid[ty][tx] === 0) {
+          triggerTiles.push({ x: tx, y: ty, target: 'wasapok-room.html' });
+        }
+      }
+    }
     const padMat = new THREE.MeshStandardMaterial({
       color: 0xff2030,
       emissive: 0xff1818,
@@ -2065,12 +2076,21 @@ export function buildScene(layout, opts) {
       roughness: 0.35, metalness: 0.10,
       transparent: true, opacity: 0,
     });
+    const wasapokPadMat = new THREE.MeshStandardMaterial({
+      color: 0xff2030,
+      emissive: 0xff1818,
+      emissiveIntensity: 2.6,
+      roughness: 0.35, metalness: 0.10,
+      transparent: false, opacity: 1,
+    });
+    console.log('[museum] triggerTiles:', triggerTiles);
     for (const t of triggerTiles) {
+      const isWasapok = t.target === 'wasapok-room.html';
       const pad = new THREE.Mesh(
-        new THREE.BoxGeometry(CELL * 0.92, 0.05, CELL * 0.92),
-        padMat,
+        new THREE.BoxGeometry(CELL * 0.92, 0.06, CELL * 0.92),
+        isWasapok ? wasapokPadMat : padMat,
       );
-      pad.position.set(t.x * CELL, 0.028, t.y * CELL);
+      pad.position.set(t.x * CELL, 0.05, t.y * CELL);
       pad.visible = false;
       pad.userData.trigger = t;
       triggerPadGroup.add(pad);
