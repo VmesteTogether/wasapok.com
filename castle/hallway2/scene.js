@@ -912,10 +912,11 @@ export function buildScene(opts) {
       zMax: (layout.height - 0.5) * CELL - VASE_RADIUS,
     };
     const vaseMat = new THREE.MeshStandardMaterial({
-      color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.25,
-      metalness: 0.1, roughness: 0.08, transparent: true, opacity: 0.32,
+      color: 0xffffff, emissive: 0xffffff, emissiveIntensity: 0.30,
+      metalness: 0.375, roughness: 0.06, transparent: true, opacity: 0.32,
       side: THREE.DoubleSide,
     });
+
     pendingLoads.push(new Promise((resolve) => {
       new OBJLoader().load('outside/Eskleo-Vase-01.obj', (loaded) => {
         const bbox = new THREE.Box3().setFromObject(loaded);
