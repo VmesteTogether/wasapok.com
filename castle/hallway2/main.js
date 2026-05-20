@@ -162,6 +162,8 @@ const BG_PAGE = new THREE.Color(0x0a1a1f);
 const FOG_DUNGEON = new THREE.Color(0x000000);
 const FOG_PAGE = new THREE.Color(0x0a1a1f);
 let dungeonHidden = false;
+let navUIHidden = false;
+let forwardArrowHidden = false;
 function dungeonFadeValue() {
   if (!ZOOM_POSES) return 0;
   // Smooth fade across the three transitions. At step 0 → 0, step 3 → 1.
@@ -564,16 +566,6 @@ function updateShards(dt) {
       s.userData.vel.z *= 0.6;
       s.userData.angVel.multiplyScalar(0.6);
     }
-    s.userData.age += dt;
-    if (s.userData.age > 2.5) {
-      const fade = Math.max(0, 1 - (s.userData.age - 2.5) / 0.9);
-      s.material.opacity = 0.78 * fade;
-      if (s.userData.age > 3.4) {
-        scene.remove(s);
-        s.geometry.dispose();
-        shards.splice(i, 1);
-      }
-    }
   }
 }
 
@@ -632,6 +624,23 @@ function applyDungeonFade() {
   if (zoomStep >= 1 || zoomAnim) {
     if (lifeBar) lifeBar.style.opacity = '0';
     if (damageOverlay) damageOverlay.style.opacity = '0';
+  }
+
+  // Hide all nav arrows except forward (+ the two look-up dots) once the
+  // central vase drops into dreidel mode.
+  if (!navUIHidden && centralVase && built.dreidelVases && built.dreidelVases.length === 1) {
+    for (const id of ['dpad-left', 'dpad-right', 'dpad-down', 'dpad-upleft', 'dpad-upright']) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    }
+    navUIHidden = true;
+  }
+
+  // Hide the forward arrow too once the vase becomes interactable (zoom step 3).
+  if (!forwardArrowHidden && ZOOM_POSES && zoomStep === ZOOM_POSES.length - 1 && !zoomAnim) {
+    const el = document.getElementById('dpad-up');
+    if (el) el.style.display = 'none';
+    forwardArrowHidden = true;
   }
 }
 
