@@ -628,81 +628,221 @@ export function buildScene(opts) {
   let shelfWalls = null;
   if (opts && opts.bigRoom) {
     const SHELF_H = 80;       // very tall — fog handles the upper fade
-    const SHELF_LEN = 38;     // matches set-wall length (room perimeter span)
-    const OFFSET = 5.8;       // sit just past where set walls land flat (~5.6m)
+    const OFFSET = 13.8;      // 4 tiles (8m) back from where the set walls land flat (~5.6m)
     const xMin = 3, xMax = 41, zMin = -1, zMax = 37;
-    const midX = (xMin + xMax) / 2;
     const midZ = (zMin + zMax) / 2;
+    // East wall spans corner-to-corner; north/south extend east to meet it at the NE + SE corners.
+    const eastLen   = (zMax + OFFSET) - (zMin - OFFSET);
+    const nsLen     = (xMax + OFFSET) - xMin;
+    const nsCenterX = (xMin + (xMax + OFFSET)) / 2;
 
-    // Procedural maple-shelf tile: maple frame + dark inset compartment.
+    // Procedural maple bookshelf tile: one big empty cubby with thick
+    // horizontal shelf planks above + below, thinner vertical dividers, and a
+    // deep shadowed interior lit by a soft glow at the front edge of the
+    // lower plank (as if light catches the wood where the books would sit).
     const c = document.createElement('canvas');
-    c.width = 128; c.height = 128;
+    c.width = 256; c.height = 256;
     const ctx = c.getContext('2d');
     ctx.imageSmoothingEnabled = false;
+    // Maple base (the wood color of the planks/dividers)
     ctx.fillStyle = '#d2a574';
-    ctx.fillRect(0, 0, 128, 128);
-    for (let i = 0; i < 18; i++) {
-      const gy = Math.random() * 128;
-      const rr = 130 + (Math.random() * 30 | 0);
-      const gg =  85 + (Math.random() * 20 | 0);
-      const bb =  45 + (Math.random() * 20 | 0);
-      ctx.strokeStyle = `rgba(${rr},${gg},${bb},0.25)`;
+    ctx.fillRect(0, 0, 256, 256);
+    // Subtle wood grain streaks
+    for (let i = 0; i < 28; i++) {
+      const gy = Math.random() * 256;
+      const rr = 125 + (Math.random() * 35 | 0);
+      const gg =  82 + (Math.random() * 22 | 0);
+      const bb =  42 + (Math.random() * 22 | 0);
+      ctx.strokeStyle = `rgba(${rr},${gg},${bb},0.22)`;
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, gy);
-      ctx.lineTo(128, gy + (Math.random() - 0.5) * 4);
+      ctx.lineTo(256, gy + (Math.random() - 0.5) * 5);
       ctx.stroke();
     }
-    const inset = 12;
-    ctx.fillStyle = '#221408';
-    ctx.fillRect(inset, inset, 128 - 2*inset, 128 - 2*inset);
-    const grad = ctx.createLinearGradient(0, inset, 0, 128 - inset);
-    grad.addColorStop(0, 'rgba(0,0,0,0.6)');
-    grad.addColorStop(1, 'rgba(0,0,0,0.15)');
+    // Cubby cutout: thick top + bottom planks, thinner side dividers.
+    const PLANK = 22;   // top/bottom shelf plank thickness
+    const SIDE  = 8;    // vertical side divider thickness
+    const top = PLANK, bottom = 256 - PLANK;
+    const left = SIDE, right = 256 - SIDE;
+    // Dark interior fill
+    ctx.fillStyle = '#0e0703';
+    ctx.fillRect(left, top, right - left, bottom - top);
+    // Depth gradient: deepest shadow at the top (under the plank above),
+    // gently lifting toward the bottom (where ambient light catches the shelf).
+    const grad = ctx.createLinearGradient(0, top, 0, bottom);
+    grad.addColorStop(0.00, 'rgba(0,0,0,0.85)');
+    grad.addColorStop(0.45, 'rgba(0,0,0,0.55)');
+    grad.addColorStop(1.00, 'rgba(0,0,0,0.30)');
     ctx.fillStyle = grad;
-    ctx.fillRect(inset, inset, 128 - 2*inset, 128 - 2*inset);
-    ctx.fillStyle = 'rgba(255,220,170,0.5)';
-    ctx.fillRect(inset, inset, 128 - 2*inset, 2);
-    ctx.fillStyle = 'rgba(40,20,8,0.55)';
-    ctx.fillRect(0, 125, 128, 3);
-    ctx.fillStyle = 'rgba(255,235,200,0.3)';
-    ctx.fillRect(0, 0, 128, 2);
+    ctx.fillRect(left, top, right - left, bottom - top);
+    // Under-plank ceiling shadow (the underside of the shelf above is darkest)
+    ctx.fillStyle = 'rgba(0,0,0,0.55)';
+    ctx.fillRect(left, top, right - left, 4);
+    // Front-edge highlight on the bottom plank — the lit top surface of the
+    // shelf below, where the books would sit.
+    ctx.fillStyle = 'rgba(255,232,188,0.55)';
+    ctx.fillRect(0, bottom - 1, 256, 3);
+    ctx.fillStyle = 'rgba(255,232,188,0.25)';
+    ctx.fillRect(0, bottom + 2, 256, 2);
+    // Top-of-plank highlight strip (the top edge of the top plank, lit)
+    ctx.fillStyle = 'rgba(255,232,188,0.35)';
+    ctx.fillRect(0, 0, 256, 2);
+    // Bottom-of-plank deep shadow under the bottom plank
+    ctx.fillStyle = 'rgba(30,15,5,0.65)';
+    ctx.fillRect(0, 253, 256, 3);
+    // Inner-edge highlight + shadow on the side dividers (a hint of depth)
+    ctx.fillStyle = 'rgba(255,232,188,0.18)';
+    ctx.fillRect(left, top, 1, bottom - top);
+    ctx.fillStyle = 'rgba(20,10,4,0.5)';
+    ctx.fillRect(right - 1, top, 1, bottom - top);
 
     const shelfTex = new THREE.CanvasTexture(c);
     shelfTex.wrapS = shelfTex.wrapT = THREE.RepeatWrapping;
-    shelfTex.repeat.set(SHELF_LEN, SHELF_H);   // 1m × 1m square shelves
     shelfTex.magFilter = THREE.NearestFilter;
     shelfTex.needsUpdate = true;
 
-    const shelfMat = new THREE.MeshStandardMaterial({
-      map: shelfTex,
-      emissive: 0x6a4520,
-      emissiveIntensity: 0.18,
-      roughness: 0.85,
-      metalness: 0.05,
-      side: THREE.FrontSide,
-    });
-    const shelfGeom = new THREE.PlaneGeometry(SHELF_LEN, SHELF_H);
+    // Height map for relief/parallax: wood (planks + dividers) = top of surface
+    // (white = 1), cubby interior = bottom (black = 0). The shader marches the
+    // sampled UV into this height to fake actual 3D depth on a flat plane.
+    const hc = document.createElement('canvas');
+    hc.width = 256; hc.height = 256;
+    const hctx = hc.getContext('2d');
+    hctx.imageSmoothingEnabled = false;
+    hctx.fillStyle = '#ffffff';
+    hctx.fillRect(0, 0, 256, 256);
+    hctx.fillStyle = '#000000';
+    hctx.fillRect(left, top, right - left, bottom - top);
+    const shelfHeightTex = new THREE.CanvasTexture(hc);
+    shelfHeightTex.wrapS = shelfHeightTex.wrapT = THREE.RepeatWrapping;
+    shelfHeightTex.minFilter = THREE.LinearFilter;
+    shelfHeightTex.magFilter = THREE.LinearFilter;
+    shelfHeightTex.needsUpdate = true;
 
-    const east = new THREE.Mesh(shelfGeom, shelfMat);
+    // Relief-mapping shader: view direction is transformed to the plane's local
+    // (tangent) space, then we march along it. Where the height map is dark
+    // (cubby interior), the sample point shifts further "into" the wall — the
+    // painted shading on the color map then sells the depth as you walk past.
+    // Fog chunks below pull fogColor/fogNear/fogFar from scene.fog at render
+    // time (because `fog: true` is set on the ShaderMaterial). Without these
+    // includes, the bookshelves would ignore scene.fog and render crystal-clear
+    // at any distance — even when everything around them fades into the haze.
+    const shelfShaderVS = `
+      #include <fog_pars_vertex>
+      varying vec2 vUv;
+      varying vec3 vViewLocal;
+      void main() {
+        vUv = uv;
+        vec4 worldPos = modelMatrix * vec4(position, 1.0);
+        vec3 viewDirWorld = normalize(cameraPosition - worldPos.xyz);
+        // modelMatrix here is pure rotation+translation (no scale on these walls),
+        // so transpose of its 3x3 = inverse → transforms world dirs into local.
+        mat3 worldToLocal = transpose(mat3(modelMatrix));
+        vViewLocal = worldToLocal * viewDirWorld;
+        vec4 mvPosition = viewMatrix * worldPos;
+        gl_Position = projectionMatrix * mvPosition;
+        #include <fog_vertex>
+      }
+    `;
+    const shelfShaderFS = `
+      precision highp float;
+      #include <fog_pars_fragment>
+      uniform sampler2D uMap;
+      uniform sampler2D uHeight;
+      uniform vec2 uRepeat;
+      uniform float uDepth;
+      varying vec2 vUv;
+      varying vec3 vViewLocal;
+      void main() {
+        vec3 V = normalize(vViewLocal);
+        vec2 baseUv = vUv * uRepeat;
+        const int STEPS = 28;
+        float dLayer = 1.0 / float(STEPS);
+        // Cap V.z to avoid runaway shifts at grazing angles.
+        vec2 dUv = -V.xy / max(V.z, 0.15) * uDepth / float(STEPS);
+        vec2 curUv = baseUv;
+        float layerDepth = 0.0;
+        float surfaceDepth = 1.0 - texture2D(uHeight, curUv).r;
+        for (int i = 0; i < STEPS; i++) {
+          if (layerDepth >= surfaceDepth) break;
+          curUv += dUv;
+          layerDepth += dLayer;
+          surfaceDepth = 1.0 - texture2D(uHeight, curUv).r;
+        }
+        vec4 color = texture2D(uMap, curUv);
+        // Tunnel darkening: deeper march = closer to black, so the cubbies
+        // read as infinitely deep tunnels rather than shallow boxes. The
+        // painted shading on uMap still tints the near walls of the tunnel.
+        float tunnel = exp(-2.6 * layerDepth);   // 1.0 at the surface, ~0.07 at full depth
+        gl_FragColor = vec4(color.rgb * tunnel, 1.0);
+        #include <fog_fragment>
+      }
+    `;
+
+    // Each wall gets its own ShaderMaterial so uRepeat (length-dependent) can
+    // differ. Textures are shared via uniforms — repeat is handled in-shader.
+    // `fog: true` + merged UniformsLib.fog lets the renderer push scene.fog
+    // values into the shader each frame.
+    const makeShelfWall = (len) => {
+      const mat = new THREE.ShaderMaterial({
+        uniforms: {
+          ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
+          uMap:    { value: shelfTex },
+          uHeight: { value: shelfHeightTex },
+          uRepeat: { value: new THREE.Vector2(len / 2, SHELF_H / 2) },
+          uDepth:  { value: 0.9 },    // deep tunnels — ~1.8m apparent recession before tunnel-fade
+        },
+        vertexShader: shelfShaderVS,
+        fragmentShader: shelfShaderFS,
+        side: THREE.FrontSide,
+        fog: true,
+      });
+      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(len, SHELF_H), mat);
+      mesh.visible = false;
+      return mesh;
+    };
+
+    const east = makeShelfWall(eastLen);
     east.position.set(xMax + OFFSET, SHELF_H / 2, midZ);
     east.rotation.y = -Math.PI / 2;     // normal → -x (toward room)
-    east.visible = false;
     group.add(east);
 
-    const north = new THREE.Mesh(shelfGeom, shelfMat);
-    north.position.set(midX, SHELF_H / 2, zMin - OFFSET);
+    const north = makeShelfWall(nsLen);
+    north.position.set(nsCenterX, SHELF_H / 2, zMin - OFFSET);
     // PlaneGeometry default normal is +z → already points toward room.
-    north.visible = false;
     group.add(north);
 
-    const south = new THREE.Mesh(shelfGeom, shelfMat);
-    south.position.set(midX, SHELF_H / 2, zMax + OFFSET);
+    const south = makeShelfWall(nsLen);
+    south.position.set(nsCenterX, SHELF_H / 2, zMax + OFFSET);
     south.rotation.y = Math.PI;         // normal → -z (toward room)
-    south.visible = false;
     group.add(south);
 
     shelfWalls = { east, north, south };
+
+    // High ceiling that meets the top of the bookshelf walls. The original
+    // low ceiling (at ROOM_CEIL = 5.6m) gets hidden when this one is revealed.
+    const HC_W = (xMax + OFFSET) - (-1);      // -1 → 46.8: full bookshelf-enclosed span
+    const HC_D = (zMax + OFFSET) - (zMin - OFFSET);
+    const ceilTexHi = getCeilingTexture().clone();
+    ceilTexHi.wrapS = ceilTexHi.wrapT = THREE.RepeatWrapping;
+    ceilTexHi.repeat.set(HC_W / 2, HC_D / 2);  // 2m per ceiling tile
+    ceilTexHi.needsUpdate = true;
+    const highCeilMat = new THREE.MeshStandardMaterial({
+      map: ceilTexHi,
+      emissive: 0xffffff,
+      emissiveMap: ceilTexHi,
+      emissiveIntensity: 0.4,
+      roughness: 0.95,
+      metalness: 0,
+      side: THREE.DoubleSide,
+    });
+    const highCeiling = new THREE.Mesh(new THREE.PlaneGeometry(HC_W, HC_D), highCeilMat);
+    highCeiling.position.set((-1 + xMax + OFFSET) / 2, SHELF_H, ((zMin - OFFSET) + (zMax + OFFSET)) / 2);
+    highCeiling.rotation.x = Math.PI / 2;       // face -y (downward)
+    highCeiling.visible = false;
+    group.add(highCeiling);
+
+    shelfWalls.highCeiling = highCeiling;
   }
 
   // ===== OCEAN VIEW WALLS — animated water/sky planes facing inward into the room.
