@@ -547,13 +547,14 @@ export async function buildScene() {
         const bbox = new THREE.Box3().setFromObject(loaded);
         const size = bbox.getSize(new THREE.Vector3());
         const maxD = Math.max(size.x, size.y, size.z);
-        const TARGET = 5.4; // 3× the base 1.8 size
+        const TARGET = 4.6; // slightly more compact — was 5.4 (3× base 1.8)
         const s = maxD > 0 ? TARGET / maxD : 1;
         const MIN_RATIO = 0.7;
+        const WIDEN = 1.22;  // squish: a bit wider on x/z, height unchanged
         loaded.scale.set(
-          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)),
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.x)) * WIDEN,
           s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.y)),
-          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)),
+          s * Math.max(1, MIN_RATIO * maxD / Math.max(1e-4, size.z)) * WIDEN,
         );
         const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
         loaded.position.sub(ctr);
@@ -563,31 +564,118 @@ export async function buildScene() {
       }, undefined, err => { console.warn('[outside] Eskleo-Vase-01.obj failed', err); resolve(); });
     }));
 
-    const ringGeom = new THREE.TorusGeometry(0.85, 0.09, 16, 64);
-    ringGeom.attributes.position.usage = THREE.DynamicDrawUsage;
-    const _rOrig = new Float32Array(ringGeom.attributes.position.array);
-    const _rNorm = ringGeom.attributes.normal.array;
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
-      metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.75,
-    });
-    const baseRing = new THREE.Mesh(ringGeom, ringMat);
-    baseRing.rotation.x = -Math.PI / 2;
-    baseRing.position.set(vaseX, 0.12, vaseZ);
-    baseRing.onBeforeRender = () => {
-      const t = performance.now() * 0.001;
-      const pa = ringGeom.attributes.position.array;
-      const n = pa.length / 3;
-      for (let i = 0; i < n; i++) {
-        const tu = (Math.floor(i / 17) / 64) * Math.PI * 2;
-        const d = Math.sin(tu * 5 - t * 3) * 0.025;
-        pa[i*3]   = _rOrig[i*3]   + _rNorm[i*3]   * d;
-        pa[i*3+1] = _rOrig[i*3+1] + _rNorm[i*3+1] * d;
-        pa[i*3+2] = _rOrig[i*3+2] + _rNorm[i*3+2] * d;
+    // Bane-mouthpiece-style metallic biopunk manifold: stacked gunmetal
+    // collar + hub + valve cap, with 4 reinforced "respirator" hoses
+    // arcing out at the cardinal directions and plunging into the floor.
+    const baseGroup = new THREE.Group();
+    baseGroup.position.set(vaseX, 0, vaseZ);
+    scene.add(baseGroup);
+
+    // Block the tiles overlapping the new manifold so the player can't walk
+    // through it — same grid=1 treatment as Wall L / Wall R / Building 1.
+    {
+      const BASE_R = 0.92;     // outer collar radius
+      const baseBox = {
+        min: { x: vaseX - BASE_R, z: vaseZ - BASE_R },
+        max: { x: vaseX + BASE_R, z: vaseZ + BASE_R },
+      };
+      const tx0 = Math.max(0, Math.floor(baseBox.min.x / CELL) - 1);
+      const tx1 = Math.min(W - 1, Math.floor(baseBox.max.x / CELL) + 1);
+      const ty0 = Math.max(0, Math.floor(baseBox.min.z / CELL) - 1);
+      const ty1 = Math.min(H - 1, Math.floor(baseBox.max.z / CELL) + 1);
+      for (let ty = ty0; ty <= ty1; ty++) {
+        for (let tx = tx0; tx <= tx1; tx++) {
+          if (grid[ty][tx] === 0 && tileOverlaps2D(tx, ty, baseBox)) {
+            grid[ty][tx] = 1;
+            roomId[ty][tx] = 'vase-base';
+          }
+        }
       }
-      ringGeom.attributes.position.needsUpdate = true;
-    };
-    scene.add(baseRing);
+    }
+
+    // Lifted, cooler palette — the manifold reads as bluish silver-grey so
+    // it sits inside the cool-daylight sky palette instead of as a dark void.
+    const gunmetal = new THREE.MeshStandardMaterial({
+      color: 0x96a8b8, metalness: 0.85, roughness: 0.40,
+    });
+    const bandSteel = new THREE.MeshStandardMaterial({
+      color: 0xccdce8, metalness: 1.0, roughness: 0.22,
+    });
+
+    // Stacked manifold (bottom → top): flared collar, decorative band,
+    // inner hub the hoses anchor into, valve cap, central port stack.
+    const collar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.85, 0.92, 0.18, 32),
+      gunmetal,
+    );
+    collar.position.y = 0.09;
+    baseGroup.add(collar);
+
+    const collarBand = new THREE.Mesh(
+      new THREE.TorusGeometry(0.86, 0.025, 8, 48),
+      bandSteel,
+    );
+    collarBand.rotation.x = -Math.PI / 2;
+    collarBand.position.y = 0.18;
+    baseGroup.add(collarBand);
+
+    const hub = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.60, 0.30, 28),
+      gunmetal,
+    );
+    hub.position.y = 0.32;
+    baseGroup.add(hub);
+
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.48, 0.05, 24),
+      bandSteel,
+    );
+    cap.position.y = 0.50;
+    baseGroup.add(cap);
+
+    const port = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.20, 0.18, 18),
+      gunmetal,
+    );
+    port.position.y = 0.62;
+    baseGroup.add(port);
+
+    // 4 hoses out the cardinal directions. Each starts inside the hub
+    // (so the open tube end is hidden), arcs outward, then bends down
+    // through the floor like Bane's mask tubes feeding a buried reservoir.
+    const TUBE_R = 0.105;
+    const HOSE_DIRS = [
+      [ 1, 0],   // east
+      [-1, 0],   // west
+      [ 0, 1],   // south
+      [ 0,-1],   // north
+    ];
+    const bandRingGeom = new THREE.TorusGeometry(TUBE_R + 0.022, 0.022, 8, 14);
+
+    for (const [dx, dz] of HOSE_DIRS) {
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(dx * 0.45, 0.30, dz * 0.45),  // inside hub (hidden)
+        new THREE.Vector3(dx * 0.85, 0.27, dz * 0.85),  // emerging
+        new THREE.Vector3(dx * 1.20, -0.05, dz * 1.20), // arcing down
+        new THREE.Vector3(dx * 1.45, -0.75, dz * 1.45), // diving in
+        new THREE.Vector3(dx * 1.55, -1.40, dz * 1.55), // buried
+      ]);
+      const hoseGeom = new THREE.TubeGeometry(curve, 36, TUBE_R, 12, false);
+      const hose = new THREE.Mesh(hoseGeom, gunmetal);
+      baseGroup.add(hose);
+
+      // Ribbed bands along the hose for the accordion-pleated respirator look.
+      const SEGMENTS = 8;
+      for (let i = 1; i < SEGMENTS; i++) {
+        const t = i / SEGMENTS;
+        const p = curve.getPoint(t);
+        const tangent = curve.getTangent(t).normalize();
+        const band = new THREE.Mesh(bandRingGeom, bandSteel);
+        band.position.copy(p);
+        band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+        baseGroup.add(band);
+      }
+    }
   }
 
   // ----- Monumental flanking vase sculptures rising from the water on either side of the path -----
