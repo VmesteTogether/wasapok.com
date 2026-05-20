@@ -65,7 +65,10 @@ function buildLayout(opts) {
 
 export function buildScene(opts) {
   const scene = new THREE.Scene();
-  scene.background = new THREE.Color(0x040e08);
+  // Wasapok room stays pure black so the void behind the tipping set walls
+  // doesn't read as a green tint through the gaps during the fall animation.
+  // The chrome chamber (non-bigRoom) keeps the dark teal atmosphere.
+  scene.background = new THREE.Color(opts.bigRoom ? 0x000000 : 0x040e08);
   scene.fog = new THREE.Fog(0x000000, 3, opts.fogDistance ?? 20);
 
   // Async loads collected here; `ready` in the returned object resolves when they all complete.
