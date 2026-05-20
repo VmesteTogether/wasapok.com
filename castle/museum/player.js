@@ -24,6 +24,8 @@ export function createPlayer(layout, CELL) {
     sprintEnergy: 0,   // 0..1, builds while sprinting / stays high during dash
     sprintHeld: false,
     lastForwardTap: 0, // for double-tap dash detection
+    // When true, canMoveTo ignores walls and grid bounds (no-clip / free roam).
+    noClip: false,
     // Tween state
     anim: null, // { type, startTime, duration, from, to }
   };
@@ -47,6 +49,7 @@ export function createPlayer(layout, CELL) {
   }
 
   function canMoveTo(tx, ty) {
+    if (state.noClip) return true;
     if (tx < 0 || ty < 0 || tx >= layout.width || ty >= layout.height) return false;
     return layout.grid[ty][tx] === 0; // floor only (walls=1, void=-1 both block)
   }

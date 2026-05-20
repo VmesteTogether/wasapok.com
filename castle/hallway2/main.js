@@ -5,8 +5,8 @@
 // no other exits.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=90';
+import { createPlayer } from '../museum/player.js?v=11';
+import { buildScene } from './scene.js?v=93';
 import { setupSceneNav } from '../nav.js?v=6';
 
 const opts = {
@@ -179,60 +179,13 @@ function dungeonFadeValue() {
 // Albums (ported from /index.html). currentAlbumKey is flipped by spin direction
 // once spin is wired up; for now it's fixed at 'A'.
 const ALBUMS = {
-  A: {
-    title:      'Biome .•.•.•:::Plain.',
-    audioUrl:   '../soundtrackComp.mp3',
-  },
-  B: {
-    title:      "‘°Palm Tree Syrup’°”",
-    audioUrl:   '../soundtrackSyrup.mp3',
-  },
+  A: { audioUrl: '../soundtrackComp.mp3'  },
+  B: { audioUrl: '../soundtrackSyrup.mp3' },
 };
 let currentAlbumKey = 'A';
 
 const _raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
-// Floating 3D title text — one billboarded sprite per album, crossfaded by spin.
-function makeTitleSprite(text) {
-  const W = 1024, H = 256;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
-  ctx.font = '700 96px Cinzel, serif';
-  ctx.fillStyle = '#fff4c8';
-  ctx.shadowColor = 'rgba(0,0,0,0.85)';
-  ctx.shadowBlur = 22;
-  ctx.textAlign = 'center';
-  ctx.textBaseline = 'middle';
-  ctx.fillText(text, W / 2, H / 2);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false });
-  const s = new THREE.Sprite(m);
-  s.scale.set(4.0, 1.0, 1);
-  s.renderOrder = 9;
-  return s;
-}
-let titleSprites = null;
-function spawnTitleSprites() {
-  if (titleSprites || !centralVase) return;
-  const a = makeTitleSprite(ALBUMS.A.title);
-  const b = makeTitleSprite(ALBUMS.B.title);
-  const cx = centralVase.position.x, cy = centralVase.position.y, cz = centralVase.position.z;
-  // Place ~2m behind the vase (east of vase, since camera is west and looks east).
-  a.position.set(cx + 2.0, cy + 1.2, cz);
-  b.position.set(cx + 2.0, cy + 1.2, cz);
-  scene.add(a);
-  scene.add(b);
-  titleSprites = { A: a, B: b };
-}
-function updateTitleSprites() {
-  if (!titleSprites) return;
-  const f = dungeonFadeValue();
-  const baseOpacity = Math.max(0, Math.min(1, (f - 0.66) * 3));
-  titleSprites.A.material.opacity = baseOpacity * (currentAlbumKey === 'A' ? 1 : 0);
-  titleSprites.B.material.opacity = baseOpacity * (currentAlbumKey === 'B' ? 1 : 0);
-}
 
 // Alt vase model (vaseNew.glb) — loaded lazily on sit, swapped in at step 3.
 let altVase = null;
@@ -443,10 +396,6 @@ function triggerShatter() {
     audioIsPlaying = false;
   }
   // Hide all UI
-  if (titleSprites) {
-    titleSprites.A.material.opacity = 0;
-    titleSprites.B.material.opacity = 0;
-  }
   // Activate the orange pyro-circle as a button (3 presses → tip set walls).
   // Hide the d-pad grid entirely — its empty grid cells default to
   // pointer-events: auto and would block clicks even with the container
@@ -558,19 +507,28 @@ function updateShards(dt) {
         scene.background = new THREE.Color(0x000000);
         if (scene.fog) {
           scene.fog.color.set(0x000000);
-          scene.fog.near = 22;
-          scene.fog.far = 80;
+          // Atmospheric haze hangs in the room — bookshelves at 14m+ stay
+          // shrouded in fog until the player walks within range. Clear bubble
+          // ~5m radius around the camera, fully fogged beyond 16m.
+          scene.fog.near = 5;
+          scene.fog.far = 16;
         }
-        // Reveal the "true" walls behind the fallen set walls.
+        // Reveal the "true" walls behind the fallen set walls, plus the
+        // high ceiling that meets their tops. Hide the original low ceiling.
         if (built.shelfWalls) {
           built.shelfWalls.east.visible = true;
           built.shelfWalls.north.visible = true;
           built.shelfWalls.south.visible = true;
+          if (built.shelfWalls.highCeiling) built.shelfWalls.highCeiling.visible = true;
         }
+        if (built.ceilMesh) built.ceilMesh.visible = false;
         // Stand the player back up and restore the d-pad so they can roam.
         // Furniture (desk + chair) stays visible until they actually move.
+        // Disable tile collision so the player can walk past the original
+        // room perimeter and right up to the bookshelf walls.
         wallsFell = true;
         sitting = false;
+        player.state.noClip = true;
         navGlowEl.classList.remove('active');
         const navCrossEl2 = document.getElementById('nav-cross');
         if (navCrossEl2) navCrossEl2.style.display = '';
@@ -606,10 +564,8 @@ window.addEventListener('pointerup', () => { spinDragging = false; }, { passive:
 
 function applyDungeonFade() {
   // Room stays active — fog, background, and dungeon geometry are all preserved.
-  // dungeonFadeValue() is still used below to gate icon/title/boombox opacity.
+  // dungeonFadeValue() is still used below to gate icon/boombox opacity.
   // Spawn icons lazily once the central vase exists and we've started zooming.
-  if (centralVase && !titleSprites && zoomStep >= 1) spawnTitleSprites();
-  updateTitleSprites();
   if (centralVase && !boombox && zoomStep >= 1) buildBoombox();
   updateBoombox(performance.now() / 1000);
 
