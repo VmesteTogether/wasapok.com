@@ -622,6 +622,89 @@ export function buildScene(opts) {
     };
   }
 
+  // ===== SHELF WALLS — the "true" walls revealed after the set walls fall flat.
+  // Three tall maple-colored walls of square shelf compartments stretching far
+  // up past the fog. Hidden until the third button press (main.js).
+  let shelfWalls = null;
+  if (opts && opts.bigRoom) {
+    const SHELF_H = 80;       // very tall — fog handles the upper fade
+    const SHELF_LEN = 38;     // matches set-wall length (room perimeter span)
+    const OFFSET = 5.8;       // sit just past where set walls land flat (~5.6m)
+    const xMin = 3, xMax = 41, zMin = -1, zMax = 37;
+    const midX = (xMin + xMax) / 2;
+    const midZ = (zMin + zMax) / 2;
+
+    // Procedural maple-shelf tile: maple frame + dark inset compartment.
+    const c = document.createElement('canvas');
+    c.width = 128; c.height = 128;
+    const ctx = c.getContext('2d');
+    ctx.imageSmoothingEnabled = false;
+    ctx.fillStyle = '#d2a574';
+    ctx.fillRect(0, 0, 128, 128);
+    for (let i = 0; i < 18; i++) {
+      const gy = Math.random() * 128;
+      const rr = 130 + (Math.random() * 30 | 0);
+      const gg =  85 + (Math.random() * 20 | 0);
+      const bb =  45 + (Math.random() * 20 | 0);
+      ctx.strokeStyle = `rgba(${rr},${gg},${bb},0.25)`;
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(0, gy);
+      ctx.lineTo(128, gy + (Math.random() - 0.5) * 4);
+      ctx.stroke();
+    }
+    const inset = 12;
+    ctx.fillStyle = '#221408';
+    ctx.fillRect(inset, inset, 128 - 2*inset, 128 - 2*inset);
+    const grad = ctx.createLinearGradient(0, inset, 0, 128 - inset);
+    grad.addColorStop(0, 'rgba(0,0,0,0.6)');
+    grad.addColorStop(1, 'rgba(0,0,0,0.15)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(inset, inset, 128 - 2*inset, 128 - 2*inset);
+    ctx.fillStyle = 'rgba(255,220,170,0.5)';
+    ctx.fillRect(inset, inset, 128 - 2*inset, 2);
+    ctx.fillStyle = 'rgba(40,20,8,0.55)';
+    ctx.fillRect(0, 125, 128, 3);
+    ctx.fillStyle = 'rgba(255,235,200,0.3)';
+    ctx.fillRect(0, 0, 128, 2);
+
+    const shelfTex = new THREE.CanvasTexture(c);
+    shelfTex.wrapS = shelfTex.wrapT = THREE.RepeatWrapping;
+    shelfTex.repeat.set(SHELF_LEN, SHELF_H);   // 1m × 1m square shelves
+    shelfTex.magFilter = THREE.NearestFilter;
+    shelfTex.needsUpdate = true;
+
+    const shelfMat = new THREE.MeshStandardMaterial({
+      map: shelfTex,
+      emissive: 0x6a4520,
+      emissiveIntensity: 0.18,
+      roughness: 0.85,
+      metalness: 0.05,
+      side: THREE.FrontSide,
+    });
+    const shelfGeom = new THREE.PlaneGeometry(SHELF_LEN, SHELF_H);
+
+    const east = new THREE.Mesh(shelfGeom, shelfMat);
+    east.position.set(xMax + OFFSET, SHELF_H / 2, midZ);
+    east.rotation.y = -Math.PI / 2;     // normal → -x (toward room)
+    east.visible = false;
+    group.add(east);
+
+    const north = new THREE.Mesh(shelfGeom, shelfMat);
+    north.position.set(midX, SHELF_H / 2, zMin - OFFSET);
+    // PlaneGeometry default normal is +z → already points toward room.
+    north.visible = false;
+    group.add(north);
+
+    const south = new THREE.Mesh(shelfGeom, shelfMat);
+    south.position.set(midX, SHELF_H / 2, zMax + OFFSET);
+    south.rotation.y = Math.PI;         // normal → -z (toward room)
+    south.visible = false;
+    group.add(south);
+
+    shelfWalls = { east, north, south };
+  }
+
   // ===== OCEAN VIEW WALLS — animated water/sky planes facing inward into the room.
   // Shares uTime with the floor water shader so animation is free.
   {
@@ -1034,6 +1117,7 @@ export function buildScene(opts) {
 
   // ===== Desk + chair (wasapok room only), 3 tiles west of room centre, facing east =====
   let furnitureBounds = null;
+  let furnitureGroup = null;
   if (opts && opts.bigRoom) {
     const wx = (layout.roomCx - 1) * CELL;
     const wz = layout.roomCy * CELL;
@@ -1043,6 +1127,9 @@ export function buildScene(opts) {
     const trimMat = new THREE.MeshStandardMaterial({
       color: 0x1a1108, roughness: 0.55, metalness: 0.35,
     });
+
+    furnitureGroup = new THREE.Group();
+    group.add(furnitureGroup);
 
     // ---- Desk (front faces east) ----
     const DESK_H = 1.05;
@@ -1055,12 +1142,12 @@ export function buildScene(opts) {
       woodMat
     );
     deskTop.position.set(deskX, DESK_H, wz);
-    group.add(deskTop);
+    furnitureGroup.add(deskTop);
     const legG = new THREE.BoxGeometry(0.08, DESK_H, 0.08);
     for (const [dx, dz] of [[ 0.36,  0.66], [ 0.36, -0.66], [-0.36,  0.66], [-0.36, -0.66]]) {
       const leg = new THREE.Mesh(legG, trimMat);
       leg.position.set(deskX + dx, DESK_H / 2, wz + dz);
-      group.add(leg);
+      furnitureGroup.add(leg);
     }
     // Modesty panel on the user-facing (west) side of the desk
     const panel = new THREE.Mesh(
@@ -1068,7 +1155,7 @@ export function buildScene(opts) {
       woodMat
     );
     panel.position.set(deskX - DESK_TOP_D / 2 + 0.04, DESK_H * 0.43, wz);
-    group.add(panel);
+    furnitureGroup.add(panel);
 
     // ---- Chair (backrest on west, seat faces east) ----
     const SEAT_H = 0.55;
@@ -1079,18 +1166,18 @@ export function buildScene(opts) {
       woodMat
     );
     seat.position.set(chairX, SEAT_H, wz);
-    group.add(seat);
+    furnitureGroup.add(seat);
     const back = new THREE.Mesh(
       new THREE.BoxGeometry(0.06, 0.7, SEAT_SIZE),
       woodMat
     );
     back.position.set(chairX - SEAT_SIZE / 2 + 0.03, SEAT_H + 0.35, wz);
-    group.add(back);
+    furnitureGroup.add(back);
     const chairLegG = new THREE.BoxGeometry(0.06, SEAT_H, 0.06);
     for (const [dx, dz] of [[ 0.20,  0.20], [ 0.20, -0.20], [-0.20,  0.20], [-0.20, -0.20]]) {
       const leg = new THREE.Mesh(chairLegG, trimMat);
       leg.position.set(chairX + dx, SEAT_H / 2, wz + dz);
-      group.add(leg);
+      furnitureGroup.add(leg);
     }
 
     furnitureBounds = {
@@ -1925,12 +2012,12 @@ export function buildScene(opts) {
 
   return {
     scene, group, layout,
-    walls, setWalls, floorMesh: floor, ceilMesh: ceilInst,
+    walls, setWalls, shelfWalls, floorMesh: floor, ceilMesh: ceilInst,
     torchLights, playerLight,
     waterMat,
     CELL, WALL_H: ROOM_CEIL,
     chandelier,
-    dreidelVases, dreidelVaseBaseY, dreidelBounds, furnitureBounds,
+    dreidelVases, dreidelVaseBaseY, dreidelBounds, furnitureBounds, furnitureGroup,
     ready: Promise.all(pendingLoads),
   };
 }

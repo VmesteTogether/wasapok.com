@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=88';
+import { buildScene } from './scene.js?v=90';
 import { setupSceneNav } from '../nav.js?v=6';
 
 const opts = {
@@ -428,6 +428,10 @@ const shards = [];
 // (30°, 60°, 90° outward). The third press also reveals the black void.
 const DROP_MAX = 3;
 let dropStep = 0;
+// Once the third press completes, the player stands up and can roam again.
+// The furniture (desk + chair) hides on their first direction input.
+let wallsFell = false;
+let furnitureHidden = false;
 function triggerShatter() {
   if (shattered || !centralVase) return;
   shattered = true;
@@ -556,6 +560,23 @@ function updateShards(dt) {
           scene.fog.color.set(0x000000);
           scene.fog.near = 22;
           scene.fog.far = 80;
+        }
+        // Reveal the "true" walls behind the fallen set walls.
+        if (built.shelfWalls) {
+          built.shelfWalls.east.visible = true;
+          built.shelfWalls.north.visible = true;
+          built.shelfWalls.south.visible = true;
+        }
+        // Stand the player back up and restore the d-pad so they can roam.
+        // Furniture (desk + chair) stays visible until they actually move.
+        wallsFell = true;
+        sitting = false;
+        navGlowEl.classList.remove('active');
+        const navCrossEl2 = document.getElementById('nav-cross');
+        if (navCrossEl2) navCrossEl2.style.display = '';
+        for (const id of ['dpad-up', 'dpad-down', 'dpad-left', 'dpad-right', 'dpad-upleft', 'dpad-upright']) {
+          const el = document.getElementById(id);
+          if (el) el.style.display = '';
         }
       }
     });
@@ -733,7 +754,20 @@ function onDeskBump() {
 }
 
 function handleAction(act) {
-  if (shattered) return;
+  if (shattered && !wallsFell) return;
+  // Walls fell → first direction input dismisses the furniture and unblocks
+  // the desk tile so the player can walk through where it used to be.
+  if (wallsFell && !furnitureHidden && (
+    act === 'forward' || act === 'back' || act === 'left' ||
+    act === 'right'   || act === 'strafeL' || act === 'strafeR'
+  )) {
+    furnitureHidden = true;
+    if (built.furnitureGroup) built.furnitureGroup.visible = false;
+    const rcx = built.layout.roomCx, rcy = built.layout.roomCy;
+    if (built.layout.grid[rcy] && built.layout.grid[rcy][rcx - 1] !== undefined) {
+      built.layout.grid[rcy][rcx - 1] = 0;
+    }
+  }
   if (sitting) {
     if (act === 'forward') tryAdvanceZoom();
     else if (act === 'sprint_on') player.setSprint(true);
