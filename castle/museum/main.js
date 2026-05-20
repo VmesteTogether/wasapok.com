@@ -20,7 +20,7 @@ const layout = buildLayout();
 
 const opts = {
   pixelation: 3,
-  fogDistance: 24,
+  fogDistance: 14,
   headbob: true,
   sprintFov: true,
 };
@@ -459,7 +459,7 @@ function animate() {
     built.diamondGroup.rotation.x = Math.sin(t * 0.6) * 0.08;
     built.diamondGroup.position.y = built.diamondBaseY + Math.sin(t * 1.1) * 0.14;
     const il = built.diamondGroup.userData.innerLight;
-    if (il) il.intensity = 2.0 + Math.sin(t * 1.8) * 0.6 + Math.sin(t * 4.7) * 0.15;
+    if (il) il.intensity = 4.0 + Math.sin(t * 1.8) * 0.9 + Math.sin(t * 4.7) * 0.25;
   }
 
   // Vignette follows the floating diamonds (radial center tracks their screen position).

@@ -24,11 +24,14 @@ export function buildScene(layout, opts) {
   // Async loads tracked here; `ready` in the returned object resolves when all complete.
   const pendingLoads = [];
 
-  scene.add(new THREE.AmbientLight(0x020402, 0.15));
-  scene.add(new THREE.HemisphereLight(0x060e08, 0x020402, 0.08));
+  // Real-dungeon dark: ambient + hemisphere are vestigial. Step outside the
+  // pool of a torch or the chandelier and you're in pitch black until you
+  // close on the next source.
+  scene.add(new THREE.AmbientLight(0x010301, 0.004));
+  scene.add(new THREE.HemisphereLight(0x040810, 0x010201, 0.003));
 
-  // Player-follow green light
-  const playerLight = new THREE.PointLight(0x40ff80, 0.5, 5, 2);
+  // Player-follow green light — almost extinguished; barely a footprint.
+  const playerLight = new THREE.PointLight(0x40ff80, 0.02, 2.5, 2);
   playerLight.position.set(0, 1.6, 0);
   scene.add(playerLight);
 
@@ -43,11 +46,13 @@ export function buildScene(layout, opts) {
 
   // Walls — glow: same texture is used as both color and emissive map so the
   // bright panel pixels emit cool LED-blue light, dark seams stay dark.
+  // Intensity is kept very low so the panels don't self-illuminate the room —
+  // they're a faint ambient glow that only reads when a torch lights them.
   const wallMat = new THREE.MeshStandardMaterial({
     map: wallTex,
     emissive: 0xffffff,
     emissiveMap: wallTex,
-    emissiveIntensity: 1.8,
+    emissiveIntensity: 0.3,
     roughness: 0.45, metalness: 0.20,
   });
   const ceilMat = new THREE.MeshStandardMaterial({ map: ceilTex, roughness: 0.95, metalness: 0 });
@@ -426,11 +431,12 @@ export function buildScene(layout, opts) {
 
     group.add(grp);
 
-    // Point light — neon green
-    const pl = new THREE.PointLight(0x40ff80, 1.8, 7, 1.7);
+    // Point light — neon green. Tight pool: hot at the orb, falls off fast
+    // so adjacent corridors stay nearly black between sconces.
+    const pl = new THREE.PointLight(0x40ff80, 2.8, 7, 2.0);
     pl.position.set(wx + nx * 0.45, 2.2, wz + nz * 0.45);
     group.add(pl);
-    torchLights.push({ light: pl, baseIntensity: 1.8, orb, halo, kind: 'torch' });
+    torchLights.push({ light: pl, baseIntensity: 2.8, orb, halo, kind: 'torch' });
   }
 
   function addChandelier(wx, wz, ceilH) {
@@ -471,10 +477,11 @@ export function buildScene(layout, opts) {
       sh.position.set(cx, -chainLen + 0.08, cz);
       ch.add(sh);
     }
-    // central point light — neon green
-    const intensity = ceilH > 4.5 ? 2.0 : 1.4;
+    // central point light — neon green. Hot core, sharper falloff so the
+    // chandelier illuminates the room below but the corners stay shadowed.
+    const intensity = ceilH > 4.5 ? 3.2 : 2.4;
     const range = ceilH > 4.5 ? 11 : 8;
-    const pl = new THREE.PointLight(0x40ff80, intensity, range, 1.7);
+    const pl = new THREE.PointLight(0x40ff80, intensity, range, 2.0);
     pl.position.y = -chainLen + 0.05;
     ch.add(pl);
     group.add(ch);
@@ -1985,39 +1992,101 @@ export function buildScene(layout, opts) {
     diamondGroup.position.set(cx, diamondBaseY, cz);
     group.add(diamondGroup);
 
-    const ringGeom = new THREE.TorusGeometry(0.85, 0.09, 16, 64);
-    ringGeom.attributes.position.usage = THREE.DynamicDrawUsage;
-    const _rOrig = new Float32Array(ringGeom.attributes.position.array);
-    const _rNorm = ringGeom.attributes.normal.array;
-    const ringMat = new THREE.MeshStandardMaterial({
-      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.5,
-      metalness: 0.30, roughness: 0.20, transparent: true, opacity: 0.75,
+    // Bane-mouthpiece-style metallic biopunk manifold (matches the outdoor
+    // vase base): stacked silvery collar + hub + valve cap, with 4
+    // reinforced respirator hoses arcing out at the cardinal directions
+    // and plunging into the floor.
+    const baseGroup = new THREE.Group();
+    baseGroup.position.set(cx, 0, cz);
+    group.add(baseGroup);
+
+    // Block the hub-centre tile so the player can't walk through the manifold.
+    if (layout.grid[hub.cy] && layout.grid[hub.cy][hub.cx] !== undefined) {
+      layout.grid[hub.cy][hub.cx] = 1;
+    }
+
+    const gunmetal = new THREE.MeshStandardMaterial({
+      color: 0x96a8b8, metalness: 0.85, roughness: 0.40,
     });
-    const baseRing = new THREE.Mesh(ringGeom, ringMat);
-    baseRing.rotation.x = -Math.PI / 2;
-    baseRing.position.set(cx, 0.12, cz);
-    baseRing.onBeforeRender = () => {
-      const t = performance.now() * 0.001;
-      const pa = ringGeom.attributes.position.array;
-      const n = pa.length / 3;
-      for (let i = 0; i < n; i++) {
-        const tu = (Math.floor(i / 17) / 64) * Math.PI * 2;
-        const d = Math.abs(Math.sin(tu * 24)) * 0.045   // tight ribs around the ring
-                + Math.sin(tu * 5 - t * 3.0) * 0.012;    // gentle living wobble
-        pa[i*3]   = _rOrig[i*3]   + _rNorm[i*3]   * d;
-        pa[i*3+1] = _rOrig[i*3+1] + _rNorm[i*3+1] * d;
-        pa[i*3+2] = _rOrig[i*3+2] + _rNorm[i*3+2] * d;
+    const bandSteel = new THREE.MeshStandardMaterial({
+      color: 0xccdce8, metalness: 1.0, roughness: 0.22,
+    });
+
+    const collar = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.85, 0.92, 0.18, 32),
+      gunmetal,
+    );
+    collar.position.y = 0.09;
+    baseGroup.add(collar);
+
+    const collarBand = new THREE.Mesh(
+      new THREE.TorusGeometry(0.86, 0.025, 8, 48),
+      bandSteel,
+    );
+    collarBand.rotation.x = -Math.PI / 2;
+    collarBand.position.y = 0.18;
+    baseGroup.add(collarBand);
+
+    const centralHub = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.55, 0.60, 0.30, 28),
+      gunmetal,
+    );
+    centralHub.position.y = 0.32;
+    baseGroup.add(centralHub);
+
+    const cap = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.42, 0.48, 0.05, 24),
+      bandSteel,
+    );
+    cap.position.y = 0.50;
+    baseGroup.add(cap);
+
+    const port = new THREE.Mesh(
+      new THREE.CylinderGeometry(0.16, 0.20, 0.18, 18),
+      gunmetal,
+    );
+    port.position.y = 0.62;
+    baseGroup.add(port);
+
+    const TUBE_R = 0.105;
+    const HOSE_DIRS = [
+      [ 1, 0],   // east
+      [-1, 0],   // west
+      [ 0, 1],   // south
+      [ 0,-1],   // north
+    ];
+    const bandRingGeom = new THREE.TorusGeometry(TUBE_R + 0.022, 0.022, 8, 14);
+
+    for (const [dx, dz] of HOSE_DIRS) {
+      const curve = new THREE.CatmullRomCurve3([
+        new THREE.Vector3(dx * 0.45, 0.30, dz * 0.45),
+        new THREE.Vector3(dx * 0.85, 0.27, dz * 0.85),
+        new THREE.Vector3(dx * 1.20, -0.05, dz * 1.20),
+        new THREE.Vector3(dx * 1.45, -0.75, dz * 1.45),
+        new THREE.Vector3(dx * 1.55, -1.40, dz * 1.55),
+      ]);
+      const hoseGeom = new THREE.TubeGeometry(curve, 36, TUBE_R, 12, false);
+      const hose = new THREE.Mesh(hoseGeom, gunmetal);
+      baseGroup.add(hose);
+
+      const SEGMENTS = 8;
+      for (let i = 1; i < SEGMENTS; i++) {
+        const t = i / SEGMENTS;
+        const p = curve.getPoint(t);
+        const tangent = curve.getTangent(t).normalize();
+        const band = new THREE.Mesh(bandRingGeom, bandSteel);
+        band.position.copy(p);
+        band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+        baseGroup.add(band);
       }
-      ringGeom.attributes.position.needsUpdate = true;
-    };
-    group.add(baseRing);
+    }
 
     const crystalMat = new THREE.MeshStandardMaterial({
       color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.6,
       metalness: 0.30, roughness: 0.18, transparent: true, opacity: 0.75,
       side: THREE.DoubleSide,
     });
-    const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 7, 1.6);
+    const innerLight = new THREE.PointLight(0x6aa8ff, 4.0, 10, 1.9);
     diamondGroup.add(innerLight);
     diamondGroup.userData.innerLight = innerLight;
 
