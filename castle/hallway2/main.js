@@ -382,9 +382,15 @@ const shards = [];
 const DROP_MAX = 3;
 let dropStep = 0;
 // Once the third press completes, the player stands up and can roam again.
-// The furniture (desk + chair) hides on their first direction input.
+// `firstStandUpDone` is a one-shot guard for the post-fall first direction
+// press (grid unblock + L/R reinterpretation). `furnitureHidden` flips once
+// the desk + chair leave the camera's frustum and we cull them.
 let wallsFell = false;
+let firstStandUpDone = false;
 let furnitureHidden = false;
+const _frustum = new THREE.Frustum();
+const _projScreenMatrix = new THREE.Matrix4();
+let furnitureBox = null;
 function triggerShatter() {
   if (shattered || !centralVase) return;
   shattered = true;
@@ -507,11 +513,11 @@ function updateShards(dt) {
         scene.background = new THREE.Color(0x000000);
         if (scene.fog) {
           scene.fog.color.set(0x000000);
-          // Atmospheric haze hangs in the room — bookshelves at 14m+ stay
-          // shrouded in fog until the player walks within range. Clear bubble
-          // ~5m radius around the camera, fully fogged beyond 16m.
+          // Atmospheric haze hangs in the room — bookshelves stay shrouded
+          // until the player walks within range. Clear bubble ~5m radius,
+          // fully fogged beyond 26m.
           scene.fog.near = 5;
-          scene.fog.far = 16;
+          scene.fog.far = 26;
         }
         // Reveal the "true" walls behind the fallen set walls, plus the
         // high ceiling that meets their tops. Hide the original low ceiling.
@@ -529,6 +535,18 @@ function updateShards(dt) {
         wallsFell = true;
         sitting = false;
         player.state.noClip = true;
+        // Snap the player onto the desk tile so when the sitting camera-lock
+        // releases, the camera lands on the desk instead of the pre-sit tile
+        // one step west. The first direction press then moves 1 tile from here.
+        if (DESK_TILE) {
+          player.state.tx = DESK_TILE.x;
+          player.state.ty = DESK_TILE.y;
+          player.state.x  = DESK_TILE.x;
+          player.state.y  = DESK_TILE.y;
+        }
+        // Clear any lingering "Ow." prompt; the desk hitbox is inert from here.
+        hideConfirmMsg();
+        confirmShownAt = 0;
         navGlowEl.classList.remove('active');
         const navCrossEl2 = document.getElementById('nav-cross');
         if (navCrossEl2) navCrossEl2.style.display = '';
@@ -677,6 +695,9 @@ function hideConfirmMsg() {
 }
 function bumpsDesk(relDir) {
   if (!DESK_TILE) return false;
+  // Once the player has stood up after the walls fell, the desk hitbox is
+  // inert — no "Ow." prompt and no path back into sitting mode.
+  if (wallsFell) return false;
   const wd = (player.state.dir + relDir) % 4;
   const tx = player.state.tx + _DX[wd];
   const ty = player.state.ty + _DY[wd];
@@ -713,16 +734,20 @@ function handleAction(act) {
   if (shattered && !wallsFell) return;
   // Walls fell → first direction input dismisses the furniture and unblocks
   // the desk tile so the player can walk through where it used to be.
-  if (wallsFell && !furnitureHidden && (
+  if (wallsFell && !firstStandUpDone && (
     act === 'forward' || act === 'back' || act === 'left' ||
     act === 'right'   || act === 'strafeL' || act === 'strafeR'
   )) {
-    furnitureHidden = true;
-    if (built.furnitureGroup) built.furnitureGroup.visible = false;
+    firstStandUpDone = true;
+    // Furniture stays visible until it leaves the player's FOV (handled in animate()).
     const rcx = built.layout.roomCx, rcy = built.layout.roomCy;
     if (built.layout.grid[rcy] && built.layout.grid[rcy][rcx - 1] !== undefined) {
       built.layout.grid[rcy][rcx - 1] = 0;
     }
+    // First press after standing up: every direction should *move* one tile
+    // from the desk, so reinterpret the turn keys as strafes just this once.
+    if (act === 'left')  act = 'strafeL';
+    else if (act === 'right') act = 'strafeR';
   }
   if (sitting) {
     if (act === 'forward') tryAdvanceZoom();
@@ -901,6 +926,22 @@ function animate() {
       camera.rotation.set(pose.pitch, pose.yaw, 0);
     }
     applyDungeonFade();
+  }
+
+  // Cull the desk + chair once they leave the player's view after the walls
+  // fall — camera/projection matrices are already up to date from applyToCamera.
+  if (wallsFell && !furnitureHidden && built.furnitureGroup) {
+    if (!furnitureBox) {
+      built.furnitureGroup.updateMatrixWorld(true);
+      furnitureBox = new THREE.Box3().setFromObject(built.furnitureGroup);
+    }
+    camera.updateMatrixWorld();
+    _projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_projScreenMatrix);
+    if (!_frustum.intersectsBox(furnitureBox)) {
+      furnitureHidden = true;
+      built.furnitureGroup.visible = false;
+    }
   }
   nav.check();
 
