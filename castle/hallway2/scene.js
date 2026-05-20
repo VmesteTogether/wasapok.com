@@ -540,6 +540,90 @@ export function buildScene(opts) {
   walls.instanceMatrix.needsUpdate = true;
   group.add(walls);
 
+  // ===== SET-WALLS (wasapok room): theatrical "wild walls" on the N/E/S edges
+  // that hinge at their OUTER-bottom edge and tip OUTWARD like a stage set
+  // collapsing. Each wall lives inside a hinge Group whose origin sits on the
+  // outer-bottom-edge line; rotating the group pivots the wall cleanly. The
+  // post-shatter pyro-circle (main.js) drives the rotation in 3 increments.
+  let setWalls = null;
+  if (opts && opts.bigRoom) {
+    const THK = 0.2;
+    const ROOM_H = ROOM_CEIL;
+    const xMin = 3, xMax = 41, zMin = -1, zMax = 37;
+    const lenX = xMax - xMin;    // 38 — N/S walls run along x
+    const lenZ = zMax - zMin;    // 38 — E wall runs along z
+    const midX = (xMin + xMax) / 2;
+    const midZ = (zMin + zMax) / 2;
+    const mkHinged = (boxGeo, mat, hingeX, hingeZ, meshOff) => {
+      const hinge = new THREE.Group();
+      hinge.position.set(hingeX, 0, hingeZ);
+      const mesh = new THREE.Mesh(boxGeo, mat);
+      mesh.position.set(meshOff.x, meshOff.y, meshOff.z);
+      hinge.add(mesh);
+      group.add(hinge);
+      return hinge;
+    };
+    // Set-walls use the ocean+sky shader (matching the visual of the planes
+    // they replace) with their OWN uTime uniform so main.js can freeze them
+    // independently of the floor water on the first button press.
+    const setWallUniform = { value: 0 };
+    const setWallMat = new THREE.ShaderMaterial({
+      uniforms: { uTime: setWallUniform },
+      vertexShader: `
+        varying vec2 vUv;
+        void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }
+      `,
+      fragmentShader: `
+        uniform float uTime;
+        varying vec2 vUv;
+        float h21(vec2 p){ p = fract(p*vec2(234.34,435.345)); p += dot(p,p+34.23); return fract(p.x*p.y); }
+        float vn(vec2 p){ vec2 i=floor(p),f=fract(p); f=f*f*(3.-2.*f);
+          return mix(mix(h21(i),h21(i+vec2(1,0)),f.x),mix(h21(i+vec2(0,1)),h21(i+vec2(1,1)),f.x),f.y); }
+        float fbm(vec2 p){ float v=0., a=0.5; for(int i=0;i<4;i++){ v+=vn(p)*a; p=p*2.1; a*=0.5; } return v; }
+        void main() {
+          float H = 0.30;
+          vec3 sky = mix(vec3(0.55,0.66,0.78), vec3(0.32,0.46,0.66), smoothstep(H, 1.0, vUv.y));
+          float depth = max(0.001, H - vUv.y);
+          vec2 suv = vec2(vUv.x * 5.0, depth * 10.0 + 1.0/depth * 0.04);
+          float w = fbm(suv + vec2(uTime*0.15, uTime*0.08));
+          vec3 deep  = vec3(0.02,0.07,0.16);
+          vec3 mid   = vec3(0.06,0.16,0.30);
+          vec3 crest = vec3(0.20,0.32,0.46);
+          vec3 sea = mix(deep, mid, smoothstep(0.25, 0.60, w));
+          sea = mix(sea, crest, smoothstep(0.60, 0.85, w) * 0.7);
+          vec3 col = vUv.y > H ? sky : sea;
+          col = mix(col, vec3(0.55,0.62,0.72), exp(-abs(vUv.y - H) * 35.0) * 0.5);
+          gl_FragColor = vec4(col, 0.94);
+        }
+      `,
+      transparent: true,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+    });
+    // East wall: hinge at xMax+THK (outer bottom, +x side). Wall extends in -x.
+    const east = mkHinged(
+      new THREE.BoxGeometry(THK, ROOM_H, lenZ), setWallMat,
+      xMax + THK, midZ, { x: -THK / 2, y: ROOM_H / 2, z: 0 },
+    );
+    // North wall: hinge at zMin-THK (outer bottom, -z side). Wall extends in +z.
+    const north = mkHinged(
+      new THREE.BoxGeometry(lenX, ROOM_H, THK), setWallMat,
+      midX, zMin - THK, { x: 0, y: ROOM_H / 2, z: THK / 2 },
+    );
+    // South wall: hinge at zMax+THK (outer bottom, +z side). Wall extends in -z.
+    const south = mkHinged(
+      new THREE.BoxGeometry(lenX, ROOM_H, THK), setWallMat,
+      midX, zMax + THK, { x: 0, y: ROOM_H / 2, z: -THK / 2 },
+    );
+    setWalls = {
+      east:  { hinge: east,  axis: 'z', sign: -1, lenAlong: lenZ, edgeAxis: 'z' },
+      north: { hinge: north, axis: 'x', sign: -1, lenAlong: lenX, edgeAxis: 'x' },
+      south: { hinge: south, axis: 'x', sign:  1, lenAlong: lenX, edgeAxis: 'x' },
+      height: ROOM_H, THK,
+      uniform: setWallUniform,
+    };
+  }
+
   // ===== OCEAN VIEW WALLS — animated water/sky planes facing inward into the room.
   // Shares uTime with the floor water shader so animation is free.
   {
@@ -611,8 +695,10 @@ export function buildScene(opts) {
           group.add(pl);
         }
       }
-    } else {
+    } else if (!(opts && opts.bigRoom)) {
       // Square room — three large planes along the player's N/E/W (world E/N/S).
+      // Skipped in bigRoom (wasapok room) since the tipping set-walls live at
+      // the same perimeter positions and would visually duplicate.
       const roomXMax = layout.width - 1;
       const ROOM_W_M = (roomXMax - 2 + 1) * CELL;
       const ROOM_D_M = layout.height * CELL;
@@ -1841,7 +1927,7 @@ export function buildScene(opts) {
 
   return {
     scene, group, layout,
-    walls, floorMesh: floor, ceilMesh: ceilInst,
+    walls, setWalls, floorMesh: floor, ceilMesh: ceilInst,
     torchLights, playerLight,
     waterMat,
     CELL, WALL_H: ROOM_CEIL,

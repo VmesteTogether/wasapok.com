@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=83';
+import { buildScene } from './scene.js?v=87';
 import { setupSceneNav } from '../nav.js?v=6';
 
 const opts = {
@@ -479,6 +479,12 @@ const SHARD_GRAVITY = 9.8;
 let topSpeedTimer = 0;
 let shattered = false;
 const shards = [];
+
+// Post-shatter: the orange pyro-circle (#nav-glow) becomes a 3-press button
+// that snaps the wasapok room's set-walls (N/E/S) through static tilt states
+// (30°, 60°, 90° outward). The third press also reveals the black void.
+const DROP_MAX = 3;
+let dropStep = 0;
 function triggerShatter() {
   if (shattered || !centralVase) return;
   shattered = true;
@@ -497,6 +503,21 @@ function triggerShatter() {
   if (titleSprites) {
     titleSprites.A.material.opacity = 0;
     titleSprites.B.material.opacity = 0;
+  }
+  // Activate the orange pyro-circle as a button (3 presses → tip set walls).
+  // Hide the d-pad grid entirely — its empty grid cells default to
+  // pointer-events: auto and would block clicks even with the container
+  // itself set to pointer-events: none.
+  const navGlowEl = document.getElementById('nav-glow');
+  if (navGlowEl) navGlowEl.classList.add('active');
+  const navCrossEl = document.getElementById('nav-cross');
+  if (navCrossEl) navCrossEl.style.display = 'none';
+  // Push fog out so the set walls (at room perimeter, ~18m from camera) are
+  // clearly visible — otherwise the post-shatter tilt happens behind the fog
+  // and the player sees no change.
+  if (scene.fog) {
+    scene.fog.near = 3;
+    scene.fog.far = 60;
   }
   // Spawn shards exploding outward — mix of crystal shapes for shattered-glass feel
   const shardMat = new THREE.MeshPhysicalMaterial({
@@ -566,6 +587,39 @@ function updateShards(dt) {
       s.userData.vel.z *= 0.6;
       s.userData.angVel.multiplyScalar(0.6);
     }
+  }
+}
+
+// Glow-button: clickable only after shatter. Each press snaps the N/E/S walls
+// to the next static tilt state (30°, 60°, 90° outward); the third press also
+// pushes background + fog to black to reveal the void.
+{
+  const navGlowEl = document.getElementById('nav-glow');
+  if (navGlowEl) {
+    navGlowEl.addEventListener('pointerdown', (e) => {
+      console.log('[wasapok] nav-glow tap', { shattered, dropStep, hasSetWalls: !!(built && built.setWalls) });
+      if (!shattered || dropStep >= DROP_MAX) return;
+      e.stopPropagation();
+      const sw = built.setWalls;
+      if (!sw) return;
+      dropStep += 1;
+      const angle = (dropStep / DROP_MAX) * (Math.PI / 2);
+      for (const key of ['east', 'north', 'south']) {
+        const w = sw[key];
+        w.hinge.rotation[w.axis] = w.sign * angle;
+      }
+      console.log('[wasapok] tilt set to', angle.toFixed(3), 'rad', { dropStep });
+      navGlowEl.classList.remove('darken-1', 'darken-2', 'darken-3');
+      navGlowEl.classList.add(`darken-${dropStep}`);
+      if (dropStep >= DROP_MAX) {
+        scene.background = new THREE.Color(0x000000);
+        if (scene.fog) {
+          scene.fog.color.set(0x000000);
+          scene.fog.near = 22;
+          scene.fog.far = 80;
+        }
+      }
+    });
   }
 }
 
@@ -928,6 +982,11 @@ function animate() {
     built.playerLight.position.set(camera.position.x, 1.6, camera.position.z);
   }
   if (built.waterMat) built.waterMat.uniforms.uTime.value = t;
+  // Set walls share the ocean shader but with their own uniform; sync until
+  // the first button press (dropStep>=1) then freeze at the last value.
+  if (built.setWalls && built.setWalls.uniform && dropStep === 0) {
+    built.setWalls.uniform.value = t;
+  }
 
   // Dreidel-vases bouncing around the wasapok room
   if (built.dreidelVases && built.dreidelBounds) {

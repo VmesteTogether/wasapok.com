@@ -113,6 +113,17 @@
     background: radial-gradient(ellipse at center, rgba(255,120,8,0.28) 0%, rgba(255,80,5,0.10) 48%, transparent 72%);
     border-radius: 50%;
     pointer-events: none;
+    transition: background 0.45s ease;
+  }
+  #nav-glow.active { pointer-events: auto; cursor: pointer; }
+  #nav-glow.darken-1 {
+    background: radial-gradient(ellipse at center, rgba(200,90,12,0.26) 0%, rgba(170,60,8,0.10) 48%, transparent 72%);
+  }
+  #nav-glow.darken-2 {
+    background: radial-gradient(ellipse at center, rgba(140,55,10,0.22) 0%, rgba(120,40,6,0.08) 48%, transparent 72%);
+  }
+  #nav-glow.darken-3 {
+    background: radial-gradient(ellipse at center, rgba(80,30,8,0.18) 0%, rgba(60,20,5,0.05) 48%, transparent 72%);
   }
   #nav-cross {
     display: grid;
@@ -357,6 +368,6 @@
 }
 </script>
 
-<script type="module" src="hallway2/main.js?v=99"></script>
+<script type="module" src="hallway2/main.js?v=107"></script>
 </body>
 </html>
