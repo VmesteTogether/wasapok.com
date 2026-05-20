@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=87';
+import { buildScene } from './scene.js?v=88';
 import { setupSceneNav } from '../nav.js?v=6';
 
 const opts = {
@@ -180,75 +180,18 @@ function dungeonFadeValue() {
 // once spin is wired up; for now it's fixed at 'A'.
 const ALBUMS = {
   A: {
-    spotifyUrl: 'https://open.spotify.com/album/56nqfRzDXsfFjm5Pl1wKhf?si=4MAm0FpYSB2DodAE9SYkmQ',
-    appleUrl:   'https://music.apple.com/us/album/biome-plain-ep/1858512958',
     title:      'Biome .•.•.•:::Plain.',
     audioUrl:   '../soundtrackComp.mp3',
   },
   B: {
-    spotifyUrl: 'https://open.spotify.com/album/7w2jzK97H1Uwois7kgHxdN?si=pCyBuTLKQFKpFT_toUBHtA',
-    appleUrl:   'https://music.apple.com/us/album/palm-tree-syrup-ep/1869613519',
     title:      "‘°Palm Tree Syrup’°”",
     audioUrl:   '../soundtrackSyrup.mp3',
   },
 };
 let currentAlbumKey = 'A';
 
-// Link icon sprites (Spotify + Apple Music). Spawned once centralVase exists.
-let linkSprites = null;
-function spawnLinkSprites() {
-  if (linkSprites || !centralVase) return;
-  const loader = new THREE.TextureLoader();
-  const mkSprite = (path) => {
-    const tex = loader.load(
-      path,
-      undefined,
-      undefined,
-      (err) => console.warn('[wasapok] icon load failed:', path, err)
-    );
-    tex.colorSpace = THREE.SRGBColorSpace;
-    const m = new THREE.SpriteMaterial({ map: tex, transparent: true, opacity: 0, depthTest: false });
-    const s = new THREE.Sprite(m);
-    s.scale.setScalar(1.0);
-    s.renderOrder = 10;
-    return s;
-  };
-  const sp = mkSprite('../spotify.png');
-  const ap = mkSprite('../apple.png');
-  const cx = centralVase.position.x, cy = centralVase.position.y, cz = centralVase.position.z;
-  // Slightly in front of the vase (camera-ward = west = -X) so they can't be
-  // occluded by the vase silhouette, and lifted a bit for clear sightline.
-  sp.position.set(cx - 0.6, cy + 0.15, cz - 1.4);
-  ap.position.set(cx - 0.6, cy + 0.15, cz + 1.4);
-  scene.add(sp);
-  scene.add(ap);
-  linkSprites = { spotify: sp, apple: ap };
-}
-function updateLinkSprites() {
-  if (!linkSprites) return;
-  const f = dungeonFadeValue();
-  // Fade in across the zoom: invisible before step 1, full by step 2.
-  const opacity = Math.max(0, Math.min(1, (f - 0.2) * 2));
-  linkSprites.spotify.material.opacity = opacity;
-  linkSprites.apple.material.opacity = opacity;
-}
 const _raycaster = new THREE.Raycaster();
 const _ndc = new THREE.Vector2();
-function tryLinkClick(clientX, clientY) {
-  if (!linkSprites) return false;
-  if (!ZOOM_POSES || zoomStep !== ZOOM_POSES.length - 1 || zoomAnim) return false;
-  const rect = renderer.domElement.getBoundingClientRect();
-  _ndc.x = ((clientX - rect.left) / rect.width) * 2 - 1;
-  _ndc.y = -((clientY - rect.top) / rect.height) * 2 + 1;
-  _raycaster.setFromCamera(_ndc, camera);
-  const hits = _raycaster.intersectObjects([linkSprites.spotify, linkSprites.apple], false);
-  if (!hits.length) return false;
-  const hit = hits[0].object;
-  const album = ALBUMS[currentAlbumKey];
-  const url = (hit === linkSprites.spotify) ? album.spotifyUrl : album.appleUrl;
-  window.open(url, '_blank', 'noopener');
-  return true;
-}
 // Floating 3D title text — one billboarded sprite per album, crossfaded by spin.
 function makeTitleSprite(text) {
   const W = 1024, H = 256;
@@ -496,10 +439,6 @@ function triggerShatter() {
     audioIsPlaying = false;
   }
   // Hide all UI
-  if (linkSprites) {
-    linkSprites.spotify.material.opacity = 0;
-    linkSprites.apple.material.opacity = 0;
-  }
   if (titleSprites) {
     titleSprites.A.material.opacity = 0;
     titleSprites.B.material.opacity = 0;
@@ -627,9 +566,8 @@ window.addEventListener('pointerdown', (e) => {
   if (shattered) return;
   if (!ZOOM_POSES) return;
   if (zoomStep !== ZOOM_POSES.length - 1 || zoomAnim) return;
-  // Boombox tap → toggle audio; icon tap → open URL; otherwise → spin drag
+  // Boombox tap → toggle audio; otherwise → spin drag
   if (tryBoomboxClick(e.clientX, e.clientY)) return;
-  if (tryLinkClick(e.clientX, e.clientY)) return;
   spinDragging = true;
   spinLastX = e.clientX;
   spinLastT = performance.now();
@@ -649,8 +587,6 @@ function applyDungeonFade() {
   // Room stays active — fog, background, and dungeon geometry are all preserved.
   // dungeonFadeValue() is still used below to gate icon/title/boombox opacity.
   // Spawn icons lazily once the central vase exists and we've started zooming.
-  if (centralVase && !linkSprites && zoomStep >= 1) spawnLinkSprites();
-  updateLinkSprites();
   if (centralVase && !titleSprites && zoomStep >= 1) spawnTitleSprites();
   updateTitleSprites();
   if (centralVase && !boombox && zoomStep >= 1) buildBoombox();

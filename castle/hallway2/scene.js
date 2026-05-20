@@ -593,12 +593,10 @@ export function buildScene(opts) {
           sea = mix(sea, crest, smoothstep(0.60, 0.85, w) * 0.7);
           vec3 col = vUv.y > H ? sky : sea;
           col = mix(col, vec3(0.55,0.62,0.72), exp(-abs(vUv.y - H) * 35.0) * 0.5);
-          gl_FragColor = vec4(col, 0.94);
+          gl_FragColor = vec4(col, 1.0);
         }
       `,
-      transparent: true,
       side: THREE.DoubleSide,
-      depthWrite: false,
     });
     // East wall: hinge at xMax+THK (outer bottom, +x side). Wall extends in -x.
     const east = mkHinged(
