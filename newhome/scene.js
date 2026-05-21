@@ -387,6 +387,7 @@ function placeAlbumCover(cubbyKey, texPath) {
 }
 placeAlbumCover('C2', 'BiomePlain_Album.png');
 placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
+placeAlbumCover('B3', 'Periphsisha_Cover.png');
 
 // === Cursor tracking → per-cubby perspective tilt.
 // Mouse is unprojected onto the z=0 plane (where the cubby openings live);
