@@ -368,11 +368,17 @@ albumTex.minFilter = THREE.NearestFilter;
 albumTex.colorSpace = THREE.SRGBColorSpace;
 albumTex.anisotropy = 1;
 const ALBUM_SIZE = 1.4;
+// depthTest/depthWrite off + renderOrder 5 so the cubby's tilting panels
+// can't clip across the album (same fix as the manifold ring base in D1).
 const albumMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
-  new THREE.MeshBasicMaterial({ map: albumTex, side: THREE.DoubleSide }),
+  new THREE.MeshBasicMaterial({
+    map: albumTex, side: THREE.DoubleSide,
+    depthTest: false, depthWrite: false,
+  }),
 );
 albumMesh.position.set(0, 0, -CUBBY_D * 0.55);   // standing inside the cubby
+albumMesh.renderOrder = 5;
 albumMesh.userData.kind = 'albumCover';
 albumCubby.add(albumMesh);
 albumCubby.userData.albumCover = albumMesh;
