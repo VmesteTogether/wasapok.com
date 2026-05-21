@@ -1989,7 +1989,7 @@ export function buildScene(layout, opts) {
     const cx = hub.cx * CELL;
     const cz = hub.cy * CELL;
     diamondBaseY = (hub.ceilH || STD_CEIL) * 0.37;
-    diamondGroup.scale.setScalar(1.44);
+    diamondGroup.scale.setScalar(1.80);
     diamondGroup.position.set(cx, diamondBaseY, cz);
     group.add(diamondGroup);
 
@@ -2126,9 +2126,11 @@ export function buildScene(layout, opts) {
       uniforms: {
         uColor: { value: new THREE.Color(0xbcd6f5) },
         uTime:  { value: 0 },
+        uPhase: { value: 0 },
       },
       vertexShader: `
         uniform float uTime;
+        uniform float uPhase;
         varying vec3 vWorldNormal;
         varying vec3 vViewDir;
         varying vec3 vLocalPos;
@@ -2171,9 +2173,9 @@ export function buildScene(layout, opts) {
           // on a band that visibly constricts the orb's diameter.
           float arcLon = atan(position.z, position.x);
           float arcLat = position.y;
-          float vw1 = sin(arcLon * 5.0 + uTime * 2.6 + arcLat * 3.0);
-          float vw2 = sin(arcLon * 3.0 - uTime * 1.9 + arcLat * 5.0);
-          float vw3 = sin(arcLat * 7.0 + uTime * 3.4 + arcLon * 2.0);
+          float vw1 = sin(arcLon * 5.0 + uTime * 2.6 + arcLat * 3.0 + uPhase);
+          float vw2 = sin(arcLon * 3.0 - uTime * 1.9 + arcLat * 5.0 + uPhase * 1.7);
+          float vw3 = sin(arcLat * 7.0 + uTime * 3.4 + arcLon * 2.0 + uPhase * 0.6);
           float vArc = pow(1.0 - abs(vw1), 12.0) + pow(1.0 - abs(vw2), 12.0) + pow(1.0 - abs(vw3), 12.0);
           float squeeze = clamp(vArc, 0.0, 2.0) * 0.06;
           vec3 displaced = position + normal * (-disp - squeeze);
@@ -2188,11 +2190,27 @@ export function buildScene(layout, opts) {
       fragmentShader: `
         uniform vec3 uColor;
         uniform float uTime;
+        uniform float uPhase;
         varying vec3 vWorldNormal;
         varying vec3 vViewDir;
         varying vec3 vLocalPos;
         varying vec2 vScreenPos;
         void main() {
+          // Cracked-egg cutout: discard fragments in a horizontal latitude
+          // band so the chunk wraps the whole equator — extending all the
+          // way to the silhouette's left/right edges from any viewing angle.
+          // Jagged perimeter (top/bottom rim of the band) via two sines on
+          // world longitude so the cut reads as a broken crack, not a clean
+          // slot. Tested in world space so the band is coherent across all
+          // four concentric shells.
+          vec3 wN = normalize(vWorldNormal);
+          float wLon = atan(wN.z, wN.x);
+          float jag = 0.08 * sin(wLon * 13.0) + 0.05 * sin(wLon * 7.0 + wN.y * 11.0);
+          // Band's bottom edge stays at wN.y ≈ -0.70 (bottom cap unchanged);
+          // top edge raised to wN.y ≈ 0.85 → top cap shrinks further (0.20 → 0.15).
+          float bandCenter = 0.075;
+          float bandHalf   = 0.775 + jag;
+          if (abs(wN.y - bandCenter) < bandHalf) discard;
           // Gentle multi-frequency ripple around the silhouette.
           float lon = atan(vLocalPos.z, vLocalPos.x);
           float lat = vLocalPos.y;
@@ -2208,14 +2226,18 @@ export function buildScene(layout, opts) {
           // crossing of a sine traced along longitude/latitude, sharpened with
           // pow(1-|sin|, high) so only narrow ridges light up. Bands move and
           // overlap, occasionally crossing for a brief bright "spark".
-          float w1 = sin(lon * 5.0  + uTime * 2.6 + lat * 3.0);
-          float w2 = sin(lon * 3.0  - uTime * 1.9 + lat * 5.0);
-          float w3 = sin(lat * 7.0  + uTime * 3.4 + lon * 2.0);
+          float w1 = sin(lon * 5.0  + uTime * 2.6 + lat * 3.0 + uPhase);
+          float w2 = sin(lon * 3.0  - uTime * 1.9 + lat * 5.0 + uPhase * 1.7);
+          float w3 = sin(lat * 7.0  + uTime * 3.4 + lon * 2.0 + uPhase * 0.6);
           float arc =
               pow(1.0 - abs(w1), 32.0)
-            + pow(1.0 - abs(w2), 28.0)
-            + pow(1.0 - abs(w3), 36.0);
+            + pow(1.0 - abs(w2), 28.0);
           arc = clamp(arc, 0.0, 2.0);
+          // The third band (latitudinal) drives the alpha channel instead of
+          // adding to the additive color — it punches the orb to fully opaque
+          // along that ridge, so the band reads as a solid traveling cutout
+          // ring rather than another bright filament.
+          float arcAlpha = clamp(pow(1.0 - abs(w3), 36.0), 0.0, 1.0);
           // Inverse-vignette on the arcs: the closer a fragment is to the
           // center of the user's view, the more we fade the arc out — so the
           // current reads strongly out at the orb's silhouette where it has
@@ -2224,12 +2246,31 @@ export function buildScene(layout, opts) {
           // ~0.5 = the inner zone we want to dim.
           float fovFade = mix(0.18, 1.0, smoothstep(0.0, 0.5, length(vScreenPos)));
           arc *= fovFade;
+          arcAlpha *= fovFade;
           // Hot-white core for arcs over the cool blue body — reads electrical.
           vec3 arcColor = mix(uColor * 1.6, vec3(0.95, 0.98, 1.0), 0.55);
 
-          float a = 0.03 + fres * 0.10 + arc * 0.22;
+          // Hot spark where two arc bands cross — sharp white flare picks out
+          // the moment two filaments intersect, reads as an electrical pop.
+          float spark = pow(1.0 - abs(w1), 24.0) * pow(1.0 - abs(w2), 24.0) * 18.0;
+          // Dropout bands: same electrical-arc family as w1/w2/w3 but they
+          // punch transparency along their ridge instead of adding light, so
+          // the orb reads as a field continuously sliced by traveling cutout
+          // currents that pulse like the bright bands do.
+          float dw1 = sin(lon * 4.0 - uTime * 6.8 + lat * 2.0 + uPhase * 1.3);
+          float dw2 = sin(lat * 6.0 + uTime * 5.1 - lon * 1.5 + uPhase * 0.9);
+          float drop = clamp(pow(1.0 - abs(dw1), 28.0) + pow(1.0 - abs(dw2), 32.0), 0.0, 1.0);
+          // Tile crackle: per-cell stochastic dropout layered on top of the
+          // bands so the surface also shimmers with brief square gaps.
+          float cell = floor(uTime * 7.0 + uPhase * 3.1)
+                     + floor(lat * 5.0) * 17.0
+                     + floor(lon * 5.0) * 31.0;
+          float tile = step(0.10, fract(sin(cell) * 43758.5453));
+          float crackle = (1.0 - drop) * tile;
+          float a = (0.03 + fres * 0.10 + arc * 0.22) * crackle;
+          a = mix(a, 1.0, arcAlpha * crackle);
           gl_FragColor = vec4(
-            uColor * (0.55 + fres * 0.8) + arcColor * arc * 1.4,
+            uColor * (0.55 + fres * 0.8) + arcColor * arc * 1.4 + vec3(0.95, 0.98, 1.0) * spark,
             a
           );
         }
@@ -2241,12 +2282,11 @@ export function buildScene(layout, opts) {
       fog: false,
     });
     const orbShell = new THREE.Mesh(new THREE.SphereGeometry(1.0, 96, 64), orbShellMat);
-    // Core sized to fully contain the bobbing diamond (max bbox ~2.16m wide,
-    // ±0.14m bob amplitude). Final world size 2.4m wide × 2.88m tall, leaving
-    // ~36cm vertical and ~12cm horizontal clearance even at the peak of the
-    // diamond's bob. Parented to `group` (not diamondGroup) so it stays
-    // stationary in world space while the diamond inside rotates and floats.
-    orbShell.scale.set(1.2, 1.44, 1.2);
+    // Core sized to fully contain the bobbing diamond (bbox ~2.70m wide at
+    // scale 1.80, ±0.14m bob). Final world size 2.9m × 3.4m, ~10cm horizontal
+    // clearance. Parented to `group` (not diamondGroup) so it stays stationary
+    // in world space while the diamond inside rotates and floats.
+    orbShell.scale.set(1.45, 1.70, 1.45);
     orbShell.position.set(cx, diamondBaseY, cz);
     orbShell.renderOrder = 9;     // render after most opaque scenery so additive lands on top
     const _orbT0 = performance.now();
@@ -2254,6 +2294,108 @@ export function buildScene(layout, opts) {
       orbShellMat.uniforms.uTime.value = (performance.now() - _orbT0) / 1000;
     };
     group.add(orbShell);
+
+    // Two concentric phase-offset shells: same field, different arc phases and
+    // a small rotation each, so the stack reads as a deeper 3D electrical field
+    // with interference rather than a single perfect sphere.
+    const orbShellLayers = [
+      { scale: 1.55, yScale: 1.80, rotY: 0.7, rotX: 0.3, phase: 2.1 },
+      { scale: 1.40, yScale: 1.65, rotY: -1.1, rotX: -0.4, phase: 4.3 },
+      // Tiny core shell — lives inside the diamond as an inner energy point.
+      { scale: 1.13, yScale: 1.39, rotY: 1.9, rotX: 0.6, phase: 5.7 },
+    ];
+    for (const L of orbShellLayers) {
+      const mat = orbShellMat.clone();
+      mat.uniforms.uPhase.value = L.phase;
+      const shell = new THREE.Mesh(new THREE.SphereGeometry(1.0, 96, 64), mat);
+      shell.scale.set(L.scale, L.yScale, L.scale);
+      shell.position.set(cx, diamondBaseY, cz);
+      shell.rotation.set(L.rotX, L.rotY, 0);
+      shell.renderOrder = 9;
+      shell.onBeforeRender = () => {
+        mat.uniforms.uTime.value = (performance.now() - _orbT0) / 1000;
+      };
+      group.add(shell);
+    }
+
+    // === LIGHTNING BOLT — vertical crackling current through the orb's
+    // missing chunk, running from top cap to bottom cap dead-center. A line
+    // of N segments whose x/z get re-jittered every frame with high-frequency
+    // noise, taper-anchored at the endpoints so the bolt stays attached to
+    // the orb caps while the middle fidgets violently like real lightning.
+    const BOLT_SEG = 32;
+    const boltPts = [];
+    for (let i = 0; i <= BOLT_SEG; i++) boltPts.push(new THREE.Vector3(0, (i / BOLT_SEG - 0.5) * 2, 0));
+    const boltGeom = new THREE.BufferGeometry().setFromPoints(boltPts);
+    const boltMat = new THREE.LineBasicMaterial({
+      color: 0xeaf4ff, transparent: true, opacity: 0.95,
+      blending: THREE.AdditiveBlending, depthWrite: false, fog: false,
+    });
+    const bolt = new THREE.Line(boltGeom, boltMat);
+    bolt.position.set(cx, diamondBaseY, cz);
+    bolt.scale.set(1, 1.75, 1);
+    bolt.renderOrder = 10;
+    const boltPosAttr = boltGeom.attributes.position;
+    let boltLastT = 0;
+    bolt.onBeforeRender = () => {
+      // Throttle to ~18fps and re-strike with fresh randoms each tick — feels
+      // like real lightning instead of a smooth sinewave pattern.
+      const now = performance.now();
+      if (now - boltLastT < 55) return;
+      boltLastT = now;
+      for (let i = 0; i <= BOLT_SEG; i++) {
+        const y = (i / BOLT_SEG - 0.5) * 2;
+        const taper = 1.0 - Math.abs(y);             // anchor endpoints
+        boltPosAttr.setXYZ(
+          i,
+          (Math.random() - 0.5) * 0.50 * taper,
+          y,
+          (Math.random() - 0.5) * 0.50 * taper,
+        );
+      }
+      boltPosAttr.needsUpdate = true;
+    };
+    group.add(bolt);
+
+    // Tight spiral companion — a helix that wraps around the central bolt at
+    // small radius, ~5 turns over the bolt's height. Smoothly drifts so it
+    // appears to twist, plus per-tick radial/angular crackle so it doesn't
+    // read as a clean coil. Same throttle as the main bolt for matched fps.
+    const SPIRAL_SEG = 64;
+    const SPIRAL_R = 0.30;
+    const SPIRAL_TURNS = 5.0;
+    const spiralPts = [];
+    for (let i = 0; i <= SPIRAL_SEG; i++) spiralPts.push(new THREE.Vector3(0, (i / SPIRAL_SEG - 0.5) * 2, 0));
+    const spiralGeom = new THREE.BufferGeometry().setFromPoints(spiralPts);
+    const spiralMat = boltMat.clone();
+    spiralMat.opacity = 0.45;
+    const spiral = new THREE.Line(spiralGeom, spiralMat);
+    spiral.position.set(cx, diamondBaseY, cz);
+    spiral.scale.set(1, 1.75, 1);
+    spiral.renderOrder = 10;
+    const spiralPosAttr = spiralGeom.attributes.position;
+    let spiralLastT = 0;
+    const _spiralT0 = performance.now();
+    spiral.onBeforeRender = () => {
+      const now = performance.now();
+      if (now - spiralLastT < 55) return;
+      spiralLastT = now;
+      const tSec = (now - _spiralT0) / 1000;
+      for (let i = 0; i <= SPIRAL_SEG; i++) {
+        const y = (i / SPIRAL_SEG - 0.5) * 2;
+        const taper = 1.0 - Math.abs(y);
+        const ang = (i / SPIRAL_SEG) * SPIRAL_TURNS * Math.PI * 2 + tSec * 1.6;
+        const r = (SPIRAL_R + (Math.random() - 0.5) * 0.08) * taper;
+        spiralPosAttr.setXYZ(
+          i,
+          Math.cos(ang) * r + (Math.random() - 0.5) * 0.04 * taper,
+          y,
+          Math.sin(ang) * r + (Math.random() - 0.5) * 0.04 * taper,
+        );
+      }
+      spiralPosAttr.needsUpdate = true;
+    };
+    group.add(spiral);
 
     pendingLoads.push(new Promise((resolve) => {
       new OBJLoader().load('museum/WasaDiminds-02.obj', (loaded) => {
@@ -2273,6 +2415,10 @@ export function buildScene(layout, opts) {
         // Apply toon material + collect inverted-hull outlines; attach the
         // outlines after the traversal so we don't re-traverse the clones.
         const outlines = [];
+        const edgeLines = [];
+        const edgeMat = new THREE.LineBasicMaterial({
+          color: 0xdaecff, transparent: true, opacity: 0.92, fog: false,
+        });
         loaded.traverse(o => {
           if (!o.isMesh) return;
           o.material = crystalMat;
@@ -2280,8 +2426,99 @@ export function buildScene(layout, opts) {
           outline.material = diamondOutlineMat;
           outline.scale.multiplyScalar(1.03);
           outlines.push([o.parent, outline]);
+          // Cel-shaded facet edges: extract every crease above 20° as line
+          // segments, drawn in icy blue-white so the diamond's geometry reads
+          // crisply through the orb's haze.
+          const edges = new THREE.LineSegments(
+            new THREE.EdgesGeometry(o.geometry, 20), edgeMat,
+          );
+          edgeLines.push([o, edges]);
         });
         outlines.forEach(([p, m]) => p.add(m));
+        edgeLines.forEach(([p, m]) => p.add(m));
+
+        // === LENS FLARES — per-facet sparkles that ignite when a facet's
+        // normal points near the camera, reading as a hyper-reflective gem
+        // catching light. Sprite billboards w/ radial halo + starburst streaks
+        // so the bright peak extends past the silhouette into the user's view
+        // like a lens flare, not just a surface highlight.
+        // Low-res canvas + nearest filtering → chunky pixelated flare. Wide
+        // aspect with a single long horizontal streak so the sprite reads as
+        // a stretched anamorphic lens flare rather than a round halo.
+        const flareCv = document.createElement('canvas');
+        flareCv.width = 64; flareCv.height = 16;
+        const fctx = flareCv.getContext('2d');
+        const halo = fctx.createRadialGradient(32, 8, 0, 32, 8, 8);
+        halo.addColorStop(0.00, 'rgba(255,255,255,1.0)');
+        halo.addColorStop(0.35, 'rgba(220,236,255,0.55)');
+        halo.addColorStop(1.00, 'rgba(0,0,0,0)');
+        fctx.fillStyle = halo; fctx.fillRect(0, 0, 64, 16);
+        fctx.globalCompositeOperation = 'screen';
+        const streak = fctx.createLinearGradient(0, 0, 64, 0);
+        streak.addColorStop(0.00, 'rgba(255,255,255,0)');
+        streak.addColorStop(0.50, 'rgba(255,255,255,0.95)');
+        streak.addColorStop(1.00, 'rgba(255,255,255,0)');
+        fctx.fillStyle = streak;
+        fctx.fillRect(0, 7, 64, 2);
+        const flareTex = new THREE.CanvasTexture(flareCv);
+        flareTex.magFilter = THREE.NearestFilter;
+        flareTex.minFilter = THREE.NearestFilter;
+        flareTex.needsUpdate = true;
+
+        const _flareWP = new THREE.Vector3();
+        const _flareVD = new THREE.Vector3();
+        const _flareWN = new THREE.Vector3();
+        const _triA = new THREE.Vector3();
+        const _triB = new THREE.Vector3();
+        const _triC = new THREE.Vector3();
+        const _triE1 = new THREE.Vector3();
+        const _triE2 = new THREE.Vector3();
+        loaded.traverse(o => {
+          if (!o.isMesh || !o.geometry?.attributes?.position) return;
+          const pos = o.geometry.attributes.position;
+          const idx = o.geometry.index;
+          const triCount = idx ? idx.count / 3 : pos.count / 3;
+          const stepT = Math.max(1, Math.floor(triCount / 24));
+          for (let t = 0; t < triCount; t += stepT) {
+            const ia = idx ? idx.getX(t * 3)     : t * 3;
+            const ib = idx ? idx.getX(t * 3 + 1) : t * 3 + 1;
+            const ic = idx ? idx.getX(t * 3 + 2) : t * 3 + 2;
+            _triA.fromBufferAttribute(pos, ia);
+            _triB.fromBufferAttribute(pos, ib);
+            _triC.fromBufferAttribute(pos, ic);
+            _triE1.subVectors(_triB, _triA);
+            _triE2.subVectors(_triC, _triA);
+            const n = new THREE.Vector3().crossVectors(_triE1, _triE2).normalize();
+            const sp = new THREE.Sprite(new THREE.SpriteMaterial({
+              map: flareTex, blending: THREE.AdditiveBlending,
+              transparent: true, depthWrite: false, fog: false, opacity: 0,
+            }));
+            sp.position.set(
+              (_triA.x + _triB.x + _triC.x) / 3,
+              (_triA.y + _triB.y + _triC.y) / 3,
+              (_triA.z + _triB.z + _triC.z) / 3,
+            ).addScaledVector(n, 0.04);
+            sp.userData.normal = n;
+            sp.renderOrder = 11;
+            sp.userData.lastT = 0;
+            sp.onBeforeRender = (renderer, scene, camera) => {
+              // Throttle updates to ~8fps so the flare snap-pops like a
+              // chunky CRT/pixel sprite instead of smoothly tracking.
+              const now = performance.now();
+              if (now - sp.userData.lastT < 125) return;
+              sp.userData.lastT = now;
+              sp.getWorldPosition(_flareWP);
+              _flareVD.copy(camera.position).sub(_flareWP).normalize();
+              _flareWN.copy(sp.userData.normal).transformDirection(sp.parent.matrixWorld).normalize();
+              const dot = Math.abs(_flareWN.dot(_flareVD));
+              const peak = Math.pow(dot, 7);
+              sp.material.opacity = peak * 0.7;
+              // Anamorphic stretch: wide horizontal, thin vertical.
+              sp.scale.set(0.6 + peak * 2.6, 0.12 + peak * 0.35, 1);
+            };
+            o.add(sp);
+          }
+        });
         diamondGroup.add(loaded);
         resolve();
       }, undefined, err => { console.warn('[museum] WasaDiminds-02.obj failed', err); resolve(); });
