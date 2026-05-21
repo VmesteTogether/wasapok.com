@@ -1989,7 +1989,7 @@ export function buildScene(layout, opts) {
     const cx = hub.cx * CELL;
     const cz = hub.cy * CELL;
     diamondBaseY = (hub.ceilH || STD_CEIL) * 0.37;
-    diamondGroup.scale.setScalar(1.20);
+    diamondGroup.scale.setScalar(1.44);
     diamondGroup.position.set(cx, diamondBaseY, cz);
     group.add(diamondGroup);
 
@@ -2082,10 +2082,34 @@ export function buildScene(layout, opts) {
       }
     }
 
-    const crystalMat = new THREE.MeshStandardMaterial({
-      color: 0xb8e2ff, emissive: 0x60a0ff, emissiveIntensity: 3.0,
-      metalness: 0.30, roughness: 0.14, transparent: true, opacity: 0.88,
+    // Cel-shade the crystal so its faceted geometry reads distinctly through
+    // the orb's haze. 4-band toon gradient in the same cyan-blue family as
+    // the base color — bands are spaced for steep luminance contrast so each
+    // facet plane gets its own clear value. Inverted-hull outline in deep
+    // navy gives a crisp silhouette that pops against the bright orb interior.
+    const diamondToonCv = document.createElement('canvas');
+    diamondToonCv.width = 4; diamondToonCv.height = 1;
+    const dtctx = diamondToonCv.getContext('2d');
+    // Same palette as the outside cel-shaded vases — dark-saturated blue
+    // ramping to ice white. Standard dark→bright order so the gradient map
+    // samples bright on lit faces and saturated-dark on shadowed faces.
+    dtctx.fillStyle = '#1e3a78'; dtctx.fillRect(0, 0, 1, 1);
+    dtctx.fillStyle = '#4c84d0'; dtctx.fillRect(1, 0, 1, 1);
+    dtctx.fillStyle = '#84c6ff'; dtctx.fillRect(2, 0, 1, 1);
+    dtctx.fillStyle = '#c4e4ff'; dtctx.fillRect(3, 0, 1, 1);
+    const diamondToonGrad = new THREE.CanvasTexture(diamondToonCv);
+    diamondToonGrad.minFilter = THREE.NearestFilter;
+    diamondToonGrad.magFilter = THREE.NearestFilter;
+    diamondToonGrad.needsUpdate = true;
+
+    const crystalMat = new THREE.MeshToonMaterial({
+      color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.4,
+      gradientMap: diamondToonGrad,
+      transparent: true, opacity: 0.62,
       side: THREE.DoubleSide,
+    });
+    const diamondOutlineMat = new THREE.MeshBasicMaterial({
+      color: 0xb8d8ff, side: THREE.BackSide,
     });
     const innerLight = new THREE.PointLight(0x6aa8ff, 7.5, 12, 1.7);
     diamondGroup.add(innerLight);
@@ -2108,6 +2132,7 @@ export function buildScene(layout, opts) {
         varying vec3 vWorldNormal;
         varying vec3 vViewDir;
         varying vec3 vLocalPos;
+        varying vec2 vScreenPos;
         const int N_TENDRILS = 28;
         void main() {
           // Twenty-eight tiny drifting tendril seeds, generated procedurally
@@ -2132,19 +2157,32 @@ export function buildScene(layout, opts) {
             ));
             float d = dot(normalize(position), seed);
             float radius   = 0.005 + r1 * 0.004;   // angular footprint ~5–7° — thin whiskers
-            float strength = 0.06  + r2 * 0.06;    // 0.06–0.12 local units — shallower peaks past the core
+            float strength = 0.12  + r2 * 0.14;    // 0.12–0.26 local units — longer inward pulls
             float period   = 1.3   + r3 * 1.4;     // 1.3–2.7s — twice as fast
             float phase    = fi * 1.7;
             float falloff = smoothstep(1.0 - radius, 1.0, d);
             float pulse   = pow(max(0.0, sin(uTime * 6.2831853 / period + phase)), 1.4);
             disp += falloff * strength * pulse;
           }
-          vec3 displaced = position + normal * disp;
+          // Electric current band squeeze — same traveling sine ridges as the
+          // fragment shader, but with a softer pow exponent so the geometric
+          // pinch is a few segments wide and reads smoothly. Pulls the surface
+          // inward where each arc passes, so the visible bright filament rides
+          // on a band that visibly constricts the orb's diameter.
+          float arcLon = atan(position.z, position.x);
+          float arcLat = position.y;
+          float vw1 = sin(arcLon * 5.0 + uTime * 2.6 + arcLat * 3.0);
+          float vw2 = sin(arcLon * 3.0 - uTime * 1.9 + arcLat * 5.0);
+          float vw3 = sin(arcLat * 7.0 + uTime * 3.4 + arcLon * 2.0);
+          float vArc = pow(1.0 - abs(vw1), 12.0) + pow(1.0 - abs(vw2), 12.0) + pow(1.0 - abs(vw3), 12.0);
+          float squeeze = clamp(vArc, 0.0, 2.0) * 0.06;
+          vec3 displaced = position + normal * (-disp - squeeze);
           vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
           vWorldNormal = normalize(mat3(modelMatrix) * normal);
           vViewDir = normalize(cameraPosition - worldPos.xyz);
           vLocalPos = position;          // unit-sphere local pos, stable under group scale
           gl_Position = projectionMatrix * viewMatrix * worldPos;
+          vScreenPos = gl_Position.xy / gl_Position.w;   // NDC -1..1 for FOV-centeredness lookup
         }
       `,
       fragmentShader: `
@@ -2153,6 +2191,7 @@ export function buildScene(layout, opts) {
         varying vec3 vWorldNormal;
         varying vec3 vViewDir;
         varying vec3 vLocalPos;
+        varying vec2 vScreenPos;
         void main() {
           // Gentle multi-frequency ripple around the silhouette.
           float lon = atan(vLocalPos.z, vLocalPos.x);
@@ -2177,6 +2216,14 @@ export function buildScene(layout, opts) {
             + pow(1.0 - abs(w2), 28.0)
             + pow(1.0 - abs(w3), 36.0);
           arc = clamp(arc, 0.0, 2.0);
+          // Inverse-vignette on the arcs: the closer a fragment is to the
+          // center of the user's view, the more we fade the arc out — so the
+          // current reads strongly out at the orb's silhouette where it has
+          // peripheral attention, and gets out of the way of the diamond
+          // sitting dead-center in the user's gaze. NDC distance 0 = center,
+          // ~0.5 = the inner zone we want to dim.
+          float fovFade = mix(0.18, 1.0, smoothstep(0.0, 0.5, length(vScreenPos)));
+          arc *= fovFade;
           // Hot-white core for arcs over the cool blue body — reads electrical.
           vec3 arcColor = mix(uColor * 1.6, vec3(0.95, 0.98, 1.0), 0.55);
 
@@ -2223,7 +2270,18 @@ export function buildScene(layout, opts) {
         );
         const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
         loaded.position.sub(ctr);
-        loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+        // Apply toon material + collect inverted-hull outlines; attach the
+        // outlines after the traversal so we don't re-traverse the clones.
+        const outlines = [];
+        loaded.traverse(o => {
+          if (!o.isMesh) return;
+          o.material = crystalMat;
+          const outline = o.clone();
+          outline.material = diamondOutlineMat;
+          outline.scale.multiplyScalar(1.03);
+          outlines.push([o.parent, outline]);
+        });
+        outlines.forEach(([p, m]) => p.add(m));
         diamondGroup.add(loaded);
         resolve();
       }, undefined, err => { console.warn('[museum] WasaDiminds-02.obj failed', err); resolve(); });
