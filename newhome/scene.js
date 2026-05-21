@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
@@ -287,22 +286,44 @@ diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 topLeftCubby.add(diamondGroup);
 diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 
-new OBJLoader().load(
-  'WasaDiminds-02.obj',
-  (loaded) => {
-    console.log('[newhome] WasaDiminds-02 loaded:', loaded);
-    const bbox = new THREE.Box3().setFromObject(loaded);
-    const size = bbox.getSize(new THREE.Vector3());
-    const maxD = Math.max(size.x, size.y, size.z) || 1;
-    loaded.scale.setScalar(0.55 / maxD);
-    const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
-    loaded.position.sub(ctr);
-    loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
-    diamondGroup.add(loaded);
-  },
-  undefined,
-  (err) => { console.error('[newhome] WasaDiminds-02.obj failed to load:', err); },
-);
+// Minimal inline OBJ parser — read vertex (v) and face (f) lines, triangulate
+// quads via fan, build a BufferGeometry. Skips materials/textures/normals
+// from the file (we recompute normals and override the material below). Used
+// instead of the addon OBJLoader to keep the load path simple and surface
+// errors directly.
+fetch('WasaDiminds-02.obj').then(r => {
+  if (!r.ok) throw new Error('OBJ fetch ' + r.status);
+  return r.text();
+}).then(text => {
+  const verts = [];
+  const indices = [];
+  for (const raw of text.split('\n')) {
+    const line = raw.trim();
+    if (line.startsWith('v ')) {
+      const p = line.split(/\s+/);
+      verts.push(+p[1], +p[2], +p[3]);
+    } else if (line.startsWith('f ')) {
+      const t = line.slice(2).trim().split(/\s+/);
+      const idxs = t.map(x => parseInt(x.split('/')[0], 10) - 1);
+      for (let i = 1; i < idxs.length - 1; i++) {
+        indices.push(idxs[0], idxs[i], idxs[i + 1]);
+      }
+    }
+  }
+  const geom = new THREE.BufferGeometry();
+  geom.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
+  geom.setIndex(indices);
+  geom.computeVertexNormals();
+  geom.computeBoundingBox();
+  const size = geom.boundingBox.getSize(new THREE.Vector3());
+  const ctr  = geom.boundingBox.getCenter(new THREE.Vector3());
+  const maxD = Math.max(size.x, size.y, size.z) || 1;
+  geom.translate(-ctr.x, -ctr.y, -ctr.z);
+  const s = 0.55 / maxD;
+  geom.scale(s, s, s);
+  diamondGroup.add(new THREE.Mesh(geom, crystalMat));
+  console.log('[newhome] WasaDiminds-02 parsed: verts=' + (verts.length / 3) + ' tris=' + (indices.length / 3));
+}).catch(err => { console.error('[newhome] WasaDiminds-02.obj failed:', err); });
 
 const _sculptT0 = performance.now();
 function updateSculpture() {
