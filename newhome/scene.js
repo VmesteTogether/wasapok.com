@@ -357,38 +357,45 @@ function updateSculpture() {
   diamondGroup.position.y = DIAMOND_BASE_Y + Math.sin(t * Math.PI * 2 / 4.0) * 0.06;
 }
 
-// === Album covers as gatefold sleeves with vinyl records.
+// === Album covers — single-pocket sleeves that "open like a book toward
+// the user" when clicked.
 //
 // Per-album hierarchy (built inside the cubby):
 //   cubby
-//     albumRoot                  — scales / pops forward when opening
-//       front     (cover image)  — right panel of gatefold; pivot on its LEFT edge
-//       insideHinge              — Group, rotation.y lerps π → 0 to swing inside out
-//         inside  (blank panel)  — left panel; pivot on its RIGHT edge
-//       vinylGroup               — vinyl record + label; slides out the right
-//         vinyl  (black disc)
-//         label  (colored disc center)
+//     albumRoot                  — pops forward + scales up when opening
+//       coverPivot               — Group hinged on the cover's LEFT edge,
+//                                  rotation.y lerps 0 → ~-110° to swing open
+//         front (cover image)    — mesh shifted +ALBUM_SIZE/2 so its left
+//                                  edge sits at the pivot origin
+//       inside (blank panel)     — paperboard interior of the sleeve, sits
+//                                  where the cover was, revealed when open
+//       vinylGroup (record)      — black disc + colored label, peeking out
+//                                  the right of the sleeve when open
 //
-// Closed state: insideHinge.rotation.y = π so the inside panel is folded
-// behind the front cover; vinylGroup hidden; albumRoot at scale 1.
-// Open state:   insideHinge.rotation.y = 0 (gatefold open to the left);
-// albumRoot scaled up + popped forward; vinyl visible to the right.
+// Position stays anchored in the cubby — opening only pops forward (Z) and
+// scales up. No left-shift; the cover doesn't unfold into a wide spread.
 //
-// Hover effect (scale + corner tip) is applied to the FRONT mesh only when
-// the album is closed. Click on a front mesh toggles its open state.
+// Click handling:
+//   - click hits a front cover           → toggle that album's open state
+//   - click hits an open album's interior → no-op (stays open, future hook
+//                                            for vinyl interactions)
+//   - click misses every album entirely  → close all open albums
 const ALBUM_SIZE   = 1.4;
 const INSIDE_COLOR = 0x1f1810;       // raw paperboard color for the blank inside
 const VINYL_COLOR  = 0x080808;
-const LABEL_COLOR  = 0xb8651a;       // warm orange label
-const HOVER_SCALE   = 1.08;
-const HOVER_TIP_RAD = 0.25;
-const HOVER_LERP    = 0.30;
-const OPEN_LERP     = 0.18;
-const OPEN_SCALE    = 1.55;          // pivot scale when fully open
-const OPEN_Z_POP    = 0.32;          // pivot Z translation forward when open
-const albumMeshes  = [];             // front-cover meshes (raycaster targets)
-const albumStates  = [];             // { albumRoot, front, insideHinge, vinylGroup, isOpen, openness }
-const _hoverLocal  = new THREE.Vector3();
+const LABEL_COLOR  = 0xb8651a;
+const HOVER_SCALE    = 1.08;
+const HOVER_TIP_RAD  = 0.25;
+const HOVER_LERP     = 0.30;
+const OPEN_LERP      = 0.20;
+const OPEN_SCALE     = 1.45;         // albumRoot scale when fully open
+const OPEN_Z_POP     = 0.55;         // albumRoot Z translation toward camera
+const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the user
+
+const albumCoverMeshes = [];         // front-cover meshes (toggle-on-click targets)
+const albumAllMeshes   = [];         // every interactive album mesh (hit-test "outside?")
+const albumStates      = [];
+const _hoverLocal      = new THREE.Vector3();
 
 function placeAlbumCover(cubbyKey, texPath) {
   const cubby = cubbies[cubbyKey];
@@ -398,65 +405,65 @@ function placeAlbumCover(cubbyKey, texPath) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 1;
 
-  // Root group handles open/close transforms (scale, position pop, gatefold
-  // recentering). Sits at the cubby's "closed cover" position to start.
+  const matOpts = { depthTest: false, depthWrite: false, side: THREE.DoubleSide };
+
   const albumRoot = new THREE.Group();
   albumRoot.position.set(0, 0, -CUBBY_D * 0.55);
   cubby.add(albumRoot);
 
-  const matOpts = { depthTest: false, depthWrite: false, side: THREE.DoubleSide };
-
-  // Front cover (right panel of the gatefold). Pivot at LEFT edge: mesh
-  // center is shifted +ALBUM_SIZE/2 so its left edge lands at albumRoot origin.
+  // Cover pivot at the cover's LEFT edge. The cover mesh is shifted +x by
+  // half its size so its center sits at the cubby cover position when closed,
+  // with its left edge at the pivot.
+  const coverPivot = new THREE.Group();
+  coverPivot.position.x = -ALBUM_SIZE / 2;
+  albumRoot.add(coverPivot);
   const front = new THREE.Mesh(
     new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
     new THREE.MeshBasicMaterial({ map: tex, ...matOpts }),
   );
   front.position.x = ALBUM_SIZE / 2;
-  front.renderOrder = 6;
+  front.renderOrder = 8;             // top of the stack so it covers vinyl/inside when closed
   front.userData.kind = 'albumCover';
-  albumRoot.add(front);
+  coverPivot.add(front);
 
-  // Inside hinge: rotates around Y at albumRoot origin (the spine).
-  // Closed: rotation.y = π → inside panel mesh swings to overlap the front
-  // (back-face toward camera, hidden behind front's image).
-  // Open:   rotation.y = 0 → inside panel extends to the LEFT of the spine.
-  const insideHinge = new THREE.Group();
-  insideHinge.rotation.y = Math.PI;
-  albumRoot.add(insideHinge);
+  // Inside panel — paperboard interior of the sleeve. Sits in the cover's
+  // original plane (slightly behind), revealed as the cover swings open.
   const inside = new THREE.Mesh(
     new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
     new THREE.MeshBasicMaterial({ color: INSIDE_COLOR, ...matOpts }),
   );
-  inside.position.x = -ALBUM_SIZE / 2;      // pivot on RIGHT edge
+  inside.position.set(0, 0, -0.015);
   inside.renderOrder = 5;
-  insideHinge.add(inside);
+  inside.userData.kind = 'albumInside';
+  albumRoot.add(inside);
 
-  // Vinyl: black disc with a center label. Slides out to the right of the
-  // front cover as the album opens; hidden when fully closed.
+  // Vinyl record — black disc with a colored label. Sits inside the sleeve
+  // peeking out to the right; mostly hidden by the cover when closed.
   const vinylGroup = new THREE.Group();
-  vinylGroup.position.set(ALBUM_SIZE * 0.5, 0, -0.01);
-  vinylGroup.visible = false;
+  vinylGroup.position.set(ALBUM_SIZE * 0.55, 0, -0.01);
   albumRoot.add(vinylGroup);
   const vinyl = new THREE.Mesh(
     new THREE.CircleGeometry(ALBUM_SIZE * 0.46, 48),
     new THREE.MeshBasicMaterial({ color: VINYL_COLOR, ...matOpts }),
   );
-  vinyl.renderOrder = 5;
+  vinyl.renderOrder = 6;
+  vinyl.userData.kind = 'albumVinyl';
   vinylGroup.add(vinyl);
   const label = new THREE.Mesh(
     new THREE.CircleGeometry(ALBUM_SIZE * 0.13, 24),
     new THREE.MeshBasicMaterial({ color: LABEL_COLOR, ...matOpts }),
   );
   label.position.z = 0.001;
-  label.renderOrder = 6;
+  label.renderOrder = 7;
+  label.userData.kind = 'albumLabel';
   vinylGroup.add(label);
 
   cubby.userData.albumCover = front;
   cubby.userData.albumRoot  = albumRoot;
-  albumMeshes.push(front);
+  albumCoverMeshes.push(front);
+  albumAllMeshes.push(front, inside, vinyl, label);
   albumStates.push({
-    albumRoot, front, insideHinge, vinylGroup,
+    albumRoot, coverPivot, front, inside, vinylGroup,
     isOpen: false, openness: 0,
   });
 }
@@ -464,39 +471,41 @@ placeAlbumCover('C2', 'BiomePlain_Album.png');
 placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
 placeAlbumCover('B3', 'Periphsisha_Cover.png');
 
-// === Click on an album front cover toggles its open/close state. Independent
-// per album (multiple can be open at once if desired).
 window.addEventListener('click', (e) => {
   const clickNdc = new THREE.Vector2(
      (e.clientX / window.innerWidth)  * 2 - 1,
     -((e.clientY / window.innerHeight) * 2 - 1),
   );
   raycaster.setFromCamera(clickNdc, camera);
-  const hits = raycaster.intersectObjects(albumMeshes, false);
-  if (hits.length) {
-    const state = albumStates.find(s => s.front === hits[0].object);
+  const anyHits = raycaster.intersectObjects(albumAllMeshes, false);
+  if (!anyHits.length) {
+    // Empty space — close every open album.
+    for (const s of albumStates) s.isOpen = false;
+    return;
+  }
+  // First hit: if it's a front cover, toggle that album. If it's vinyl/inside
+  // of an already-open album, do nothing (reserved for future interactions).
+  const hit = anyHits[0].object;
+  if (hit.userData.kind === 'albumCover') {
+    const state = albumStates.find(s => s.front === hit);
     if (state) state.isOpen = !state.isOpen;
   }
 });
 
-// Hover + open-state animation. Closed albums get the existing scale +
-// corner-tip on hover; open albums skip hover and animate their gatefold.
 function updateAlbumState() {
+  // Hover only counts when the album is closed.
   raycaster.setFromCamera(ndc, camera);
-  const hits = raycaster.intersectObjects(albumMeshes, false);
+  const hits = raycaster.intersectObjects(albumCoverMeshes, false);
   const hovered = hits.length ? hits[0].object : null;
   const hitPt   = hits.length ? hits[0].point  : null;
 
   for (const s of albumStates) {
-    // --- Hover (closed only) ---
+    // --- Hover (closed only) — scale + nearest-corner tip on the cover mesh.
     let tScale = 1.0, tRotX = 0, tRotY = 0;
     if (!s.isOpen && s.front === hovered) {
       tScale = HOVER_SCALE;
       _hoverLocal.copy(hitPt);
       s.front.worldToLocal(_hoverLocal);
-      // Front mesh is offset +ALBUM_SIZE/2 in albumRoot local, but
-      // worldToLocal already accounts for that — local x is centered on the
-      // front mesh's own origin.
       const dx = _hoverLocal.x / (ALBUM_SIZE / 2);
       const dy = _hoverLocal.y / (ALBUM_SIZE / 2);
       tRotX =  HOVER_TIP_RAD * dy;
@@ -508,21 +517,14 @@ function updateAlbumState() {
     s.front.rotation.x += (tRotX - s.front.rotation.x) * HOVER_LERP;
     s.front.rotation.y += (tRotY - s.front.rotation.y) * HOVER_LERP;
 
-    // --- Open / close ---
+    // --- Open / close — pop forward, scale up, swing cover open like a book.
     const target = s.isOpen ? 1 : 0;
     s.openness += (target - s.openness) * OPEN_LERP;
     const o = s.openness;
     const ps = 1 + (OPEN_SCALE - 1) * o;
     s.albumRoot.scale.set(ps, ps, ps);
-    // Pop forward (toward camera) when opening
     s.albumRoot.position.z = -CUBBY_D * 0.55 + OPEN_Z_POP * o;
-    // Shift left so the open 2-panel spread is roughly centered on the cubby
-    s.albumRoot.position.x = -ALBUM_SIZE / 2 * o;
-    // Inside hinge swings from π (folded behind) to 0 (open to the left)
-    s.insideHinge.rotation.y = Math.PI * (1 - o);
-    // Vinyl: slide out to the right as opening progresses, fade in
-    s.vinylGroup.visible = o > 0.05;
-    s.vinylGroup.position.x = ALBUM_SIZE * (0.5 + 0.65 * o);
+    s.coverPivot.rotation.y = OPEN_COVER_ROT * o;
   }
 }
 
