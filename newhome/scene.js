@@ -364,6 +364,7 @@ function updateSculpture() {
 // with userData.kind='albumCover' so a future raycaster interaction layer
 // can find them generically.
 const ALBUM_SIZE = 1.4;
+const albumMeshes = [];               // populated by placeAlbumCover for hover raycasting
 function placeAlbumCover(cubbyKey, texPath) {
   const cubby = cubbies[cubbyKey];
   const tex = new THREE.TextureLoader().load(texPath);
@@ -383,11 +384,45 @@ function placeAlbumCover(cubbyKey, texPath) {
   mesh.userData.kind = 'albumCover';
   cubby.add(mesh);
   cubby.userData.albumCover = mesh;
+  albumMeshes.push(mesh);
   return mesh;
 }
 placeAlbumCover('C2', 'BiomePlain_Album.png');
 placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
 placeAlbumCover('B3', 'Periphsisha_Cover.png');
+
+// === Hover effects: cursor over an album cover → cover scales up a little
+// and tips its nearest corner toward the cursor (top-left of cover hovered
+// → top-left corner comes forward, etc.). The corner-tip is just a small
+// rotation around X (vertical lean) and Y (horizontal lean) proportional to
+// the cursor's offset from the cover's center. All lerped per frame.
+const HOVER_SCALE   = 1.10;          // 10% grow
+const HOVER_TIP_RAD = 0.25;          // ~14° max corner lift
+const HOVER_LERP    = 0.30;
+const _hoverLocal   = new THREE.Vector3();
+function updateAlbumHover() {
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObjects(albumMeshes, false);
+  const hovered = hits.length ? hits[0].object : null;
+  const hitPt   = hits.length ? hits[0].point  : null;
+  for (const album of albumMeshes) {
+    let tScale = 1.0, tRotX = 0, tRotY = 0;
+    if (album === hovered) {
+      tScale = HOVER_SCALE;
+      _hoverLocal.copy(hitPt);
+      album.worldToLocal(_hoverLocal);
+      const dx = _hoverLocal.x / (ALBUM_SIZE / 2);  // -1..+1 across the cover
+      const dy = _hoverLocal.y / (ALBUM_SIZE / 2);
+      tRotX =  HOVER_TIP_RAD * dy;                  // cursor above center → top tips forward
+      tRotY = -HOVER_TIP_RAD * dx;                  // cursor left of center → left tips forward
+    }
+    album.scale.x += (tScale - album.scale.x) * HOVER_LERP;
+    album.scale.y += (tScale - album.scale.y) * HOVER_LERP;
+    album.scale.z += (tScale - album.scale.z) * HOVER_LERP;
+    album.rotation.x += (tRotX - album.rotation.x) * HOVER_LERP;
+    album.rotation.y += (tRotY - album.rotation.y) * HOVER_LERP;
+  }
+}
 
 // === Cursor tracking → per-cubby perspective tilt.
 // Mouse is unprojected onto the z=0 plane (where the cubby openings live);
@@ -444,6 +479,7 @@ function render(now) {
     lastFrame = now;
     updateTilt();
     updateSculpture();
+    updateAlbumHover();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
