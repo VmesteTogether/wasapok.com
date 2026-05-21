@@ -1,5 +1,4 @@
 import * as THREE from 'three';
-import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
@@ -207,22 +206,17 @@ const diamondGroup = new THREE.Group();
 diamondGroup.position.set(0, 0, SCULPT_Z);
 topLeftCubby.add(diamondGroup);
 
-new OBJLoader().load('/castle/museum/WasaDiminds-02.obj', (loaded) => {
-  const bbox = new THREE.Box3().setFromObject(loaded);
-  const size = bbox.getSize(new THREE.Vector3());
-  const maxD = Math.max(size.x, size.y, size.z);
-  const TARGET = 0.55;
-  loaded.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
-  const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
-  loaded.position.sub(ctr);
-  const crystalMat = new THREE.MeshStandardMaterial({
-    color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 0.55,
-    transparent: true, opacity: 0.78, metalness: 0.30, roughness: 0.35,
-    side: THREE.DoubleSide,
-  });
-  loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
-  diamondGroup.add(loaded);
+// Procedural diamond: vertically-stretched octahedron with flat shading for
+// the faceted gem look. Bright emissive + inner point light so it reads
+// against the dark cubby without needing transparency.
+const dGeom = new THREE.OctahedronGeometry(0.30, 0);
+dGeom.scale(1.0, 1.5, 1.0);
+const crystalMat = new THREE.MeshStandardMaterial({
+  color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.0,
+  metalness: 0.40, roughness: 0.30, flatShading: true,
 });
+diamondGroup.add(new THREE.Mesh(dGeom, crystalMat));
+diamondGroup.add(new THREE.PointLight(0x6aa8ff, 2.5, 1.5, 1.5));
 
 const _sculptT0 = performance.now();
 function updateSculpture() {
