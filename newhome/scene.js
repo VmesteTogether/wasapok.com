@@ -666,22 +666,28 @@ function buildRecordPlayer() {
   power.position.set(W / 2 - 0.10, H / 2 + 0.006, D / 2 - 0.08);
   ro(power, 7);
 
-  // Dust cover — clear acrylic panel hinged at the BACK-TOP edge of the
-  // plinth and lifted up to nearly vertical with a small backward lean.
-  // Group-based so the hinge math is intuitive (group at the hinge, plane
-  // shifted up by half its height so its bottom edge sits at the hinge).
+  // Dust cover — clear acrylic box that hinges at a height above the plinth
+  // top (so when closed it sits ABOVE the platter + tonearm, not through
+  // them). Starts CLOSED (horizontal) and lerps OPEN (lifted nearly vertical
+  // with a small backward lean) while the cursor hovers anywhere on the
+  // turntable.
+  const COVER_CLOSED_Y = 0.20;
+  const coverPanelD    = D * 0.95;
+  const coverThickness = 0.018;
   const coverHinge = new THREE.Group();
-  coverHinge.position.set(0, H / 2, -D / 2);
-  coverHinge.rotation.x = -0.20;                  // ~11.5° lean back from vertical
+  coverHinge.position.set(0, COVER_CLOSED_Y, -D / 2);
+  coverHinge.rotation.x = 0;                                // start closed (horizontal)
   player.add(coverHinge);
-  const coverPlaneH = D * 0.95;
   const cover = new THREE.Mesh(
-    new THREE.PlaneGeometry(W * 0.97, coverPlaneH),
+    new THREE.BoxGeometry(W * 0.97, coverThickness, coverPanelD),
     dustCoverMat,
   );
-  cover.position.y = coverPlaneH / 2;
+  cover.position.z = coverPanelD / 2;                       // back edge sits at the hinge
   cover.renderOrder = 13;
   coverHinge.add(cover);
+  player.userData.coverHinge = coverHinge;
+  player.userData.coverClosedRot = 0;
+  player.userData.coverOpenRot   = -Math.PI / 2 + 0.20;     // ~80° from horizontal, slight lean back
 
   return player;
 }
@@ -690,6 +696,20 @@ recordPlayer.rotation.x = 0;                                                // f
 recordPlayer.position.set(0, -CUBBY_H / 2 + (0.12 / 2) + 0.04, -CUBBY_D * 0.40);
 cubbies.B2.add(recordPlayer);
 cubbies.B2.userData.recordPlayer = recordPlayer;
+
+// Cursor over ANY part of the turntable → dust cover lifts open. Cursor off
+// → cover lerps back closed. Raycaster tests the whole player subtree, so
+// any mesh (plinth, platter, tonearm, even the cover itself) counts as a
+// hover, keeping the cover stable while the cursor is anywhere on the model.
+function updateRecordPlayerCover() {
+  const ch = recordPlayer.userData.coverHinge;
+  raycaster.setFromCamera(ndc, camera);
+  const hits = raycaster.intersectObject(recordPlayer, true);
+  const target = hits.length
+    ? recordPlayer.userData.coverOpenRot
+    : recordPlayer.userData.coverClosedRot;
+  ch.rotation.x += (target - ch.rotation.x) * 0.20;
+}
 
 window.addEventListener('click', (e) => {
   const clickNdc = new THREE.Vector2(
@@ -816,6 +836,7 @@ function render(now) {
     updateTilt();
     updateSculpture();
     updateAlbumState();
+    updateRecordPlayerCover();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
