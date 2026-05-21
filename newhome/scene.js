@@ -225,14 +225,16 @@ function updateTilt() {
         Math.max(-TILT_MAX_X, Math.min(TILT_MAX_X, dx)),
         Math.max(-TILT_MAX_Y, Math.min(TILT_MAX_Y, dy)),
       );
-      cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.18);
+      cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.55);
     }
   }
 }
 
-// Throttle the full render loop to ~15fps so the tilt animation reads as
-// chunky/snappy in keeping with the pixel-art look.
-const FRAME_MS = 1000 / 15;
+// Throttle the full render loop to ~30fps so the tilt reads as chunky/pixel-y
+// while staying responsive to fast cursor moves. The per-frame lerp factor
+// below was bumped to ~0.55 so the cubbies catch up to the cursor in 2–3
+// ticks rather than gliding sluggishly behind it.
+const FRAME_MS = 1000 / 30;
 let lastFrame = 0;
 function render(now) {
   if (now - lastFrame >= FRAME_MS) {
