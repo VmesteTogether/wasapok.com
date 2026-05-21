@@ -204,10 +204,22 @@ const baseGroup = new THREE.Group();
 baseGroup.scale.setScalar(BASE_SCALE);
 baseGroup.rotation.x = Math.PI;
 baseGroup.position.set(0, CEILING_Y, SCULPT_Z);
+baseGroup.renderOrder = 5;
 topLeftCubby.add(baseGroup);
+// renderOrder applies per-Mesh in Three.js (Groups don't propagate it), so we
+// also stamp it on every child as they're added below via baseGroup.traverse.
 
-const gunmetal  = new THREE.MeshStandardMaterial({ color: 0x96a8b8, metalness: 0.85, roughness: 0.40 });
-const bandSteel = new THREE.MeshStandardMaterial({ color: 0xccdce8, metalness: 1.0,  roughness: 0.22 });
+// depthTest/depthWrite off + high renderOrder so the manifold always reads
+// over the cubby panels — when the cursor tilts the perspective, the top
+// panel rotates inward and would otherwise cut through the ring base.
+const gunmetal  = new THREE.MeshStandardMaterial({
+  color: 0x96a8b8, metalness: 0.85, roughness: 0.40,
+  depthTest: false, depthWrite: false,
+});
+const bandSteel = new THREE.MeshStandardMaterial({
+  color: 0xccdce8, metalness: 1.0,  roughness: 0.22,
+  depthTest: false, depthWrite: false,
+});
 
 const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.92, 0.18, 32), gunmetal);
 collar.position.y = 0.09;
@@ -254,6 +266,7 @@ for (const [dx, dz] of HOSE_DIRS) {
     baseGroup.add(band);
   }
 }
+baseGroup.traverse(o => { if (o.isMesh) o.renderOrder = 5; });
 
 // --- Cel-shaded crystal material + inverted-hull outline, same recipe as
 // the main hall. 4-band cyan-blue toon gradient + ice-white outline.
