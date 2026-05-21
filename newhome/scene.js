@@ -519,6 +519,127 @@ placeAlbumCover('C2', 'BiomePlain_Album.png');
 placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
 placeAlbumCover('B3', 'Periphsisha_Cover.png');
 
+// === Cubby B2: HK T25–style record player. Procedurally modeled: dark wood
+// plinth, dark metallic platter with a record loaded, chrome tonearm + counter-
+// weight + headshell sweeping from a back-right pivot, spindle, anti-skate
+// post. Tilted forward ~68° in the cubby so the top surface (the player's
+// "face") reads clearly from the head-on camera. depthTest off + renderOrder
+// stack so the cubby's tilting panels can't clip across the model.
+function buildRecordPlayer() {
+  const player = new THREE.Group();
+  const W = 1.5, H = 0.10, D = 0.55;
+  const platterR = 0.32;
+  const platterTopY = H / 2 + 0.018;
+  const platterX = -0.18;
+  const armPivotX = 0.42;
+  const armPivotZ = -0.18;
+
+  const matOpts = { depthTest: false, depthWrite: false, transparent: true };
+
+  const woodMat    = new THREE.MeshStandardMaterial({ color: 0x2a1810, metalness: 0.10, roughness: 0.75, ...matOpts });
+  const platterMat = new THREE.MeshStandardMaterial({ color: 0x1d1d1f, metalness: 0.70, roughness: 0.35, ...matOpts });
+  const matInsetM  = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.10, roughness: 0.90, ...matOpts });
+  const chromeMat  = new THREE.MeshStandardMaterial({ color: 0xc4c4c8, metalness: 0.95, roughness: 0.20, ...matOpts });
+  const headshellMat = new THREE.MeshStandardMaterial({ color: 0x101010, metalness: 0.30, roughness: 0.50, ...matOpts });
+  const recordVinylMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: vinylTex, side: THREE.DoubleSide, ...matOpts });
+  const labelMat   = new THREE.MeshBasicMaterial({ color: LABEL_COLOR, side: THREE.DoubleSide, ...matOpts });
+
+  const ro = (m, n) => { m.renderOrder = n; player.add(m); return m; };
+
+  // Plinth
+  const plinth = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), woodMat);
+  ro(plinth, 5);
+  // Subtle plinth top trim (slightly darker inset where the platter sits)
+  // skipped — keep model uncluttered
+
+  // Platter
+  const platter = new THREE.Mesh(new THREE.CylinderGeometry(platterR, platterR, 0.035, 48), platterMat);
+  platter.position.set(platterX, platterTopY, 0);
+  ro(platter, 6);
+  // Rubber mat inset on top of the platter
+  const matInset = new THREE.Mesh(new THREE.CylinderGeometry(platterR * 0.95, platterR * 0.95, 0.005, 48), matInsetM);
+  matInset.position.set(platterX, platterTopY + 0.020, 0);
+  ro(matInset, 7);
+
+  // Vinyl record sitting on the platter (uses the shared grooved texture)
+  const record = new THREE.Mesh(new THREE.CircleGeometry(platterR * 0.92, 48), recordVinylMat);
+  record.rotation.x = -Math.PI / 2;
+  record.position.set(platterX, platterTopY + 0.024, 0);
+  ro(record, 8);
+  const recordLabel = new THREE.Mesh(new THREE.CircleGeometry(platterR * 0.27, 24), labelMat);
+  recordLabel.rotation.x = -Math.PI / 2;
+  recordLabel.position.set(platterX, platterTopY + 0.0245, 0);
+  ro(recordLabel, 9);
+
+  // Spindle
+  const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.06, 16), chromeMat);
+  spindle.position.set(platterX, platterTopY + 0.045, 0);
+  ro(spindle, 10);
+
+  // Tonearm base (chrome cylinder at the back-right corner of the plinth)
+  const armBase = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.06, 24), chromeMat);
+  armBase.position.set(armPivotX, H / 2 + 0.03, armPivotZ);
+  ro(armBase, 7);
+
+  // Tonearm group — pivots above armBase
+  const tonearmGroup = new THREE.Group();
+  tonearmGroup.position.set(armPivotX, H / 2 + 0.07, armPivotZ);
+  // Aim so the headshell sits over the outer edge of the record (in-play look)
+  // Direction from pivot to a point near platter's right-front edge.
+  // Computed: arm extends in local -X; rotation.y so -X → (-0.35, 0, 0.18) normalized
+  tonearmGroup.rotation.y = 0.47;
+  player.add(tonearmGroup);
+
+  // Counterweight (back end)
+  const counterweight = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.05, 16), chromeMat);
+  counterweight.rotation.z = Math.PI / 2;
+  counterweight.position.x = 0.06;
+  counterweight.renderOrder = 8;
+  tonearmGroup.add(counterweight);
+
+  // The arm itself (thin chrome cylinder extending from pivot in -X)
+  const armLen = 0.48;
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, armLen, 12), chromeMat);
+  arm.rotation.z = Math.PI / 2;
+  arm.position.x = -armLen / 2;
+  arm.renderOrder = 8;
+  tonearmGroup.add(arm);
+
+  // Headshell at the end of the arm
+  const headshell = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.022, 0.030), headshellMat);
+  headshell.position.x = -armLen;
+  headshell.renderOrder = 9;
+  tonearmGroup.add(headshell);
+
+  // Stylus needle pointing down from the headshell
+  const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.001, 0.014, 8), chromeMat);
+  needle.position.set(-armLen, -0.015, 0);
+  needle.renderOrder = 9;
+  tonearmGroup.add(needle);
+
+  // Anti-skate / tonearm rest post (small cylinder near the back-right corner,
+  // separate from the pivot)
+  const rest = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.04, 16), chromeMat);
+  rest.position.set(W / 2 - 0.08, H / 2 + 0.02, -D / 2 + 0.12);
+  ro(rest, 7);
+
+  // Small speed selector knob on the front-right
+  const knobBase = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.012, 24), chromeMat);
+  knobBase.position.set(W / 2 - 0.10, H / 2 + 0.006, D / 2 - 0.10);
+  ro(knobBase, 7);
+  const knobTop = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.025, 0.018, 24),
+    new THREE.MeshStandardMaterial({ color: 0x141414, metalness: 0.2, roughness: 0.6, ...matOpts }));
+  knobTop.position.set(W / 2 - 0.10, H / 2 + 0.021, D / 2 - 0.10);
+  ro(knobTop, 8);
+
+  return player;
+}
+const recordPlayer = buildRecordPlayer();
+recordPlayer.rotation.x = 1.20;                                // ~69° forward tilt so the top face reads to the camera
+recordPlayer.position.set(0, -CUBBY_H / 2 + 0.42, -CUBBY_D * 0.55);
+cubbies.B2.add(recordPlayer);
+cubbies.B2.userData.recordPlayer = recordPlayer;
+
 window.addEventListener('click', (e) => {
   const clickNdc = new THREE.Vector2(
      (e.clientX / window.innerWidth)  * 2 - 1,
