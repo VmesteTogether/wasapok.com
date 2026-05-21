@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 
-// 7×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
+// 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
 // shelfWalls (Wasapok room). Each cubby is its own Group exposed via
 // window.cubbies[row][col] — child meshes added to that group sit inside the
@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // -z into the wall).
 
 const PIXELATION = 3;
-const COLS = 7, ROWS = 4;
+const COLS = 6, ROWS = 4;
 const TILE_W = 2, TILE_H = 2;
 const GRID_W = COLS * TILE_W;
 const GRID_H = ROWS * TILE_H;
@@ -24,6 +24,19 @@ scene.background = new THREE.Color(0x1a1410);
 const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
 camera.position.set(0, 0, 20);
 camera.lookAt(0, 0, 0);
+
+// Lighting for future user-added shaded meshes (MeshStandardMaterial,
+// MeshToonMaterial, etc.). Cubby walls themselves use MeshBasicMaterial
+// with vertex colors and aren't affected. Three lights mimic the
+// pixel-art shading convention: soft ambient base, key from front-upper-left,
+// faint warm bottom-fill to echo the lit bottom plank of each cubby.
+scene.add(new THREE.AmbientLight(0xfff0d8, 0.45));
+const key = new THREE.DirectionalLight(0xfff4dc, 0.95);
+key.position.set(-6, 8, 10);
+scene.add(key);
+const fill = new THREE.DirectionalLight(0xffc488, 0.22);
+fill.position.set(0, -6, 6);
+scene.add(fill);
 
 // --- Procedural maple bookshelf tile: wood frame only (top/bottom planks +
 // side dividers), cubby interior alpha=0 so the recessed-box geometry behind
