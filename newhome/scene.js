@@ -2,10 +2,14 @@ import * as THREE from 'three';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
-// shelfWalls (Wasapok room). Each cubby is its own Group exposed via
-// window.cubbies[row][col] — child meshes added to that group sit inside the
-// cubby's local frame (origin at front-center of opening, +x right, +y up,
-// -z into the wall).
+// shelfWalls (Wasapok room). Each cubby is its own Group, addressable two
+// ways via window.cubbies:
+//   - window.cubbies[row][col]      // row 0 = top, col 0 = left
+//   - window.cubbies.A1 .. .D6      // letters A–D row from BOTTOM up,
+//                                   //   numbers 1–6 col from LEFT to right
+// e.g. A1 = bottom-left, D6 = top-right. Child meshes added to a cubby sit
+// inside its local frame (origin at front-center of opening, +x right,
+// +y up, -z into the wall).
 
 const PIXELATION = 3;
 const COLS = 6, ROWS = 4;
@@ -164,6 +168,14 @@ for (let row = 0; row < ROWS; row++) {
     cubbies[row].push(cubbyGroup);
   }
 }
+// Label aliases: A–D rows from BOTTOM up, 1–6 cols from LEFT to right.
+// Lets you write `cubbies.A1` instead of `cubbies[ROWS-1][0]`.
+const ROW_LETTERS = 'ABCD';
+for (let row = 0; row < ROWS; row++) {
+  for (let col = 0; col < COLS; col++) {
+    cubbies[ROW_LETTERS[ROWS - 1 - row] + (col + 1)] = cubbies[row][col];
+  }
+}
 
 // --- Auto-fit: pick the camera distance that makes the grid fully visible
 // on both axes (letterboxing on whichever axis is shorter than the grid's
@@ -193,7 +205,7 @@ onResize();
 // CEILING instead of the floor, with its respirator hoses plunging up into
 // the wood frame above. Diamond gradually bobs ±6cm on a 4s cycle, no
 // rotation.
-const topLeftCubby = cubbies[0][0];
+const topLeftCubby = cubbies.D1;     // top row (D), leftmost column (1)
 const SCULPT_Z   = -CUBBY_D * 0.5;
 const CEILING_Y  =  CUBBY_H / 2;
 const BASE_SCALE =  0.22;
