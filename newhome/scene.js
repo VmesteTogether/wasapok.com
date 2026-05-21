@@ -287,34 +287,17 @@ diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 topLeftCubby.add(diamondGroup);
 diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 
-// Immediate procedural fallback so the cubby has a visible diamond even
-// before the OBJ has loaded (and if it never loads). Removed when OBJ loads.
-const fallbackGeom = new THREE.OctahedronGeometry(0.30, 0);
-fallbackGeom.scale(1.0, 1.5, 1.0);
-const fallbackMesh = new THREE.Mesh(fallbackGeom, crystalMat);
-diamondGroup.add(fallbackMesh);
-
 new OBJLoader().load(
   '/castle/museum/WasaDiminds-02.obj',
   (loaded) => {
-    diamondGroup.remove(fallbackMesh);
+    console.log('[newhome] WasaDiminds-02 loaded:', loaded);
     const bbox = new THREE.Box3().setFromObject(loaded);
     const size = bbox.getSize(new THREE.Vector3());
-    const maxD = Math.max(size.x, size.y, size.z);
-    const TARGET = 0.55;
-    loaded.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
+    const maxD = Math.max(size.x, size.y, size.z) || 1;
+    loaded.scale.setScalar(0.55 / maxD);
     const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
     loaded.position.sub(ctr);
-    const outlines = [];
-    loaded.traverse(o => {
-      if (!o.isMesh) return;
-      o.material = crystalMat;
-      const outline = o.clone();
-      outline.material = diamondOutlineMat;
-      outline.scale.multiplyScalar(1.03);
-      outlines.push([o.parent, outline]);
-    });
-    outlines.forEach(([p, m]) => p.add(m));
+    loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
     diamondGroup.add(loaded);
   },
   undefined,
