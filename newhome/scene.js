@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
@@ -186,42 +187,129 @@ const onResize = () => {
 window.addEventListener('resize', onResize);
 onResize();
 
-// === Top-left cubby: floating diamond sculpture. The base ring is mounted
-// to the cubby's ceiling (inverted from main hall where it sits on the floor)
-// and the diamond hangs below it, gradually bobbing up/down — no rotation.
+// === Top-left cubby: same floating-diamond sculpture as the main hall of
+// /castle — cel-shaded WasaDiminds-02 crystal with inverted-hull outline,
+// hanging below the biopunk-manifold base. The whole base is scaled down
+// and flipped (rotation.x = π) so the manifold mounts to the cubby's
+// CEILING instead of the floor, with its respirator hoses plunging up into
+// the wood frame above. Diamond gradually bobs ±6cm on a 4s cycle, no
+// rotation.
 const topLeftCubby = cubbies[0][0];
-const SCULPT_Z = -CUBBY_D * 0.5;        // halfway into the cubby
-const RING_Y   =  CUBBY_H / 2 - 0.05;   // just below the cubby ceiling plane
+const SCULPT_Z   = -CUBBY_D * 0.5;
+const CEILING_Y  =  CUBBY_H / 2;
+const BASE_SCALE =  0.22;
 
-const ringMat = new THREE.MeshStandardMaterial({
-  color: 0x3a2614, metalness: 0.55, roughness: 0.42,
-  emissive: 0x110800, emissiveIntensity: 0.25,
+// --- Biopunk manifold: stacked collar + hub + cap + port + 4 reinforced
+// hoses, lifted straight from castle/museum/scene.js.
+const baseGroup = new THREE.Group();
+baseGroup.scale.setScalar(BASE_SCALE);
+baseGroup.rotation.x = Math.PI;
+baseGroup.position.set(0, CEILING_Y, SCULPT_Z);
+topLeftCubby.add(baseGroup);
+
+const gunmetal  = new THREE.MeshStandardMaterial({ color: 0x96a8b8, metalness: 0.85, roughness: 0.40 });
+const bandSteel = new THREE.MeshStandardMaterial({ color: 0xccdce8, metalness: 1.0,  roughness: 0.22 });
+
+const collar = new THREE.Mesh(new THREE.CylinderGeometry(0.85, 0.92, 0.18, 32), gunmetal);
+collar.position.y = 0.09;
+baseGroup.add(collar);
+
+const collarBand = new THREE.Mesh(new THREE.TorusGeometry(0.86, 0.025, 8, 48), bandSteel);
+collarBand.rotation.x = -Math.PI / 2;
+collarBand.position.y = 0.18;
+baseGroup.add(collarBand);
+
+const centralHub = new THREE.Mesh(new THREE.CylinderGeometry(0.55, 0.60, 0.30, 28), gunmetal);
+centralHub.position.y = 0.32;
+baseGroup.add(centralHub);
+
+const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.48, 0.05, 24), bandSteel);
+cap.position.y = 0.50;
+baseGroup.add(cap);
+
+const port = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.20, 0.18, 18), gunmetal);
+port.position.y = 0.62;
+baseGroup.add(port);
+
+const TUBE_R = 0.105;
+const HOSE_DIRS = [[1,0],[-1,0],[0,1],[0,-1]];
+const bandRingGeom = new THREE.TorusGeometry(TUBE_R + 0.022, 0.022, 8, 14);
+for (const [dx, dz] of HOSE_DIRS) {
+  const curve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(dx * 0.45,  0.30, dz * 0.45),
+    new THREE.Vector3(dx * 0.85,  0.27, dz * 0.85),
+    new THREE.Vector3(dx * 1.20, -0.05, dz * 1.20),
+    new THREE.Vector3(dx * 1.45, -0.75, dz * 1.45),
+    new THREE.Vector3(dx * 1.55, -1.40, dz * 1.55),
+  ]);
+  const hose = new THREE.Mesh(new THREE.TubeGeometry(curve, 36, TUBE_R, 12, false), gunmetal);
+  baseGroup.add(hose);
+  const SEGMENTS = 8;
+  for (let i = 1; i < SEGMENTS; i++) {
+    const t = i / SEGMENTS;
+    const p = curve.getPoint(t);
+    const tangent = curve.getTangent(t).normalize();
+    const band = new THREE.Mesh(bandRingGeom, bandSteel);
+    band.position.copy(p);
+    band.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), tangent);
+    baseGroup.add(band);
+  }
+}
+
+// --- Cel-shaded crystal material + inverted-hull outline, same recipe as
+// the main hall. 4-band cyan-blue toon gradient + ice-white outline.
+const diamondToonCv = document.createElement('canvas');
+diamondToonCv.width = 4; diamondToonCv.height = 1;
+const dtctx = diamondToonCv.getContext('2d');
+dtctx.fillStyle = '#1e3a78'; dtctx.fillRect(0, 0, 1, 1);
+dtctx.fillStyle = '#4c84d0'; dtctx.fillRect(1, 0, 1, 1);
+dtctx.fillStyle = '#84c6ff'; dtctx.fillRect(2, 0, 1, 1);
+dtctx.fillStyle = '#c4e4ff'; dtctx.fillRect(3, 0, 1, 1);
+const diamondToonGrad = new THREE.CanvasTexture(diamondToonCv);
+diamondToonGrad.minFilter = THREE.NearestFilter;
+diamondToonGrad.magFilter = THREE.NearestFilter;
+diamondToonGrad.needsUpdate = true;
+
+const crystalMat = new THREE.MeshToonMaterial({
+  color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.4,
+  gradientMap: diamondToonGrad,
+  transparent: true, opacity: 0.62, side: THREE.DoubleSide,
 });
-const ring = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.035, 10, 28), ringMat);
-ring.rotation.x = Math.PI / 2;          // lie flat against the ceiling
-ring.position.set(0, RING_Y, SCULPT_Z);
-topLeftCubby.add(ring);
+const diamondOutlineMat = new THREE.MeshBasicMaterial({
+  color: 0xb8d8ff, side: THREE.BackSide,
+});
 
 const diamondGroup = new THREE.Group();
-diamondGroup.position.set(0, 0, SCULPT_Z);
+const DIAMOND_BASE_Y = 0.05;        // anchor — bob oscillates around this
+diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 topLeftCubby.add(diamondGroup);
+diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 
-// Procedural diamond: vertically-stretched octahedron with flat shading for
-// the faceted gem look. Bright emissive + inner point light so it reads
-// against the dark cubby without needing transparency.
-const dGeom = new THREE.OctahedronGeometry(0.30, 0);
-dGeom.scale(1.0, 1.5, 1.0);
-const crystalMat = new THREE.MeshStandardMaterial({
-  color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.0,
-  metalness: 0.40, roughness: 0.30, flatShading: true,
+new OBJLoader().load('/castle/museum/WasaDiminds-02.obj', (loaded) => {
+  const bbox = new THREE.Box3().setFromObject(loaded);
+  const size = bbox.getSize(new THREE.Vector3());
+  const maxD = Math.max(size.x, size.y, size.z);
+  const TARGET = 0.55;
+  loaded.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
+  const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+  loaded.position.sub(ctr);
+  const outlines = [];
+  loaded.traverse(o => {
+    if (!o.isMesh) return;
+    o.material = crystalMat;
+    const outline = o.clone();
+    outline.material = diamondOutlineMat;
+    outline.scale.multiplyScalar(1.03);
+    outlines.push([o.parent, outline]);
+  });
+  outlines.forEach(([p, m]) => p.add(m));
+  diamondGroup.add(loaded);
 });
-diamondGroup.add(new THREE.Mesh(dGeom, crystalMat));
-diamondGroup.add(new THREE.PointLight(0x6aa8ff, 2.5, 1.5, 1.5));
 
 const _sculptT0 = performance.now();
 function updateSculpture() {
   const t = (performance.now() - _sculptT0) / 1000;
-  diamondGroup.position.y = Math.sin(t * Math.PI * 2 / 4.0) * 0.06;   // 4s period, ±6cm
+  diamondGroup.position.y = DIAMOND_BASE_Y + Math.sin(t * Math.PI * 2 / 4.0) * 0.06;
 }
 
 // === Cursor tracking → per-cubby perspective tilt.
