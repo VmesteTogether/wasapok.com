@@ -288,7 +288,7 @@ topLeftCubby.add(diamondGroup);
 diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 
 new OBJLoader().load(
-  '/castle/museum/WasaDiminds-02.obj',
+  'WasaDiminds-02.obj',
   (loaded) => {
     console.log('[newhome] WasaDiminds-02 loaded:', loaded);
     const bbox = new THREE.Box3().setFromObject(loaded);
