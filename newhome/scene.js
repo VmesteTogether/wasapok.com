@@ -333,7 +333,7 @@ fetch('WasaDiminds-02.obj').then(r => {
   const ctr  = geom.boundingBox.getCenter(new THREE.Vector3());
   const maxD = Math.max(size.x, size.y, size.z) || 1;
   geom.translate(-ctr.x, -ctr.y, -ctr.z);
-  const s = 0.55 / maxD;
+  const s = 0.85 / maxD;
   geom.scale(s, s, s);
   diamondGroup.add(new THREE.Mesh(geom, crystalMat));
   console.log('[newhome] WasaDiminds-02 parsed: verts=' + (verts.length / 3) + ' tris=' + (indices.length / 3));
