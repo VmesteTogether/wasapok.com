@@ -97,33 +97,54 @@ const FRONT_INSET = 0.006;                           // recess opening behind wa
 const cubbyGeom = (() => {
   const w2 = CUBBY_W / 2, h2 = CUBBY_H / 2;
   const zF = -FRONT_INSET, zB = -CUBBY_D - FRONT_INSET;
-  const positions = [], normals = [], colors = [], indices = [];
+  const positions = [], normals = [], colors = [], isBack = [], indices = [];
+  // isBack: 1.0 for vertices at the back of the recessed box (z == zB),
+  // 0.0 for front-facing vertices. The vertex shader shifts back verts by
+  // uBackOffset.xy so each cubby's vanishing point tilts toward the cursor.
   const addQuad = (verts, n, col) => {
     const base = positions.length / 3;
-    for (const v of verts) positions.push(...v);
+    for (const v of verts) {
+      positions.push(...v);
+      isBack.push(Math.abs(v[2] - zB) < 1e-4 ? 1.0 : 0.0);
+    }
     for (let i = 0; i < 4; i++) normals.push(...n);
     for (let i = 0; i < 4; i++) colors.push(...col);
     indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
-  // back (darkest)
   addQuad([[-w2,-h2,zB],[ w2,-h2,zB],[ w2, h2,zB],[-w2, h2,zB]], [0,0,1],  [0.11,0.07,0.035]);
-  // top (under-plank shadow)
   addQuad([[-w2, h2,zB],[ w2, h2,zB],[ w2, h2,zF],[-w2, h2,zF]], [0,-1,0], [0.15,0.10,0.05 ]);
-  // bottom (lit — where things sit)
   addQuad([[-w2,-h2,zF],[ w2,-h2,zF],[ w2,-h2,zB],[-w2,-h2,zB]], [0, 1,0], [0.34,0.22,0.12 ]);
-  // left
   addQuad([[-w2,-h2,zF],[-w2,-h2,zB],[-w2, h2,zB],[-w2, h2,zF]], [1, 0,0], [0.15,0.10,0.05 ]);
-  // right
   addQuad([[ w2,-h2,zF],[ w2, h2,zF],[ w2, h2,zB],[ w2,-h2,zB]], [-1,0,0], [0.15,0.10,0.05 ]);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   g.setAttribute('normal',   new THREE.Float32BufferAttribute(normals, 3));
   g.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+  g.setAttribute('isBack',   new THREE.Float32BufferAttribute(isBack, 1));
   g.setIndex(indices);
   return g;
 })();
-const cubbyMat = new THREE.MeshBasicMaterial({
-  vertexColors: true, side: THREE.DoubleSide,
+// Shader: shifts vertices flagged isBack=1 by per-cubby uBackOffset.xy.
+// Forwards the color attribute manually since ShaderMaterial doesn't auto-wire
+// the vertexColors flag like MeshBasicMaterial does.
+const makeCubbyMat = () => new THREE.ShaderMaterial({
+  uniforms: { uBackOffset: { value: new THREE.Vector2(0, 0) } },
+  vertexShader: `
+    uniform vec2 uBackOffset;
+    attribute float isBack;
+    attribute vec3 color;
+    varying vec3 vColor;
+    void main() {
+      vec3 p = position + vec3(uBackOffset * isBack, 0.0);
+      vColor = color;
+      gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
+    }
+  `,
+  fragmentShader: `
+    varying vec3 vColor;
+    void main() { gl_FragColor = vec4(vColor, 1.0); }
+  `,
+  side: THREE.DoubleSide,
 });
 
 // Build the 7×4 grid. cubbies[0] is the top row, cubbies[ROWS-1] the bottom.
@@ -136,7 +157,9 @@ for (let row = 0; row < ROWS; row++) {
     const cellY = -((row + 0.5) * TILE_H - GRID_H / 2);
     const cubbyGroup = new THREE.Group();
     cubbyGroup.position.set(cellX, cellY, 0);
-    cubbyGroup.add(new THREE.Mesh(cubbyGeom, cubbyMat));
+    const cubbyMesh = new THREE.Mesh(cubbyGeom, makeCubbyMat());
+    cubbyGroup.add(cubbyMesh);
+    cubbyGroup.userData.cubbyMesh = cubbyMesh;     // for per-frame uBackOffset updates
     scene.add(cubbyGroup);
     cubbies[row].push(cubbyGroup);
   }
@@ -163,7 +186,52 @@ const onResize = () => {
 window.addEventListener('resize', onResize);
 onResize();
 
+// === Cursor tracking → per-cubby perspective tilt.
+// Mouse is unprojected onto the z=0 plane (where the cubby openings live);
+// each cubby's uBackOffset is set proportional to (mouseWorld - cubbyPos) so
+// the recessed box appears to look at the cursor. Distant cubbies need
+// larger angular tilt, so their offsets are larger (clamped to keep the back
+// from punching through the side panels). Lerped each frame for smooth glide.
+const raycaster = new THREE.Raycaster();
+const ndc = new THREE.Vector2(0, 0);
+const mouseWorld = new THREE.Vector3(0, 0, 0);
+let mouseSeen = false;
+window.addEventListener('mousemove', (e) => {
+  ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  ndc.y = -((e.clientY / window.innerHeight) * 2 - 1);
+  mouseSeen = true;
+});
+
+const TILT_SCALE = 0.12;                     // how strongly each cubby tilts per meter of cursor offset
+const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
+const TILT_MAX_Y = CUBBY_H * 0.42;
+const _target = new THREE.Vector2();
+
+function updateTilt() {
+  if (mouseSeen) {
+    raycaster.setFromCamera(ndc, camera);
+    const ray = raycaster.ray;
+    if (Math.abs(ray.direction.z) > 1e-6) {
+      const t = -ray.origin.z / ray.direction.z;
+      mouseWorld.copy(ray.origin).addScaledVector(ray.direction, t);
+    }
+  }
+  for (let row = 0; row < ROWS; row++) {
+    for (let col = 0; col < COLS; col++) {
+      const cg = cubbies[row][col];
+      const dx = (mouseWorld.x - cg.position.x) * TILT_SCALE;
+      const dy = (mouseWorld.y - cg.position.y) * TILT_SCALE;
+      _target.set(
+        Math.max(-TILT_MAX_X, Math.min(TILT_MAX_X, dx)),
+        Math.max(-TILT_MAX_Y, Math.min(TILT_MAX_Y, dy)),
+      );
+      cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.18);
+    }
+  }
+}
+
 function render() {
+  updateTilt();
   renderer.render(scene, camera);
   requestAnimationFrame(render);
 }
