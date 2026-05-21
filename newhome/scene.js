@@ -283,6 +283,7 @@ const diamondOutlineMat = new THREE.MeshBasicMaterial({
 const diamondGroup = new THREE.Group();
 const DIAMOND_BASE_Y = 0.05;        // anchor — bob oscillates around this
 diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
+diamondGroup.rotation.x = Math.PI / 2;   // 90° tilt
 topLeftCubby.add(diamondGroup);
 diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 
