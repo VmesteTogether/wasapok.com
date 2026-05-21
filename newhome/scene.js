@@ -396,7 +396,7 @@ placeAlbumCover('B3', 'Periphsisha_Cover.png');
 // → top-left corner comes forward, etc.). The corner-tip is just a small
 // rotation around X (vertical lean) and Y (horizontal lean) proportional to
 // the cursor's offset from the cover's center. All lerped per frame.
-const HOVER_SCALE   = 1.10;          // 10% grow
+const HOVER_SCALE   = 1.08;          // 8% grow
 const HOVER_TIP_RAD = 0.25;          // ~14° max corner lift
 const HOVER_LERP    = 0.30;
 const _hoverLocal   = new THREE.Vector3();
