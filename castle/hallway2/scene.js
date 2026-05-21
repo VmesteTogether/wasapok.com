@@ -639,20 +639,31 @@ export function buildScene(opts) {
     const nsLen     = (xMax + OFFSET) - xMin;
     const nsCenterX = (xMin + (xMax + OFFSET)) / 2;
 
-    // Procedural maple bookshelf tile: one big empty cubby with thick
-    // horizontal shelf planks above + below, thinner vertical dividers, and a
-    // deep shadowed interior lit by a soft glow at the front edge of the
-    // lower plank (as if light catches the wood where the books would sit).
+    // Procedural maple bookshelf tile: wood frame only (top/bottom planks +
+    // side dividers). Cubby interior is left transparent so the real
+    // recessed-box geometry behind it shows through.
+    const PLANK = 22;   // top/bottom shelf plank thickness (texture pixels)
+    const SIDE  = 8;    // vertical side divider thickness
+    const TPX = 256;
+    const top = PLANK, bottom = TPX - PLANK;
+    const left = SIDE, right = TPX - SIDE;
+
     const c = document.createElement('canvas');
-    c.width = 256; c.height = 256;
+    c.width = TPX; c.height = TPX;
     const ctx = c.getContext('2d');
     ctx.imageSmoothingEnabled = false;
-    // Maple base (the wood color of the planks/dividers)
+
+    // Clip to frame region (everything except cubby) so maple + grain only
+    // paint the planks/dividers; cubby stays alpha=0.
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(0, 0, TPX, TPX);
+    ctx.rect(left, top, right - left, bottom - top);
+    ctx.clip('evenodd');
     ctx.fillStyle = '#d2a574';
-    ctx.fillRect(0, 0, 256, 256);
-    // Subtle wood grain streaks
+    ctx.fillRect(0, 0, TPX, TPX);
     for (let i = 0; i < 28; i++) {
-      const gy = Math.random() * 256;
+      const gy = Math.random() * TPX;
       const rr = 125 + (Math.random() * 35 | 0);
       const gg =  82 + (Math.random() * 22 | 0);
       const bb =  42 + (Math.random() * 22 | 0);
@@ -660,149 +671,98 @@ export function buildScene(opts) {
       ctx.lineWidth = 1;
       ctx.beginPath();
       ctx.moveTo(0, gy);
-      ctx.lineTo(256, gy + (Math.random() - 0.5) * 5);
+      ctx.lineTo(TPX, gy + (Math.random() - 0.5) * 5);
       ctx.stroke();
     }
-    // Cubby cutout: thick top + bottom planks, thinner side dividers.
-    const PLANK = 22;   // top/bottom shelf plank thickness
-    const SIDE  = 8;    // vertical side divider thickness
-    const top = PLANK, bottom = 256 - PLANK;
-    const left = SIDE, right = 256 - SIDE;
-    // Dark interior fill
-    ctx.fillStyle = '#0e0703';
-    ctx.fillRect(left, top, right - left, bottom - top);
-    // Depth gradient: deepest shadow at the top (under the plank above),
-    // gently lifting toward the bottom (where ambient light catches the shelf).
-    const grad = ctx.createLinearGradient(0, top, 0, bottom);
-    grad.addColorStop(0.00, 'rgba(0,0,0,0.85)');
-    grad.addColorStop(0.45, 'rgba(0,0,0,0.55)');
-    grad.addColorStop(1.00, 'rgba(0,0,0,0.30)');
-    ctx.fillStyle = grad;
-    ctx.fillRect(left, top, right - left, bottom - top);
-    // Under-plank ceiling shadow (the underside of the shelf above is darkest)
-    ctx.fillStyle = 'rgba(0,0,0,0.55)';
-    ctx.fillRect(left, top, right - left, 4);
-    // Front-edge highlight on the bottom plank — the lit top surface of the
-    // shelf below, where the books would sit.
-    ctx.fillStyle = 'rgba(255,232,188,0.55)';
-    ctx.fillRect(0, bottom - 1, 256, 3);
-    ctx.fillStyle = 'rgba(255,232,188,0.25)';
-    ctx.fillRect(0, bottom + 2, 256, 2);
-    // Top-of-plank highlight strip (the top edge of the top plank, lit)
+    ctx.restore();
+    // Plank edge accents (lit top edge of upper plank, shadow under lower plank).
+    // These rows lie inside the plank bands so they don't spill into the cubby.
     ctx.fillStyle = 'rgba(255,232,188,0.35)';
-    ctx.fillRect(0, 0, 256, 2);
-    // Bottom-of-plank deep shadow under the bottom plank
+    ctx.fillRect(0, 0, TPX, 2);
     ctx.fillStyle = 'rgba(30,15,5,0.65)';
-    ctx.fillRect(0, 253, 256, 3);
-    // Inner-edge highlight + shadow on the side dividers (a hint of depth)
-    ctx.fillStyle = 'rgba(255,232,188,0.18)';
-    ctx.fillRect(left, top, 1, bottom - top);
-    ctx.fillStyle = 'rgba(20,10,4,0.5)';
-    ctx.fillRect(right - 1, top, 1, bottom - top);
+    ctx.fillRect(0, TPX - 3, TPX, 3);
 
     const shelfTex = new THREE.CanvasTexture(c);
     shelfTex.wrapS = shelfTex.wrapT = THREE.RepeatWrapping;
     shelfTex.magFilter = THREE.NearestFilter;
     shelfTex.needsUpdate = true;
 
-    // Height map for relief/parallax: wood (planks + dividers) = top of surface
-    // (white = 1), cubby interior = bottom (black = 0). The shader marches the
-    // sampled UV into this height to fake actual 3D depth on a flat plane.
-    const hc = document.createElement('canvas');
-    hc.width = 256; hc.height = 256;
-    const hctx = hc.getContext('2d');
-    hctx.imageSmoothingEnabled = false;
-    hctx.fillStyle = '#ffffff';
-    hctx.fillRect(0, 0, 256, 256);
-    hctx.fillStyle = '#000000';
-    hctx.fillRect(left, top, right - left, bottom - top);
-    const shelfHeightTex = new THREE.CanvasTexture(hc);
-    shelfHeightTex.wrapS = shelfHeightTex.wrapT = THREE.RepeatWrapping;
-    shelfHeightTex.minFilter = THREE.LinearFilter;
-    shelfHeightTex.magFilter = THREE.LinearFilter;
-    shelfHeightTex.needsUpdate = true;
+    // Recessed cubby box: 5 inward-facing panels (back + top + bottom + 2 sides,
+    // no front). Stamped behind every cell of the wood frame as an InstancedMesh
+    // — same recessed-box trick the outside portal door uses for its faux
+    // hallway, just instanced across a wall. Vertex colors fake the painted
+    // shading the old parallax shader used to do (dark back, under-plank shadow,
+    // lit bottom plank where books would sit).
+    const TILE_W = 2.0, TILE_H = 2.0;                    // 2m per shelf cell
+    const CUBBY_W = TILE_W * (right - left) / TPX;       // ~1.875m opening
+    const CUBBY_H = TILE_H * (bottom - top) / TPX;       // ~1.656m opening
+    const CUBBY_D = 1.25;                                // depth into the wall
+    const FRONT_INSET = 0.006;                           // recess opening behind wall plane to dodge z-fighting
+    const cubbyGeom = (() => {
+      const w2 = CUBBY_W / 2, h2 = CUBBY_H / 2;
+      const zF = -FRONT_INSET, zB = -CUBBY_D - FRONT_INSET;
+      const positions = [], normals = [], colors = [], indices = [];
+      const addQuad = (verts, n, col) => {
+        const base = positions.length / 3;
+        for (const v of verts) positions.push(...v);
+        for (let i = 0; i < 4; i++) normals.push(...n);
+        for (let i = 0; i < 4; i++) colors.push(...col);
+        indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
+      };
+      // back (darkest)
+      addQuad([[-w2,-h2,zB],[ w2,-h2,zB],[ w2, h2,zB],[-w2, h2,zB]], [0,0,1],  [0.04,0.025,0.012]);
+      // top (under-plank shadow)
+      addQuad([[-w2, h2,zB],[ w2, h2,zB],[ w2, h2,zF],[-w2, h2,zF]], [0,-1,0], [0.06,0.04, 0.02 ]);
+      // bottom (lit — where books would sit)
+      addQuad([[-w2,-h2,zF],[ w2,-h2,zF],[ w2,-h2,zB],[-w2,-h2,zB]], [0, 1,0], [0.20,0.13, 0.07 ]);
+      // left
+      addQuad([[-w2,-h2,zF],[-w2,-h2,zB],[-w2, h2,zB],[-w2, h2,zF]], [1, 0,0], [0.06,0.04, 0.02 ]);
+      // right
+      addQuad([[ w2,-h2,zF],[ w2, h2,zF],[ w2, h2,zB],[ w2,-h2,zB]], [-1,0,0], [0.06,0.04, 0.02 ]);
+      const g = new THREE.BufferGeometry();
+      g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      g.setAttribute('normal',   new THREE.Float32BufferAttribute(normals, 3));
+      g.setAttribute('color',    new THREE.Float32BufferAttribute(colors, 3));
+      g.setIndex(indices);
+      return g;
+    })();
+    const cubbyMat = new THREE.MeshBasicMaterial({
+      vertexColors: true, fog: true, side: THREE.DoubleSide,
+    });
 
-    // Relief-mapping shader: view direction is transformed to the plane's local
-    // (tangent) space, then we march along it. Where the height map is dark
-    // (cubby interior), the sample point shifts further "into" the wall — the
-    // painted shading on the color map then sells the depth as you walk past.
-    // Fog chunks below pull fogColor/fogNear/fogFar from scene.fog at render
-    // time (because `fog: true` is set on the ShaderMaterial). Without these
-    // includes, the bookshelves would ignore scene.fog and render crystal-clear
-    // at any distance — even when everything around them fades into the haze.
-    const shelfShaderVS = `
-      #include <fog_pars_vertex>
-      varying vec2 vUv;
-      varying vec3 vViewLocal;
-      void main() {
-        vUv = uv;
-        vec4 worldPos = modelMatrix * vec4(position, 1.0);
-        vec3 viewDirWorld = normalize(cameraPosition - worldPos.xyz);
-        // modelMatrix here is pure rotation+translation (no scale on these walls),
-        // so transpose of its 3x3 = inverse → transforms world dirs into local.
-        mat3 worldToLocal = transpose(mat3(modelMatrix));
-        vViewLocal = worldToLocal * viewDirWorld;
-        vec4 mvPosition = viewMatrix * worldPos;
-        gl_Position = projectionMatrix * mvPosition;
-        #include <fog_vertex>
-      }
-    `;
-    const shelfShaderFS = `
-      precision highp float;
-      #include <fog_pars_fragment>
-      uniform sampler2D uMap;
-      uniform sampler2D uHeight;
-      uniform vec2 uRepeat;
-      uniform float uDepth;
-      varying vec2 vUv;
-      varying vec3 vViewLocal;
-      void main() {
-        vec3 V = normalize(vViewLocal);
-        vec2 baseUv = vUv * uRepeat;
-        const int STEPS = 28;
-        float dLayer = 1.0 / float(STEPS);
-        // Cap V.z to avoid runaway shifts at grazing angles.
-        vec2 dUv = -V.xy / max(V.z, 0.15) * uDepth / float(STEPS);
-        vec2 curUv = baseUv;
-        float layerDepth = 0.0;
-        float surfaceDepth = 1.0 - texture2D(uHeight, curUv).r;
-        for (int i = 0; i < STEPS; i++) {
-          if (layerDepth >= surfaceDepth) break;
-          curUv += dUv;
-          layerDepth += dLayer;
-          surfaceDepth = 1.0 - texture2D(uHeight, curUv).r;
-        }
-        vec4 color = texture2D(uMap, curUv);
-        // Tunnel darkening: deeper march = closer to black, so the cubbies
-        // read as infinitely deep tunnels rather than shallow boxes. The
-        // painted shading on uMap still tints the near walls of the tunnel.
-        float tunnel = exp(-2.6 * layerDepth);   // 1.0 at the surface, ~0.07 at full depth
-        gl_FragColor = vec4(color.rgb * tunnel, 1.0);
-        #include <fog_fragment>
-      }
-    `;
-
-    // Each wall gets its own ShaderMaterial so uRepeat (length-dependent) can
-    // differ. Textures are shared via uniforms — repeat is handled in-shader.
-    // `fog: true` + merged UniformsLib.fog lets the renderer push scene.fog
-    // values into the shader each frame.
+    // Each wall = group(alpha-cut wood plane + InstancedMesh of cubby boxes).
+    // Plane normal is +z in local frame; cubbies recess to -z (into the wall).
     const makeShelfWall = (len) => {
-      const mat = new THREE.ShaderMaterial({
-        uniforms: {
-          ...THREE.UniformsUtils.clone(THREE.UniformsLib.fog),
-          uMap:    { value: shelfTex },
-          uHeight: { value: shelfHeightTex },
-          uRepeat: { value: new THREE.Vector2(len / 2, SHELF_H / 2) },
-          uDepth:  { value: 0.9 },    // deep tunnels — ~1.8m apparent recession before tunnel-fade
-        },
-        vertexShader: shelfShaderVS,
-        fragmentShader: shelfShaderFS,
-        side: THREE.FrontSide,
-        fog: true,
+      const tex = shelfTex.clone();
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.magFilter = THREE.NearestFilter;
+      tex.repeat.set(len / TILE_W, SHELF_H / TILE_H);
+      tex.needsUpdate = true;
+      const wallMat = new THREE.MeshBasicMaterial({
+        map: tex, alphaTest: 0.5, side: THREE.FrontSide, fog: true,
       });
-      const mesh = new THREE.Mesh(new THREE.PlaneGeometry(len, SHELF_H), mat);
-      mesh.visible = false;
-      return mesh;
+      const wall = new THREE.Mesh(new THREE.PlaneGeometry(len, SHELF_H), wallMat);
+
+      const nx = Math.round(len / TILE_W);
+      const ny = Math.round(SHELF_H / TILE_H);
+      const cubbies = new THREE.InstancedMesh(cubbyGeom, cubbyMat, nx * ny);
+      const m = new THREE.Matrix4();
+      for (let iy = 0; iy < ny; iy++) {
+        for (let ix = 0; ix < nx; ix++) {
+          const x = (ix + 0.5) * TILE_W - len / 2;
+          const y = (iy + 0.5) * TILE_H - SHELF_H / 2;
+          m.makeTranslation(x, y, 0);
+          cubbies.setMatrixAt(iy * nx + ix, m);
+        }
+      }
+      cubbies.instanceMatrix.needsUpdate = true;
+      cubbies.frustumCulled = false;   // big spread, conservative bounds aren't worth recomputing
+
+      const pivot = new THREE.Group();
+      pivot.add(wall);
+      pivot.add(cubbies);
+      pivot.visible = false;
+      return pivot;
     };
 
     const east = makeShelfWall(eastLen);
