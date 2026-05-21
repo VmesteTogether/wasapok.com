@@ -357,31 +357,36 @@ function updateSculpture() {
   diamondGroup.position.y = DIAMOND_BASE_Y + Math.sin(t * Math.PI * 2 / 4.0) * 0.06;
 }
 
-// === Cubby C2: square album cover (vinyl-record style), pixelated. Sized so
-// it sits centered with visible cubby walls around it. Exposed via
-// cubbies.C2.userData.albumCover so a future interaction layer (raycaster
-// click / hover / drag) can target it directly.
-const albumCubby = cubbies.C2;
-const albumTex = new THREE.TextureLoader().load('BiomePlain_Album.png');
-albumTex.magFilter = THREE.NearestFilter;
-albumTex.minFilter = THREE.NearestFilter;
-albumTex.colorSpace = THREE.SRGBColorSpace;
-albumTex.anisotropy = 1;
+// === Album covers (vinyl-record style) — square pixelated planes centered
+// inside their cubbies. depthTest/depthWrite off + renderOrder 5 so the
+// cubby's tilting panels can't clip across them (same fix as the manifold
+// ring base in D1). Each cover is exposed via cubbies.<key>.userData.albumCover
+// with userData.kind='albumCover' so a future raycaster interaction layer
+// can find them generically.
 const ALBUM_SIZE = 1.4;
-// depthTest/depthWrite off + renderOrder 5 so the cubby's tilting panels
-// can't clip across the album (same fix as the manifold ring base in D1).
-const albumMesh = new THREE.Mesh(
-  new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
-  new THREE.MeshBasicMaterial({
-    map: albumTex, side: THREE.DoubleSide,
-    depthTest: false, depthWrite: false,
-  }),
-);
-albumMesh.position.set(0, 0, -CUBBY_D * 0.55);   // standing inside the cubby
-albumMesh.renderOrder = 5;
-albumMesh.userData.kind = 'albumCover';
-albumCubby.add(albumMesh);
-albumCubby.userData.albumCover = albumMesh;
+function placeAlbumCover(cubbyKey, texPath) {
+  const cubby = cubbies[cubbyKey];
+  const tex = new THREE.TextureLoader().load(texPath);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 1;
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
+    new THREE.MeshBasicMaterial({
+      map: tex, side: THREE.DoubleSide,
+      depthTest: false, depthWrite: false,
+    }),
+  );
+  mesh.position.set(0, 0, -CUBBY_D * 0.55);
+  mesh.renderOrder = 5;
+  mesh.userData.kind = 'albumCover';
+  cubby.add(mesh);
+  cubby.userData.albumCover = mesh;
+  return mesh;
+}
+placeAlbumCover('C2', 'BiomePlain_Album.png');
+placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
 
 // === Cursor tracking → per-cubby perspective tilt.
 // Mouse is unprojected onto the z=0 plane (where the cubby openings live);
