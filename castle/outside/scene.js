@@ -532,11 +532,72 @@ export async function buildScene() {
     vaseGroup.position.set(vaseX, vaseBaseY, vaseZ);
     scene.add(vaseGroup);
 
-    const crystalMat = new THREE.MeshStandardMaterial({
-      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.4,
-      metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.65,
+    // Cel-shaded crystal: 4-band toon gradient (deep blue → ice white) gives
+    // the vase hard color steps that pop against the soft daylight + ocean.
+    // Inverted-hull outline (BackSide mesh at +3% scale, dark navy) adds a
+    // crisp silhouette so the vase reads cleanly even from across the grounds.
+    const toonGradCv = document.createElement('canvas');
+    toonGradCv.width = 4; toonGradCv.height = 1;
+    const tgctx = toonGradCv.getContext('2d');
+    tgctx.fillStyle = '#1e3a78'; tgctx.fillRect(0, 0, 1, 1);
+    tgctx.fillStyle = '#4c84d0'; tgctx.fillRect(1, 0, 1, 1);
+    tgctx.fillStyle = '#84c6ff'; tgctx.fillRect(2, 0, 1, 1);
+    tgctx.fillStyle = '#c4e4ff'; tgctx.fillRect(3, 0, 1, 1);
+    const toonGrad = new THREE.CanvasTexture(toonGradCv);
+    toonGrad.minFilter = THREE.NearestFilter;
+    toonGrad.magFilter = THREE.NearestFilter;
+    toonGrad.needsUpdate = true;
+
+    const crystalMat = new THREE.MeshToonMaterial({
+      color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.4,
+      gradientMap: toonGrad,
+      transparent: true, opacity: 0.62,
       side: THREE.DoubleSide,
     });
+    const outlineMat = new THREE.MeshBasicMaterial({
+      color: 0xb8d8ff, side: THREE.BackSide,
+    });
+
+    // Subtle electric ripples — inject thin sine-ridge arcs into the toon
+    // material's fragment via onBeforeCompile so the cel bands stay intact
+    // and the arcs just add a faint ice-blue glow along traveling filaments.
+    // Two slow bands at low intensity keep it from reading busy.
+    crystalMat.userData.uTime = { value: 0 };
+    crystalMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = crystalMat.userData.uTime;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vArcWorldPos;'
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        '#include <project_vertex>\nvArcWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        '#include <common>\nuniform float uTime;\nvarying vec3 vArcWorldPos;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+         {
+           float arcLon = atan(vArcWorldPos.z, vArcWorldPos.x);
+           float arcLat = vArcWorldPos.y;
+           // Slow base ripples — quieter than before so they barely register.
+           float aw1 = sin(arcLon * 3.0 + uTime * 0.9 + arcLat * 1.5);
+           float aw2 = sin(arcLat * 4.0 - uTime * 0.7 + arcLon * 2.0);
+           float slowArc = pow(1.0 - abs(aw1), 32.0) + pow(1.0 - abs(aw2), 28.0);
+           // Fast thin lines layered on top — sharpened by a higher pow
+           // exponent so they read as fine darting filaments rather than soft
+           // bands, and animated ~3× faster to feel like skittering current.
+           float aw3 = sin(arcLon * 5.0 + uTime * 2.8 + arcLat * 3.0);
+           float aw4 = sin(arcLat * 6.0 - uTime * 3.4 + arcLon * 4.0);
+           float fastArc = pow(1.0 - abs(aw3), 60.0) + pow(1.0 - abs(aw4), 55.0);
+           float arc = clamp(slowArc * 0.09 + fastArc * 0.14, 0.0, 0.4);
+           totalEmissiveRadiance += vec3(0.45, 0.65, 0.95) * arc;
+         }`
+      );
+    };
 
     const innerLight = new THREE.PointLight(0x6aa8ff, 2.2, 8, 1.6);
     vaseGroup.add(innerLight);
@@ -558,7 +619,26 @@ export async function buildScene() {
         );
         const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
         loaded.position.sub(ctr);
-        loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+        // Collect outlines first, attach after the traversal so we don't
+        // re-traverse the newly-added clones.
+        const outlines = [];
+        let firstArcMesh = null;
+        loaded.traverse(o => {
+          if (!o.isMesh) return;
+          if (!firstArcMesh) firstArcMesh = o;
+          o.material = crystalMat;
+          const outline = o.clone();
+          outline.material = outlineMat;
+          outline.scale.multiplyScalar(1.03);
+          outlines.push([o.parent, outline]);
+        });
+        outlines.forEach(([p, m]) => p.add(m));
+        if (firstArcMesh) {
+          const _t0 = performance.now();
+          firstArcMesh.onBeforeRender = () => {
+            crystalMat.userData.uTime.value = (performance.now() - _t0) / 1000;
+          };
+        }
         vaseGroup.add(loaded);
         resolve();
       }, undefined, err => { console.warn('[outside] Eskleo-Vase-01.obj failed', err); resolve(); });
@@ -702,26 +782,101 @@ export async function buildScene() {
       mGroup.userData.innerLight = inner;
       monuments.push(mGroup);
     }
+    // Same icy cel-shaded palette as the floating walkable-path vase: 4-band
+    // toon gradient + icy-blue inverted-hull outline. Reads cleanly across
+    // the long sightline from spawn through the gate.
+    const monGradCv = document.createElement('canvas');
+    monGradCv.width = 4; monGradCv.height = 1;
+    const mgctx = monGradCv.getContext('2d');
+    mgctx.fillStyle = '#1e3a78'; mgctx.fillRect(0, 0, 1, 1);
+    mgctx.fillStyle = '#4c84d0'; mgctx.fillRect(1, 0, 1, 1);
+    mgctx.fillStyle = '#84c6ff'; mgctx.fillRect(2, 0, 1, 1);
+    mgctx.fillStyle = '#c4e4ff'; mgctx.fillRect(3, 0, 1, 1);
+    const monGrad = new THREE.CanvasTexture(monGradCv);
+    monGrad.minFilter = THREE.NearestFilter;
+    monGrad.magFilter = THREE.NearestFilter;
+    monGrad.needsUpdate = true;
+    const monMat = new THREE.MeshToonMaterial({
+      color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.4,
+      gradientMap: monGrad,
+      transparent: true, opacity: 0.62,
+      side: THREE.DoubleSide,
+    });
+    const monOutlineMat = new THREE.MeshBasicMaterial({
+      color: 0xb8d8ff, side: THREE.BackSide,
+    });
+
+    // Same subtle electric ripples as the floating vase — injected into the
+    // monument toon material so both vase sets share the look.
+    monMat.userData.uTime = { value: 0 };
+    monMat.onBeforeCompile = (shader) => {
+      shader.uniforms.uTime = monMat.userData.uTime;
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <common>',
+        '#include <common>\nvarying vec3 vArcWorldPos;'
+      );
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <project_vertex>',
+        '#include <project_vertex>\nvArcWorldPos = (modelMatrix * vec4(position, 1.0)).xyz;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <common>',
+        '#include <common>\nuniform float uTime;\nvarying vec3 vArcWorldPos;'
+      );
+      shader.fragmentShader = shader.fragmentShader.replace(
+        '#include <emissivemap_fragment>',
+        `#include <emissivemap_fragment>
+         {
+           float arcLon = atan(vArcWorldPos.z, vArcWorldPos.x);
+           float arcLat = vArcWorldPos.y;
+           // Slow base ripples — quieter than before so they barely register.
+           float aw1 = sin(arcLon * 3.0 + uTime * 0.9 + arcLat * 1.5);
+           float aw2 = sin(arcLat * 4.0 - uTime * 0.7 + arcLon * 2.0);
+           float slowArc = pow(1.0 - abs(aw1), 32.0) + pow(1.0 - abs(aw2), 28.0);
+           // Fast thin lines layered on top — sharpened by a higher pow
+           // exponent so they read as fine darting filaments rather than soft
+           // bands, and animated ~3× faster to feel like skittering current.
+           float aw3 = sin(arcLon * 5.0 + uTime * 2.8 + arcLat * 3.0);
+           float aw4 = sin(arcLat * 6.0 - uTime * 3.4 + arcLon * 4.0);
+           float fastArc = pow(1.0 - abs(aw3), 60.0) + pow(1.0 - abs(aw4), 55.0);
+           float arc = clamp(slowArc * 0.09 + fastArc * 0.14, 0.0, 0.4);
+           totalEmissiveRadiance += vec3(0.45, 0.65, 0.95) * arc;
+         }`
+      );
+    };
+
     pendingLoads.push(new Promise((resolve) => {
       new OBJLoader().load('outside/Eskleo-Vase-01.obj', (loaded) => {
-        const mat = new THREE.MeshStandardMaterial({
-          color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.4,
-          metalness: 0.25, roughness: 0.18, transparent: true, opacity: 0.65,
-          side: THREE.DoubleSide,
-        });
         const bbox = new THREE.Box3().setFromObject(loaded);
         const size = bbox.getSize(new THREE.Vector3());
         const maxD = Math.max(size.x, size.y, size.z);
         const TARGET = 12; // welcome-monument scale
         const s = maxD > 0 ? TARGET / maxD : 1;
+        let monFirstArcMesh = null;
         for (const mGroup of monuments) {
           const c = loaded.clone(true);
           c.scale.setScalar(s);
           const cb = new THREE.Box3().setFromObject(c);
           const cc = cb.getCenter(new THREE.Vector3());
           c.position.sub(cc);
-          c.traverse(o => { if (o.isMesh) o.material = mat; });
+          const outlines = [];
+          c.traverse(o => {
+            if (!o.isMesh) return;
+            if (!monFirstArcMesh) monFirstArcMesh = o;
+            o.material = monMat;
+            const outline = o.clone();
+            outline.material = monOutlineMat;
+            outline.scale.multiplyScalar(1.03);
+            outlines.push([o.parent, outline]);
+          });
+          outlines.forEach(([p, m]) => p.add(m));
           mGroup.add(c);
+        }
+        if (monFirstArcMesh) {
+          const _t0 = performance.now();
+          monFirstArcMesh.onBeforeRender = () => {
+            monMat.userData.uTime.value = (performance.now() - _t0) / 1000;
+          };
         }
         resolve();
       }, undefined, err => { console.warn('[outside] monument vases failed', err); resolve(); });
