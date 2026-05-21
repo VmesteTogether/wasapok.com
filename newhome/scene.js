@@ -519,124 +519,168 @@ placeAlbumCover('C2', 'BiomePlain_Album.png');
 placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
 placeAlbumCover('B3', 'Periphsisha_Cover.png');
 
-// === Cubby B2: HK T25–style record player. Procedurally modeled: dark wood
-// plinth, dark metallic platter with a record loaded, chrome tonearm + counter-
-// weight + headshell sweeping from a back-right pivot, spindle, anti-skate
-// post. Tilted forward ~68° in the cubby so the top surface (the player's
-// "face") reads clearly from the head-on camera. depthTest off + renderOrder
-// stack so the cubby's tilting panels can't clip across the model.
+// === Cubby B2: harman/kardon T25 turntable. Procedurally modeled to match
+// reference photos — light champagne plinth, bright aluminum platter rim,
+// black felt mat with cross spoke marks, polished silver center disc + spindle,
+// BLACK plastic tonearm housing (not chrome), chrome arm, cream/white headshell
+// with a reddish-brown cartridge and stylus + finger lift, two silver knobs +
+// rectangular power button on the front face, four dark rubber feet, and a
+// clear acrylic dust cover hinged at the back lifted open. Tilted forward ~63°
+// so the top reads cleanly to the head-on camera.
 function buildRecordPlayer() {
   const player = new THREE.Group();
-  const W = 1.5, H = 0.10, D = 0.55;
-  const platterR = 0.32;
+  const W = 1.5, H = 0.12, D = 0.60;
+  const platterR = 0.30;
   const platterTopY = H / 2 + 0.018;
   const platterX = -0.18;
   const armPivotX = 0.42;
-  const armPivotZ = -0.18;
+  const armPivotZ = -0.20;
 
   const matOpts = { depthTest: false, depthWrite: false, transparent: true };
 
-  const woodMat    = new THREE.MeshStandardMaterial({ color: 0x2a1810, metalness: 0.10, roughness: 0.75, ...matOpts });
-  const platterMat = new THREE.MeshStandardMaterial({ color: 0x1d1d1f, metalness: 0.70, roughness: 0.35, ...matOpts });
-  const matInsetM  = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.10, roughness: 0.90, ...matOpts });
-  const chromeMat  = new THREE.MeshStandardMaterial({ color: 0xc4c4c8, metalness: 0.95, roughness: 0.20, ...matOpts });
-  const headshellMat = new THREE.MeshStandardMaterial({ color: 0x101010, metalness: 0.30, roughness: 0.50, ...matOpts });
+  const plinthMat    = new THREE.MeshStandardMaterial({ color: 0xc7c2b3, metalness: 0.35, roughness: 0.45, ...matOpts });
+  const rimMat       = new THREE.MeshStandardMaterial({ color: 0xd6d3c8, metalness: 0.90, roughness: 0.20, ...matOpts });
+  const feltMat      = new THREE.MeshStandardMaterial({ color: 0x0e0e0e, metalness: 0.05, roughness: 0.95, ...matOpts });
+  const spokeMat     = new THREE.MeshStandardMaterial({ color: 0x2a2a2a, metalness: 0.10, roughness: 0.85, ...matOpts });
+  const centerDiscMat = new THREE.MeshStandardMaterial({ color: 0xb8b3a4, metalness: 0.95, roughness: 0.18, ...matOpts });
+  const chromeMat    = new THREE.MeshStandardMaterial({ color: 0xb8b3a4, metalness: 0.92, roughness: 0.22, ...matOpts });
+  const blackPlastic = new THREE.MeshStandardMaterial({ color: 0x0e0e0e, metalness: 0.15, roughness: 0.55, ...matOpts });
+  const headshellMat = new THREE.MeshStandardMaterial({ color: 0xeae3d1, metalness: 0.15, roughness: 0.45, ...matOpts });
+  const cartridgeMat = new THREE.MeshStandardMaterial({ color: 0x6b3a26, metalness: 0.30, roughness: 0.50, ...matOpts });
+  const rubberMat    = new THREE.MeshStandardMaterial({ color: 0x0a0a0a, metalness: 0.00, roughness: 0.85, ...matOpts });
+  const dustCoverMat = new THREE.MeshStandardMaterial({
+    color: 0xdde8f4, metalness: 0.00, roughness: 0.05,
+    opacity: 0.14, side: THREE.DoubleSide, ...matOpts,
+  });
   const recordVinylMat = new THREE.MeshBasicMaterial({ color: 0xffffff, map: vinylTex, side: THREE.DoubleSide, ...matOpts });
-  const labelMat   = new THREE.MeshBasicMaterial({ color: LABEL_COLOR, side: THREE.DoubleSide, ...matOpts });
+  const labelMat     = new THREE.MeshBasicMaterial({ color: LABEL_COLOR, side: THREE.DoubleSide, ...matOpts });
 
   const ro = (m, n) => { m.renderOrder = n; player.add(m); return m; };
 
-  // Plinth
-  const plinth = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), woodMat);
-  ro(plinth, 5);
-  // Subtle plinth top trim (slightly darker inset where the platter sits)
-  // skipped — keep model uncluttered
+  // Plinth — light champagne / brushed silver rectangle
+  ro(new THREE.Mesh(new THREE.BoxGeometry(W, H, D), plinthMat), 5);
 
-  // Platter
-  const platter = new THREE.Mesh(new THREE.CylinderGeometry(platterR, platterR, 0.035, 48), platterMat);
-  platter.position.set(platterX, platterTopY, 0);
-  ro(platter, 6);
-  // Rubber mat inset on top of the platter
-  const matInset = new THREE.Mesh(new THREE.CylinderGeometry(platterR * 0.95, platterR * 0.95, 0.005, 48), matInsetM);
-  matInset.position.set(platterX, platterTopY + 0.020, 0);
-  ro(matInset, 7);
+  // Rubber feet at 4 corners
+  for (const [sx, sz] of [[-1,-1],[1,-1],[-1,1],[1,1]]) {
+    const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.034, 0.04, 16), rubberMat);
+    foot.position.set(sx * (W / 2 - 0.10), -H / 2 - 0.02, sz * (D / 2 - 0.10));
+    ro(foot, 5);
+  }
 
-  // Vinyl record sitting on the platter (uses the shared grooved texture)
-  const record = new THREE.Mesh(new THREE.CircleGeometry(platterR * 0.92, 48), recordVinylMat);
+  // Platter rim — bright aluminum
+  const rim = new THREE.Mesh(new THREE.CylinderGeometry(platterR, platterR, 0.030, 48), rimMat);
+  rim.position.set(platterX, platterTopY, 0);
+  ro(rim, 6);
+  // Black felt mat sitting on top of the rim
+  const feltR = platterR * 0.96;
+  const felt = new THREE.Mesh(new THREE.CylinderGeometry(feltR, feltR, 0.010, 48), feltMat);
+  felt.position.set(platterX, platterTopY + 0.020, 0);
+  ro(felt, 7);
+  // Cross spoke marks across the felt (2 perpendicular thin strips)
+  for (let i = 0; i < 2; i++) {
+    const spoke = new THREE.Mesh(new THREE.BoxGeometry(feltR * 1.85, 0.0025, 0.010), spokeMat);
+    spoke.position.set(platterX, platterTopY + 0.026, 0);
+    spoke.rotation.y = i * Math.PI / 2;
+    spoke.renderOrder = 8;
+    player.add(spoke);
+  }
+  // Polished silver center disc — where the harman/kardon emblem sits IRL
+  const centerDisc = new THREE.Mesh(new THREE.CylinderGeometry(feltR * 0.33, feltR * 0.33, 0.005, 32), centerDiscMat);
+  centerDisc.position.set(platterX, platterTopY + 0.027, 0);
+  ro(centerDisc, 9);
+
+  // Vinyl record loaded on top (uses the shared grooved texture)
+  const record = new THREE.Mesh(new THREE.CircleGeometry(feltR * 0.94, 48), recordVinylMat);
   record.rotation.x = -Math.PI / 2;
-  record.position.set(platterX, platterTopY + 0.024, 0);
-  ro(record, 8);
-  const recordLabel = new THREE.Mesh(new THREE.CircleGeometry(platterR * 0.27, 24), labelMat);
+  record.position.set(platterX, platterTopY + 0.029, 0);
+  ro(record, 10);
+  const recordLabel = new THREE.Mesh(new THREE.CircleGeometry(feltR * 0.30, 24), labelMat);
   recordLabel.rotation.x = -Math.PI / 2;
-  recordLabel.position.set(platterX, platterTopY + 0.0245, 0);
-  ro(recordLabel, 9);
+  recordLabel.position.set(platterX, platterTopY + 0.0295, 0);
+  ro(recordLabel, 11);
 
-  // Spindle
-  const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.06, 16), chromeMat);
-  spindle.position.set(platterX, platterTopY + 0.045, 0);
-  ro(spindle, 10);
+  // Spindle through the record's center hole
+  const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.060, 16), chromeMat);
+  spindle.position.set(platterX, platterTopY + 0.055, 0);
+  ro(spindle, 12);
 
-  // Tonearm base (chrome cylinder at the back-right corner of the plinth)
-  const armBase = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.05, 0.06, 24), chromeMat);
-  armBase.position.set(armPivotX, H / 2 + 0.03, armPivotZ);
-  ro(armBase, 7);
+  // Tonearm BASE — black plastic housing on the back-right
+  const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.080, 0.080, 24), blackPlastic);
+  housing.position.set(armPivotX, H / 2 + 0.040, armPivotZ);
+  ro(housing, 7);
+  const bearing = new THREE.Mesh(new THREE.CylinderGeometry(0.045, 0.050, 0.030, 24), blackPlastic);
+  bearing.position.set(armPivotX, H / 2 + 0.095, armPivotZ);
+  ro(bearing, 8);
 
-  // Tonearm group — pivots above armBase
+  // Tonearm group — pivots above the bearing, sweeps over the record
   const tonearmGroup = new THREE.Group();
-  tonearmGroup.position.set(armPivotX, H / 2 + 0.07, armPivotZ);
-  // Aim so the headshell sits over the outer edge of the record (in-play look)
-  // Direction from pivot to a point near platter's right-front edge.
-  // Computed: arm extends in local -X; rotation.y so -X → (-0.35, 0, 0.18) normalized
-  tonearmGroup.rotation.y = 0.47;
+  tonearmGroup.position.set(armPivotX, H / 2 + 0.115, armPivotZ);
+  tonearmGroup.rotation.y = 0.55;
   player.add(tonearmGroup);
-
-  // Counterweight (back end)
-  const counterweight = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.05, 16), chromeMat);
-  counterweight.rotation.z = Math.PI / 2;
-  counterweight.position.x = 0.06;
-  counterweight.renderOrder = 8;
-  tonearmGroup.add(counterweight);
-
-  // The arm itself (thin chrome cylinder extending from pivot in -X)
+  // Black counterweight at the back
+  const cw = new THREE.Mesh(new THREE.CylinderGeometry(0.032, 0.032, 0.060, 16), blackPlastic);
+  cw.rotation.z = Math.PI / 2;
+  cw.position.x = 0.07;
+  cw.renderOrder = 8;
+  tonearmGroup.add(cw);
+  // Chrome arm
   const armLen = 0.48;
-  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.007, 0.007, armLen, 12), chromeMat);
+  const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.0075, 0.0075, armLen, 12), chromeMat);
   arm.rotation.z = Math.PI / 2;
   arm.position.x = -armLen / 2;
   arm.renderOrder = 8;
   tonearmGroup.add(arm);
-
-  // Headshell at the end of the arm
-  const headshell = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.022, 0.030), headshellMat);
+  // Cream/white headshell
+  const headshell = new THREE.Mesh(new THREE.BoxGeometry(0.060, 0.025, 0.038), headshellMat);
   headshell.position.x = -armLen;
   headshell.renderOrder = 9;
   tonearmGroup.add(headshell);
-
-  // Stylus needle pointing down from the headshell
+  // Reddish-brown cartridge under the headshell
+  const cartridge = new THREE.Mesh(new THREE.BoxGeometry(0.040, 0.018, 0.032), cartridgeMat);
+  cartridge.position.set(-armLen, -0.020, 0);
+  cartridge.renderOrder = 9;
+  tonearmGroup.add(cartridge);
+  // Stylus needle
   const needle = new THREE.Mesh(new THREE.CylinderGeometry(0.002, 0.001, 0.014, 8), chromeMat);
-  needle.position.set(-armLen, -0.015, 0);
-  needle.renderOrder = 9;
+  needle.position.set(-armLen, -0.035, 0);
+  needle.renderOrder = 10;
   tonearmGroup.add(needle);
+  // Finger lift — small tab off the headshell
+  const lift = new THREE.Mesh(new THREE.BoxGeometry(0.004, 0.010, 0.026), chromeMat);
+  lift.position.set(-armLen + 0.030, 0, 0.025);
+  lift.renderOrder = 9;
+  tonearmGroup.add(lift);
 
-  // Anti-skate / tonearm rest post (small cylinder near the back-right corner,
-  // separate from the pivot)
-  const rest = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.04, 16), chromeMat);
-  rest.position.set(W / 2 - 0.08, H / 2 + 0.02, -D / 2 + 0.12);
+  // Tonearm rest clip near the front-right of the arm area
+  const rest = new THREE.Mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.045, 16), blackPlastic);
+  rest.position.set(W / 2 - 0.13, H / 2 + 0.022, 0.06);
   ro(rest, 7);
 
-  // Small speed selector knob on the front-right
-  const knobBase = new THREE.Mesh(new THREE.CylinderGeometry(0.030, 0.030, 0.012, 24), chromeMat);
-  knobBase.position.set(W / 2 - 0.10, H / 2 + 0.006, D / 2 - 0.10);
-  ro(knobBase, 7);
-  const knobTop = new THREE.Mesh(new THREE.CylinderGeometry(0.020, 0.025, 0.018, 24),
-    new THREE.MeshStandardMaterial({ color: 0x141414, metalness: 0.2, roughness: 0.6, ...matOpts }));
-  knobTop.position.set(W / 2 - 0.10, H / 2 + 0.021, D / 2 - 0.10);
-  ro(knobTop, 8);
+  // Front controls: two chrome knobs (speed / control) + rectangular power button
+  for (let i = 0; i < 2; i++) {
+    const knob = new THREE.Mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.014, 24), chromeMat);
+    knob.position.set(0.22 + i * 0.10, H / 2 + 0.007, D / 2 - 0.08);
+    ro(knob, 7);
+  }
+  const power = new THREE.Mesh(new THREE.BoxGeometry(0.028, 0.012, 0.046), chromeMat);
+  power.position.set(W / 2 - 0.10, H / 2 + 0.006, D / 2 - 0.08);
+  ro(power, 7);
+
+  // Dust cover — clear acrylic panel hinged at the back, lifted up ~75°.
+  const cover = new THREE.Mesh(
+    new THREE.PlaneGeometry(W * 0.97, D * 1.10),
+    dustCoverMat,
+  );
+  cover.position.set(0, H / 2 + 0.40, -D / 2 + 0.02);
+  cover.rotation.x = -Math.PI / 2.4;
+  cover.renderOrder = 13;
+  player.add(cover);
 
   return player;
 }
 const recordPlayer = buildRecordPlayer();
-recordPlayer.rotation.x = 1.20;                                // ~69° forward tilt so the top face reads to the camera
-recordPlayer.position.set(0, -CUBBY_H / 2 + 0.42, -CUBBY_D * 0.55);
+recordPlayer.rotation.x = 1.10;                                // ~63° forward tilt — top reads + cover still visible behind
+recordPlayer.position.set(0, -CUBBY_H / 2 + 0.45, -CUBBY_D * 0.55);
 cubbies.B2.add(recordPlayer);
 cubbies.B2.userData.recordPlayer = recordPlayer;
 
