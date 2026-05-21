@@ -391,6 +391,8 @@ const OPEN_LERP      = 0.20;
 const OPEN_SCALE     = 1.45;         // albumRoot scale when fully open
 const OPEN_Z_POP     = 0.55;         // albumRoot Z translation toward camera
 const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the user
+const VINYL_PEEK_X   = ALBUM_SIZE * 0.12;   // vinyl sits inside the sleeve, edge peeking out right
+const VINYL_OUT_X    = ALBUM_SIZE * 0.95;   // fully popped out (label visible past the sleeve)
 
 const albumCoverMeshes = [];         // front-cover meshes (toggle-on-click targets)
 const albumAllMeshes   = [];         // every interactive album mesh (hit-test "outside?")
@@ -426,27 +428,16 @@ function placeAlbumCover(cubbyKey, texPath) {
   front.userData.kind = 'albumCover';
   coverPivot.add(front);
 
-  // Inside panel — paperboard interior of the sleeve. Sits in the cover's
-  // original plane (slightly behind), revealed as the cover swings open.
-  const inside = new THREE.Mesh(
-    new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
-    new THREE.MeshBasicMaterial({ color: INSIDE_COLOR, ...matOpts }),
-  );
-  inside.position.set(0, 0, -0.015);
-  inside.renderOrder = 5;
-  inside.userData.kind = 'albumInside';
-  albumRoot.add(inside);
-
-  // Vinyl record — black disc with a colored label. Sits inside the sleeve
-  // peeking out to the right; mostly hidden by the cover when closed.
+  // Vinyl record (built BEFORE inside so render order can layer inside on
+  // top — inside panel must occlude the vinyl when it's tucked in).
   const vinylGroup = new THREE.Group();
-  vinylGroup.position.set(ALBUM_SIZE * 0.55, 0, -0.01);
+  vinylGroup.position.set(0, 0, -0.01);
   albumRoot.add(vinylGroup);
   const vinyl = new THREE.Mesh(
     new THREE.CircleGeometry(ALBUM_SIZE * 0.46, 48),
     new THREE.MeshBasicMaterial({ color: VINYL_COLOR, ...matOpts }),
   );
-  vinyl.renderOrder = 6;
+  vinyl.renderOrder = 5;
   vinyl.userData.kind = 'albumVinyl';
   vinylGroup.add(vinyl);
   const label = new THREE.Mesh(
@@ -454,18 +445,39 @@ function placeAlbumCover(cubbyKey, texPath) {
     new THREE.MeshBasicMaterial({ color: LABEL_COLOR, ...matOpts }),
   );
   label.position.z = 0.001;
-  label.renderOrder = 7;
+  label.renderOrder = 6;
   label.userData.kind = 'albumLabel';
   vinylGroup.add(label);
+
+  // Inside panel — paperboard interior of the sleeve. renderOrder=7 so it
+  // sits ON TOP of the vinyl/label, hiding whatever portion of the vinyl is
+  // still inside the sleeve. Only the part of the vinyl that's slid past the
+  // panel's right edge stays visible.
+  const inside = new THREE.Mesh(
+    new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
+    new THREE.MeshBasicMaterial({ color: INSIDE_COLOR, ...matOpts }),
+  );
+  inside.position.set(0, 0, -0.015);
+  inside.renderOrder = 7;
+  inside.userData.kind = 'albumInside';
+  albumRoot.add(inside);
 
   cubby.userData.albumCover = front;
   cubby.userData.albumRoot  = albumRoot;
   albumCoverMeshes.push(front);
   albumAllMeshes.push(front, inside, vinyl, label);
-  albumStates.push({
-    albumRoot, coverPivot, front, inside, vinylGroup,
+  const state = {
+    albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label,
     isOpen: false, openness: 0,
-  });
+    vinylOut: false, vinylness: 0,
+  };
+  // Back-references so the click handler can find a state from any of its
+  // meshes without a search.
+  front.userData.albumState = state;
+  inside.userData.albumState = state;
+  vinyl.userData.albumState = state;
+  label.userData.albumState = state;
+  albumStates.push(state);
 }
 placeAlbumCover('C2', 'BiomePlain_Album.png');
 placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
@@ -479,17 +491,20 @@ window.addEventListener('click', (e) => {
   raycaster.setFromCamera(clickNdc, camera);
   const anyHits = raycaster.intersectObjects(albumAllMeshes, false);
   if (!anyHits.length) {
-    // Empty space — close every open album.
-    for (const s of albumStates) s.isOpen = false;
+    // Empty space — close every open album (vinyls retract along with covers).
+    for (const s of albumStates) { s.isOpen = false; s.vinylOut = false; }
     return;
   }
-  // First hit: if it's a front cover, toggle that album. If it's vinyl/inside
-  // of an already-open album, do nothing (reserved for future interactions).
   const hit = anyHits[0].object;
+  const state = hit.userData.albumState;
+  if (!state) return;
   if (hit.userData.kind === 'albumCover') {
-    const state = albumStates.find(s => s.front === hit);
-    if (state) state.isOpen = !state.isOpen;
+    state.isOpen = !state.isOpen;
+    if (!state.isOpen) state.vinylOut = false;     // closing cover pulls vinyl back in
+  } else if (hit.userData.kind === 'albumVinyl' || hit.userData.kind === 'albumLabel') {
+    if (state.isOpen) state.vinylOut = !state.vinylOut;
   }
+  // Clicking the inside panel of an open album is a no-op for now.
 });
 
 function updateAlbumState() {
@@ -525,6 +540,15 @@ function updateAlbumState() {
     s.albumRoot.scale.set(ps, ps, ps);
     s.albumRoot.position.z = -CUBBY_D * 0.55 + OPEN_Z_POP * o;
     s.coverPivot.rotation.y = OPEN_COVER_ROT * o;
+
+    // --- Vinyl pop-out (only meaningful when cover is open). When cover is
+    // closed, vinyl x=0 keeps it hidden behind the cover. When open + tucked
+    // in, vinyl sits at VINYL_PEEK_X with its right edge poking past the
+    // inside panel. Click on the peek and it slides out to VINYL_OUT_X.
+    const targetV = s.vinylOut ? 1 : 0;
+    s.vinylness += (targetV - s.vinylness) * OPEN_LERP;
+    const v = s.vinylness;
+    s.vinylGroup.position.x = (VINYL_PEEK_X + (VINYL_OUT_X - VINYL_PEEK_X) * v) * o;
   }
 }
 
