@@ -357,25 +357,46 @@ function updateSculpture() {
   diamondGroup.position.y = DIAMOND_BASE_Y + Math.sin(t * Math.PI * 2 / 4.0) * 0.06;
 }
 
-// === Cubby C2: square album cover (vinyl-record style), pixelated. Sized so
-// it sits centered with visible cubby walls around it. Exposed via
-// cubbies.C2.userData.albumCover so a future interaction layer (raycaster
-// click / hover / drag) can target it directly.
+// === Cubby C2: square album cover on a small wooden display stand, like a
+// vinyl record propped up for view. Pixelated texture. Album bottom edge
+// rests on the stand top, top leans back ~7° so it visibly tilts against
+// the stand rather than standing dead vertical. Exposed via
+// cubbies.C2.userData.albumCover / .albumStand so a future interaction
+// layer (raycaster click / hover / drag) can target either piece.
 const albumCubby = cubbies.C2;
 const albumTex = new THREE.TextureLoader().load('BiomePlain_Album.png');
 albumTex.magFilter = THREE.NearestFilter;
 albumTex.minFilter = THREE.NearestFilter;
 albumTex.colorSpace = THREE.SRGBColorSpace;
 albumTex.anisotropy = 1;
+
 const ALBUM_SIZE = 1.4;
+const ALBUM_TILT = -0.13;           // ~7.5° backward lean
+const STAND_W = ALBUM_SIZE * 0.85;
+const STAND_H = 0.06;
+const STAND_D = 0.28;
+const ALBUM_Z = -CUBBY_D * 0.55;
+const FLOOR_Y = -CUBBY_H / 2;
+
+const albumStand = new THREE.Mesh(
+  new THREE.BoxGeometry(STAND_W, STAND_H, STAND_D),
+  new THREE.MeshStandardMaterial({ color: 0x3a2614, metalness: 0.30, roughness: 0.55 }),
+);
+albumStand.position.set(0, FLOOR_Y + STAND_H / 2, ALBUM_Z);
+albumStand.userData.kind = 'albumStand';
+albumCubby.add(albumStand);
+
 const albumMesh = new THREE.Mesh(
   new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
   new THREE.MeshBasicMaterial({ map: albumTex, side: THREE.DoubleSide }),
 );
-albumMesh.position.set(0, 0, -CUBBY_D * 0.55);   // standing inside the cubby
+// Album center placed so its (tilted) bottom edge sits on the stand top.
+albumMesh.position.set(0, FLOOR_Y + STAND_H + (ALBUM_SIZE / 2) * Math.cos(ALBUM_TILT), ALBUM_Z);
+albumMesh.rotation.x = ALBUM_TILT;
 albumMesh.userData.kind = 'albumCover';
 albumCubby.add(albumMesh);
 albumCubby.userData.albumCover = albumMesh;
+albumCubby.userData.albumStand = albumStand;
 
 // === Cursor tracking → per-cubby perspective tilt.
 // Mouse is unprojected onto the z=0 plane (where the cubby openings live);
