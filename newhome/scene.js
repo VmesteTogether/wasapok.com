@@ -407,7 +407,11 @@ function placeAlbumCover(cubbyKey, texPath) {
   tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 1;
 
-  const matOpts = { depthTest: false, depthWrite: false, side: THREE.DoubleSide };
+  // transparent:true forces these materials into the transparent render queue
+  // (after the opaque + transparent wall plane), so the album can draw OVER
+  // the wooden cubby frame when it pops forward — without it, the wall's
+  // wood pixels render after the album and cover it.
+  const matOpts = { depthTest: false, depthWrite: false, side: THREE.DoubleSide, transparent: true };
 
   const albumRoot = new THREE.Group();
   albumRoot.position.set(0, 0, -CUBBY_D * 0.55);
