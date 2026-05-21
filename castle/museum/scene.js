@@ -413,9 +413,10 @@ export function buildScene(layout, opts) {
     arm.position.set(0, 0, 0.03);
     grp.add(arm);
 
-    // Glowing orb core
+    // Glowing orb core — bright enough that the core itself is visible from
+    // the hallway spawn through the dungeon fog, not just the halo.
     const orbMat = new THREE.MeshStandardMaterial({
-      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 4.5,
+      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 13.0,
       roughness: 0.08, metalness: 0.0,
     });
     const orb = new THREE.Mesh(new THREE.SphereGeometry(0.1, 14, 10), orbMat);
@@ -423,9 +424,9 @@ export function buildScene(layout, opts) {
     grp.add(orb);
     // Outer glow halo
     const haloMat = new THREE.MeshBasicMaterial({
-      color: 0x40ff80, transparent: true, opacity: 0.13, depthWrite: false,
+      color: 0x40ff80, transparent: true, opacity: 0.42, depthWrite: false,
     });
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.19, 14, 10), haloMat);
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.26, 14, 10), haloMat);
     halo.position.set(0, 0, 0.17);
     grp.add(halo);
 
@@ -459,7 +460,7 @@ export function buildScene(layout, opts) {
     // Floating orbs around the ring
     const orbCount = 8;
     const smallOrbMat = new THREE.MeshStandardMaterial({
-      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 4.5,
+      color: 0x20ff60, emissive: 0x40ff80, emissiveIntensity: 13.0,
       roughness: 0.1, metalness: 0,
     });
     for (let i = 0; i < orbCount; i++) {
@@ -471,8 +472,8 @@ export function buildScene(layout, opts) {
       smallOrb.position.set(cx, -chainLen + 0.08, cz);
       ch.add(smallOrb);
       const sh = new THREE.Mesh(
-        new THREE.SphereGeometry(0.09, 10, 8),
-        new THREE.MeshBasicMaterial({ color: 0x40ff80, transparent: true, opacity: 0.10, depthWrite: false })
+        new THREE.SphereGeometry(0.13, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0x40ff80, transparent: true, opacity: 0.32, depthWrite: false })
       );
       sh.position.set(cx, -chainLen + 0.08, cz);
       ch.add(sh);
