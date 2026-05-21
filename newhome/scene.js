@@ -391,7 +391,7 @@ const OPEN_LERP      = 0.20;
 const OPEN_SCALE     = 1.45;         // albumRoot scale when fully open
 const OPEN_Z_POP     = 0.55;         // albumRoot Z translation toward camera
 const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the user
-const VINYL_PEEK_X   = ALBUM_SIZE * 0.12;   // vinyl sits inside the sleeve, edge peeking out right
+const VINYL_PEEK_X   = ALBUM_SIZE * 0.40;   // vinyl peeks out far enough that a slice of the orange label shows past the sleeve edge
 const VINYL_OUT_X    = ALBUM_SIZE * 0.95;   // fully popped out (label visible past the sleeve)
 
 const albumCoverMeshes = [];         // front-cover meshes (toggle-on-click targets)
