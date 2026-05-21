@@ -230,9 +230,16 @@ function updateTilt() {
   }
 }
 
-function render() {
-  updateTilt();
-  renderer.render(scene, camera);
+// Throttle the full render loop to ~15fps so the tilt animation reads as
+// chunky/snappy in keeping with the pixel-art look.
+const FRAME_MS = 1000 / 15;
+let lastFrame = 0;
+function render(now) {
+  if (now - lastFrame >= FRAME_MS) {
+    lastFrame = now;
+    updateTilt();
+    renderer.render(scene, camera);
+  }
   requestAnimationFrame(render);
 }
-render();
+requestAnimationFrame(render);
