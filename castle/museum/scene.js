@@ -2083,13 +2083,130 @@ export function buildScene(layout, opts) {
     }
 
     const crystalMat = new THREE.MeshStandardMaterial({
-      color: 0x9cd6ff, emissive: 0x4080ff, emissiveIntensity: 1.6,
-      metalness: 0.30, roughness: 0.18, transparent: true, opacity: 0.75,
+      color: 0xb8e2ff, emissive: 0x60a0ff, emissiveIntensity: 3.0,
+      metalness: 0.30, roughness: 0.14, transparent: true, opacity: 0.88,
       side: THREE.DoubleSide,
     });
-    const innerLight = new THREE.PointLight(0x6aa8ff, 4.0, 10, 1.9);
+    const innerLight = new THREE.PointLight(0x6aa8ff, 7.5, 12, 1.7);
     diamondGroup.add(innerLight);
     diamondGroup.userData.innerLight = innerLight;
+
+    // ===== HOLY ORB SHELL — vertically oblong sacred bubble around the diamond.
+    // Additive-blended translucent ellipsoid that brightens whatever is behind
+    // it with a clear-blue glow, pushing back against the dungeon fog inside
+    // its silhouette so the sculpture reads as the room's epicenter. Fresnel
+    // hot at the rim defines the column's outline from any angle; the soft
+    // body adds a clean blue volume the diamond floats inside. `fog: false`
+    // keeps the bubble bright at any viewing distance.
+    const orbShellMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uColor: { value: new THREE.Color(0xbcd6f5) },
+        uTime:  { value: 0 },
+      },
+      vertexShader: `
+        uniform float uTime;
+        varying vec3 vWorldNormal;
+        varying vec3 vViewDir;
+        varying vec3 vLocalPos;
+        const int N_TENDRILS = 28;
+        void main() {
+          // Twenty-eight tiny drifting tendril seeds, generated procedurally
+          // per-index. Each seed direction wanders over time and pulses on a
+          // unique short period — overlapping pulses keep ~half active at any
+          // moment, so the silhouette reads as constant energetic rippling
+          // rather than discrete pokes.
+          float disp = 0.0;
+          for (int i = 0; i < N_TENDRILS; i++) {
+            float fi = float(i);
+            float r1 = fract(sin(fi * 12.9898) * 43758.5453);
+            float r2 = fract(sin(fi * 78.2330) * 17283.1234);
+            float r3 = fract(sin(fi * 39.4769) * 91234.5678);
+            // Fixed seed direction per index — tendrils flare from the same
+            // spots every cycle, so the orb reads as stationary while still
+            // rippling actively. Removing the time-driven seed wander stops
+            // the silhouette from swimming around.
+            vec3 seed = normalize(vec3(
+              sin(fi * 1.31 + r1 * 6.2831853),
+              cos(fi * 0.87 + r2 * 6.2831853) * (0.55 + r3 * 0.35),
+              sin(fi * 2.13 + r3 * 6.2831853)
+            ));
+            float d = dot(normalize(position), seed);
+            float radius   = 0.005 + r1 * 0.004;   // angular footprint ~5–7° — thin whiskers
+            float strength = 0.06  + r2 * 0.06;    // 0.06–0.12 local units — shallower peaks past the core
+            float period   = 1.3   + r3 * 1.4;     // 1.3–2.7s — twice as fast
+            float phase    = fi * 1.7;
+            float falloff = smoothstep(1.0 - radius, 1.0, d);
+            float pulse   = pow(max(0.0, sin(uTime * 6.2831853 / period + phase)), 1.4);
+            disp += falloff * strength * pulse;
+          }
+          vec3 displaced = position + normal * disp;
+          vec4 worldPos = modelMatrix * vec4(displaced, 1.0);
+          vWorldNormal = normalize(mat3(modelMatrix) * normal);
+          vViewDir = normalize(cameraPosition - worldPos.xyz);
+          vLocalPos = position;          // unit-sphere local pos, stable under group scale
+          gl_Position = projectionMatrix * viewMatrix * worldPos;
+        }
+      `,
+      fragmentShader: `
+        uniform vec3 uColor;
+        uniform float uTime;
+        varying vec3 vWorldNormal;
+        varying vec3 vViewDir;
+        varying vec3 vLocalPos;
+        void main() {
+          // Gentle multi-frequency ripple around the silhouette.
+          float lon = atan(vLocalPos.z, vLocalPos.x);
+          float lat = vLocalPos.y;
+          float ripple =
+              0.10 * sin(uTime * 0.55 + lon * 4.0)
+            + 0.07 * sin(uTime * 0.83 + lon * 3.0 + lat * 2.4)
+            + 0.05 * sin(uTime * 0.31 + lat * 3.7);
+          float fres = pow(1.0 - max(dot(normalize(vWorldNormal), normalize(vViewDir)), 0.0), 1.2);
+          fres = clamp(fres * (1.0 + ripple), 0.0, 1.0);
+
+          // Electrical current arcs: thin bright ridges traveling across the
+          // surface in different directions and speeds. Each band is the zero
+          // crossing of a sine traced along longitude/latitude, sharpened with
+          // pow(1-|sin|, high) so only narrow ridges light up. Bands move and
+          // overlap, occasionally crossing for a brief bright "spark".
+          float w1 = sin(lon * 5.0  + uTime * 2.6 + lat * 3.0);
+          float w2 = sin(lon * 3.0  - uTime * 1.9 + lat * 5.0);
+          float w3 = sin(lat * 7.0  + uTime * 3.4 + lon * 2.0);
+          float arc =
+              pow(1.0 - abs(w1), 32.0)
+            + pow(1.0 - abs(w2), 28.0)
+            + pow(1.0 - abs(w3), 36.0);
+          arc = clamp(arc, 0.0, 2.0);
+          // Hot-white core for arcs over the cool blue body — reads electrical.
+          vec3 arcColor = mix(uColor * 1.6, vec3(0.95, 0.98, 1.0), 0.55);
+
+          float a = 0.03 + fres * 0.10 + arc * 0.22;
+          gl_FragColor = vec4(
+            uColor * (0.55 + fres * 0.8) + arcColor * arc * 1.4,
+            a
+          );
+        }
+      `,
+      transparent: true,
+      blending: THREE.AdditiveBlending,
+      side: THREE.DoubleSide,
+      depthWrite: false,
+      fog: false,
+    });
+    const orbShell = new THREE.Mesh(new THREE.SphereGeometry(1.0, 96, 64), orbShellMat);
+    // Core sized to fully contain the bobbing diamond (max bbox ~2.16m wide,
+    // ±0.14m bob amplitude). Final world size 2.4m wide × 2.88m tall, leaving
+    // ~36cm vertical and ~12cm horizontal clearance even at the peak of the
+    // diamond's bob. Parented to `group` (not diamondGroup) so it stays
+    // stationary in world space while the diamond inside rotates and floats.
+    orbShell.scale.set(1.2, 1.44, 1.2);
+    orbShell.position.set(cx, diamondBaseY, cz);
+    orbShell.renderOrder = 9;     // render after most opaque scenery so additive lands on top
+    const _orbT0 = performance.now();
+    orbShell.onBeforeRender = () => {
+      orbShellMat.uniforms.uTime.value = (performance.now() - _orbT0) / 1000;
+    };
+    group.add(orbShell);
 
     pendingLoads.push(new Promise((resolve) => {
       new OBJLoader().load('museum/WasaDiminds-02.obj', (loaded) => {
