@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { OBJLoader } from 'three/addons/loaders/OBJLoader.js';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
@@ -186,6 +187,49 @@ const onResize = () => {
 window.addEventListener('resize', onResize);
 onResize();
 
+// === Top-left cubby: floating diamond sculpture. The base ring is mounted
+// to the cubby's ceiling (inverted from main hall where it sits on the floor)
+// and the diamond hangs below it, gradually bobbing up/down — no rotation.
+const topLeftCubby = cubbies[0][0];
+const SCULPT_Z = -CUBBY_D * 0.5;        // halfway into the cubby
+const RING_Y   =  CUBBY_H / 2 - 0.05;   // just below the cubby ceiling plane
+
+const ringMat = new THREE.MeshStandardMaterial({
+  color: 0x3a2614, metalness: 0.55, roughness: 0.42,
+  emissive: 0x110800, emissiveIntensity: 0.25,
+});
+const ring = new THREE.Mesh(new THREE.TorusGeometry(0.18, 0.035, 10, 28), ringMat);
+ring.rotation.x = Math.PI / 2;          // lie flat against the ceiling
+ring.position.set(0, RING_Y, SCULPT_Z);
+topLeftCubby.add(ring);
+
+const diamondGroup = new THREE.Group();
+diamondGroup.position.set(0, 0, SCULPT_Z);
+topLeftCubby.add(diamondGroup);
+
+new OBJLoader().load('/castle/museum/WasaDiminds-02.obj', (loaded) => {
+  const bbox = new THREE.Box3().setFromObject(loaded);
+  const size = bbox.getSize(new THREE.Vector3());
+  const maxD = Math.max(size.x, size.y, size.z);
+  const TARGET = 0.55;
+  loaded.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
+  const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+  loaded.position.sub(ctr);
+  const crystalMat = new THREE.MeshStandardMaterial({
+    color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 0.55,
+    transparent: true, opacity: 0.78, metalness: 0.30, roughness: 0.35,
+    side: THREE.DoubleSide,
+  });
+  loaded.traverse(o => { if (o.isMesh) o.material = crystalMat; });
+  diamondGroup.add(loaded);
+});
+
+const _sculptT0 = performance.now();
+function updateSculpture() {
+  const t = (performance.now() - _sculptT0) / 1000;
+  diamondGroup.position.y = Math.sin(t * Math.PI * 2 / 4.0) * 0.06;   // 4s period, ±6cm
+}
+
 // === Cursor tracking → per-cubby perspective tilt.
 // Mouse is unprojected onto the z=0 plane (where the cubby openings live);
 // each cubby's uBackOffset is set proportional to (mouseWorld - cubbyPos) so
@@ -240,6 +284,7 @@ function render(now) {
   if (now - lastFrame >= FRAME_MS) {
     lastFrame = now;
     updateTilt();
+    updateSculpture();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
