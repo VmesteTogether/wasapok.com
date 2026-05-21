@@ -357,6 +357,26 @@ function updateSculpture() {
   diamondGroup.position.y = DIAMOND_BASE_Y + Math.sin(t * Math.PI * 2 / 4.0) * 0.06;
 }
 
+// === Cubby C2: square album cover (vinyl-record style), pixelated. Sized so
+// it sits centered with visible cubby walls around it. Exposed via
+// cubbies.C2.userData.albumCover so a future interaction layer (raycaster
+// click / hover / drag) can target it directly.
+const albumCubby = cubbies.C2;
+const albumTex = new THREE.TextureLoader().load('BiomePlain_Album.png');
+albumTex.magFilter = THREE.NearestFilter;
+albumTex.minFilter = THREE.NearestFilter;
+albumTex.colorSpace = THREE.SRGBColorSpace;
+albumTex.anisotropy = 1;
+const ALBUM_SIZE = 1.4;
+const albumMesh = new THREE.Mesh(
+  new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
+  new THREE.MeshBasicMaterial({ map: albumTex, side: THREE.DoubleSide }),
+);
+albumMesh.position.set(0, 0, -CUBBY_D * 0.55);   // standing inside the cubby
+albumMesh.userData.kind = 'albumCover';
+albumCubby.add(albumMesh);
+albumCubby.userData.albumCover = albumMesh;
+
 // === Cursor tracking → per-cubby perspective tilt.
 // Mouse is unprojected onto the z=0 plane (where the cubby openings live);
 // each cubby's uBackOffset is set proportional to (mouseWorld - cubbyPos) so
