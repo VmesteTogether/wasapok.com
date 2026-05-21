@@ -1157,6 +1157,67 @@ export function buildScene(opts) {
         cork.onBeforeRender = () => { rtex.offset.x = (performance.now() / 1000 - corkT0) * 0.20; };
         pivot.add(cork); // local origin = pivot origin, so corkscrew sits dead-center
         group.add(pivot);
+
+        // ---- Convoluted cybertronian purple tube bundle ----
+        // Tangled cable mass strung from the dome (or flat ceiling) down to the
+        // top of the chandelier. Tubes are siblings of the pivot (NOT children)
+        // so they stay anchored when the chandelier spins; their bottom ends
+        // plunge a half-meter into the top of the chandelier silhouette so the
+        // static attachment is hidden by the GLB's geometry.
+        const chandTopY = pivotY + ss.y / 2;
+        const ceilingY  = opts.cyberDome ? (ROOM_CEIL + 5.6) : (ROOM_CEIL + 0.1);
+        const spread    = Math.max(ss.x, ss.z);
+        const bottomR   = spread * 0.22;
+        const ceilingR  = spread * (opts.cyberDome ? 0.55 : 0.35);
+        // Each tube gets its own dark matte material with a distinct hue
+        // sweeping from deep indigo through royal purple to wine-magenta, so
+        // individual cables read separately in the tangle instead of melting
+        // into one mass.
+        const tubesGroup = new THREE.Group();
+        const N_TUBES = 13;
+        for (let i = 0; i < N_TUBES; i++) {
+          const hue = (0.66 + (i / N_TUBES) * 0.32 + (Math.random() - 0.5) * 0.04 + 1) % 1;
+          const baseCol = new THREE.Color().setHSL(hue, 0.82, 0.08 + Math.random() * 0.05);
+          const emCol   = new THREE.Color().setHSL(hue, 1.0,  0.38);
+          const tubeMat = new THREE.MeshStandardMaterial({
+            color: baseCol, emissive: emCol, emissiveIntensity: 0.12,
+            metalness: 0.05, roughness: 0.96,
+          });
+          const a0 = Math.random() * Math.PI * 2;
+          const a1 = Math.random() * Math.PI * 2;
+          const bot = new THREE.Vector3(
+            ANCHOR_X + Math.cos(a0) * bottomR * Math.random(),
+            chandTopY - 0.4 * Math.random(),
+            ANCHOR_Z + Math.sin(a0) * bottomR * Math.random(),
+          );
+          const top = new THREE.Vector3(
+            ANCHOR_X + Math.cos(a1) * ceilingR * (0.4 + Math.random() * 0.8),
+            ceilingY + Math.random() * 0.4,
+            ANCHOR_Z + Math.sin(a1) * ceilingR * (0.4 + Math.random() * 0.8),
+          );
+          // Intermediate control points: lateral wander peaks mid-run so the
+          // tangle is densest in the middle, and tubes braid through each other.
+          const N_CTRL = 5;
+          const pts = [bot];
+          for (let k = 1; k <= N_CTRL; k++) {
+            const tt = k / (N_CTRL + 1);
+            const wander = Math.sin(tt * Math.PI) * spread * 0.40;
+            const wa = a0 + tt * (a1 - a0) + (Math.random() - 0.5) * 2.4;
+            pts.push(new THREE.Vector3(
+              ANCHOR_X + Math.cos(wa) * wander + (bot.x - ANCHOR_X) * (1 - tt) + (top.x - ANCHOR_X) * tt,
+              bot.y + (top.y - bot.y) * tt + (Math.random() - 0.5) * 0.7,
+              ANCHOR_Z + Math.sin(wa) * wander + (bot.z - ANCHOR_Z) * (1 - tt) + (top.z - ANCHOR_Z) * tt,
+            ));
+          }
+          pts.push(top);
+          const curve = new THREE.CatmullRomCurve3(pts, false, 'catmullrom', 0.6);
+          const radius = 0.055 + Math.random() * 0.045;
+          const geom = new THREE.TubeGeometry(curve, 96, radius, 8, false);
+          const tube = new THREE.Mesh(geom, tubeMat);
+          tubesGroup.add(tube);
+        }
+        group.add(tubesGroup);
+
         chandelier.obj = pivot;
 
         resolve();
@@ -1473,10 +1534,21 @@ export function buildScene(opts) {
         const sz = bb.getSize(new THREE.Vector3());
         const maxD = Math.max(sz.x, sz.y, sz.z);
         proto.scale.setScalar(maxD > 0 ? 0.208 / maxD : 1); // miniature ~0.208 m (65% of prior 0.32)
-        const whiteMat = new THREE.MeshStandardMaterial({
-          color: 0xeeeae2, roughness: 0.95, metalness: 0.0,
+        // Reskin ship meshes in the diamond-base biopunk palette: bulk in
+        // gunmetal, brightest GLB meshes in shinier bandSteel for accent
+        // variation. Same materials the museum diamond manifold uses.
+        const shipGunmetal = new THREE.MeshStandardMaterial({
+          color: 0xb0c0d0, metalness: 0.85, roughness: 0.40,
         });
-        proto.traverse(o => { if (o.isMesh) o.material = whiteMat; });
+        const shipBandSteel = new THREE.MeshStandardMaterial({
+          color: 0xccdce8, metalness: 1.0, roughness: 0.22,
+        });
+        proto.traverse(o => {
+          if (!o.isMesh || !o.material) return;
+          const c = o.material.color;
+          const lum = c ? c.r * 0.299 + c.g * 0.587 + c.b * 0.114 : 1;
+          o.material = lum > 0.6 ? shipBandSteel : shipGunmetal;
+        });
         const sb = new THREE.Box3().setFromObject(proto);
         const sc = sb.getCenter(new THREE.Vector3());
         const ships = [];
