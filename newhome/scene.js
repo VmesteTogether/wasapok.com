@@ -394,6 +394,38 @@ const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the us
 const VINYL_PEEK_X   = ALBUM_SIZE * 0.40;   // vinyl peeks out far enough that a slice of the orange label shows past the sleeve edge
 const VINYL_OUT_X    = ALBUM_SIZE * 0.95;   // fully popped out (label visible past the sleeve)
 
+// Procedural vinyl texture — dark base with faint concentric grooves so the
+// disc reads as a record rather than a flat black circle. One canvas shared
+// across every vinyl mesh.
+const vinylTex = (() => {
+  const size = 512;
+  const cv = document.createElement('canvas');
+  cv.width = cv.height = size;
+  const ctx = cv.getContext('2d');
+  ctx.fillStyle = '#0a0a0a';
+  ctx.fillRect(0, 0, size, size);
+  const cx = size / 2, cy = size / 2;
+  const maxR = size / 2;
+  const minR = maxR * 0.32;            // grooves start outside the label area
+  const N = 26;
+  ctx.lineWidth = 1.4;
+  for (let i = 0; i < N; i++) {
+    const t = i / (N - 1);
+    const r = minR + t * (maxR - minR);
+    // Alternate slightly brighter / darker so adjacent grooves catch the eye
+    ctx.strokeStyle = i % 2 === 0 ? 'rgba(46,46,46,0.55)' : 'rgba(24,24,24,0.55)';
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+})();
+
 const albumCoverMeshes = [];         // front-cover meshes (toggle-on-click targets)
 const albumAllMeshes   = [];         // every interactive album mesh (hit-test "outside?")
 const albumStates      = [];
@@ -439,7 +471,7 @@ function placeAlbumCover(cubbyKey, texPath) {
   albumRoot.add(vinylGroup);
   const vinyl = new THREE.Mesh(
     new THREE.CircleGeometry(ALBUM_SIZE * 0.46, 48),
-    new THREE.MeshBasicMaterial({ color: VINYL_COLOR, ...matOpts }),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: vinylTex, ...matOpts }),
   );
   vinyl.renderOrder = 5;
   vinyl.userData.kind = 'albumVinyl';
