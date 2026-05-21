@@ -666,21 +666,28 @@ function buildRecordPlayer() {
   power.position.set(W / 2 - 0.10, H / 2 + 0.006, D / 2 - 0.08);
   ro(power, 7);
 
-  // Dust cover — clear acrylic panel hinged at the back, lifted up ~75°.
+  // Dust cover — clear acrylic panel hinged at the BACK-TOP edge of the
+  // plinth and lifted up to nearly vertical with a small backward lean.
+  // Group-based so the hinge math is intuitive (group at the hinge, plane
+  // shifted up by half its height so its bottom edge sits at the hinge).
+  const coverHinge = new THREE.Group();
+  coverHinge.position.set(0, H / 2, -D / 2);
+  coverHinge.rotation.x = -0.20;                  // ~11.5° lean back from vertical
+  player.add(coverHinge);
+  const coverPlaneH = D * 0.95;
   const cover = new THREE.Mesh(
-    new THREE.PlaneGeometry(W * 0.97, D * 1.10),
+    new THREE.PlaneGeometry(W * 0.97, coverPlaneH),
     dustCoverMat,
   );
-  cover.position.set(0, H / 2 + 0.40, -D / 2 + 0.02);
-  cover.rotation.x = -Math.PI / 2.4;
+  cover.position.y = coverPlaneH / 2;
   cover.renderOrder = 13;
-  player.add(cover);
+  coverHinge.add(cover);
 
   return player;
 }
 const recordPlayer = buildRecordPlayer();
-recordPlayer.rotation.x = 1.10;                                // ~63° forward tilt — top reads + cover still visible behind
-recordPlayer.position.set(0, -CUBBY_H / 2 + 0.45, -CUBBY_D * 0.55);
+recordPlayer.rotation.x = 0;                                                // flat — viewed straight-on like an actual bookshelf turntable
+recordPlayer.position.set(0, -CUBBY_H / 2 + (0.12 / 2) + 0.04, -CUBBY_D * 0.40);
 cubbies.B2.add(recordPlayer);
 cubbies.B2.userData.recordPlayer = recordPlayer;
 
