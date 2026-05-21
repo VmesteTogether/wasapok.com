@@ -154,7 +154,7 @@ const onResize = () => {
   const distH = (GRID_H / 2) / Math.tan(fovV / 2);
   const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
   const distW = (GRID_W / 2) / Math.tan(fovH / 2);
-  camera.position.z = Math.max(distH, distW) * 0.92;
+  camera.position.z = Math.max(distH, distW) * 1.02;
   camera.updateProjectionMatrix();
   renderer.setSize(Math.floor(w / PIXELATION), Math.floor(h / PIXELATION), false);
   canvas.style.width  = w + 'px';
