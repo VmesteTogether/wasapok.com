@@ -270,10 +270,12 @@ diamondToonGrad.minFilter = THREE.NearestFilter;
 diamondToonGrad.magFilter = THREE.NearestFilter;
 diamondToonGrad.needsUpdate = true;
 
+// Opaque toon material (main hall uses 0.62 alpha but that washes into the
+// dark cubby back without the surrounding orb/fog). Bumped emissive too.
 const crystalMat = new THREE.MeshToonMaterial({
-  color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 1.4,
+  color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 2.0,
   gradientMap: diamondToonGrad,
-  transparent: true, opacity: 0.62, side: THREE.DoubleSide,
+  side: THREE.DoubleSide,
 });
 const diamondOutlineMat = new THREE.MeshBasicMaterial({
   color: 0xb8d8ff, side: THREE.BackSide,
@@ -285,26 +287,39 @@ diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 topLeftCubby.add(diamondGroup);
 diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 
-new OBJLoader().load('/castle/museum/WasaDiminds-02.obj', (loaded) => {
-  const bbox = new THREE.Box3().setFromObject(loaded);
-  const size = bbox.getSize(new THREE.Vector3());
-  const maxD = Math.max(size.x, size.y, size.z);
-  const TARGET = 0.55;
-  loaded.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
-  const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
-  loaded.position.sub(ctr);
-  const outlines = [];
-  loaded.traverse(o => {
-    if (!o.isMesh) return;
-    o.material = crystalMat;
-    const outline = o.clone();
-    outline.material = diamondOutlineMat;
-    outline.scale.multiplyScalar(1.03);
-    outlines.push([o.parent, outline]);
-  });
-  outlines.forEach(([p, m]) => p.add(m));
-  diamondGroup.add(loaded);
-});
+// Immediate procedural fallback so the cubby has a visible diamond even
+// before the OBJ has loaded (and if it never loads). Removed when OBJ loads.
+const fallbackGeom = new THREE.OctahedronGeometry(0.30, 0);
+fallbackGeom.scale(1.0, 1.5, 1.0);
+const fallbackMesh = new THREE.Mesh(fallbackGeom, crystalMat);
+diamondGroup.add(fallbackMesh);
+
+new OBJLoader().load(
+  '/castle/museum/WasaDiminds-02.obj',
+  (loaded) => {
+    diamondGroup.remove(fallbackMesh);
+    const bbox = new THREE.Box3().setFromObject(loaded);
+    const size = bbox.getSize(new THREE.Vector3());
+    const maxD = Math.max(size.x, size.y, size.z);
+    const TARGET = 0.55;
+    loaded.scale.setScalar(maxD > 0 ? TARGET / maxD : 1);
+    const ctr = new THREE.Box3().setFromObject(loaded).getCenter(new THREE.Vector3());
+    loaded.position.sub(ctr);
+    const outlines = [];
+    loaded.traverse(o => {
+      if (!o.isMesh) return;
+      o.material = crystalMat;
+      const outline = o.clone();
+      outline.material = diamondOutlineMat;
+      outline.scale.multiplyScalar(1.03);
+      outlines.push([o.parent, outline]);
+    });
+    outlines.forEach(([p, m]) => p.add(m));
+    diamondGroup.add(loaded);
+  },
+  undefined,
+  (err) => { console.error('[newhome] WasaDiminds-02.obj failed to load:', err); },
+);
 
 const _sculptT0 = performance.now();
 function updateSculpture() {
