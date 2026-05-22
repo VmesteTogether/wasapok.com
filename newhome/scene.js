@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
@@ -685,13 +686,18 @@ function placeAlbumCover(cubbyKey, texPath) {
   // support without poking through the front.
   const EASEL_R = 0.025;
   const easelGeom = new THREE.CylinderGeometry(EASEL_R, EASEL_R, ALBUM_SIZE, 12);
+  // depthTest/depthWrite off + renderOrder=5 so the tilting cubby side
+  // walls never sweep over the easel during cursor parallax (same trick
+  // the biopunk manifold uses). Stays under album covers (renderOrder 8).
   const easelMat = new THREE.MeshStandardMaterial({
     color: 0x6b4423, metalness: 0.05, roughness: 0.75,
+    depthTest: false, depthWrite: false,
   });
   for (const sx of [-1, 1]) {
     const leg = new THREE.Mesh(easelGeom, easelMat);
     leg.position.set(sx * 0.80, LEAN_Y, -CUBBY_D * 0.55 - EASEL_R);
     leg.rotation.x = -LEAN_ANGLE;
+    leg.renderOrder = 5;
     cubby.add(leg);
   }
 
@@ -943,6 +949,148 @@ recordPlayer.position.set(0, -CUBBY_H / 2 + (0.12 / 2) + 0.04, -CUBBY_D * 0.40);
 cubbies.B2.add(recordPlayer);
 cubbies.B2.userData.recordPlayer = recordPlayer;
 
+// === Top-right cubby D6: shrunk Temmys-Castle3 icon GLB, sitting on the
+// shelf like a trophy. Fit by bbox to ~85% of the cubby's tightest dimension,
+// re-center horizontally and depth-wise, drop so bbox.min.y rests on the
+// cubby floor with a hair of padding to avoid z-fighting.
+// The GLB ships with surrounding terrain (dirt_block, grass_texture,
+// ocean_texture_1/2/3). On a shelf we only want the castle structure, so
+// hide the terrain meshes AND exclude them from the bbox so the fit-to-cubby
+// scale is driven by the castle silhouette alone, not a 300m-wide ocean.
+const D6_HIDE_NAMES = /^(dirt_block|grass_texture|ocean_texture_\d+|walkable_plane|cube017|cube018|gate[ _]?0?1)$/i;
+new GLTFLoader().load('Temmys-Castle3-ICON.q.glb', (gltf) => {
+  const castle = gltf.scene;
+  const box = new THREE.Box3();
+  const planes = cubbies.D6.userData.clippingPlanes;
+  castle.traverse(o => {
+    if (!o.isMesh) return;
+    if (D6_HIDE_NAMES.test(o.name)) { o.visible = false; return; }
+    box.expandByObject(o);
+    // Apply cubby's world-space X/Y clipping planes so any overflow past the
+    // cubby opening is masked instead of poking into adjacent cubbies.
+    // DoubleSide so reversed-normal roof panels don't render as holes.
+    const mats = Array.isArray(o.material) ? o.material : [o.material];
+    for (const m of mats) {
+      if (!m) continue;
+      m.clippingPlanes = planes;
+      m.side = THREE.DoubleSide;
+    }
+  });
+  const size = box.getSize(new THREE.Vector3());
+  const center = box.getCenter(new THREE.Vector3());
+  // Generous in-plane margin (X/Y overflow is clipped to the cubby footprint
+  // by the planes above), tighter depth margin so the castle doesn't poke
+  // through the front maple wall.
+  const fit = Math.min(
+    (CUBBY_W * 1.25) / size.x,
+    (CUBBY_H * 1.25) / size.y,
+    (CUBBY_D * 0.9)  / size.z,
+  ) * 2;
+  castle.scale.setScalar(fit);
+  const X_NUDGE = 0.22;     // visual centering — bbox center reads slightly left of cubby midline
+  castle.position.set(
+    -center.x * fit + X_NUDGE,
+    -box.min.y * fit - CUBBY_H / 2 + 0.005,
+    -center.z * fit - CUBBY_D * 0.5,
+  );
+  cubbies.D6.add(castle);
+  cubbies.D6.userData.castle = castle;
+});
+
+// === D6 castle waterfall: pixelated stream that spills from the castle
+// entrance in D6 and falls 4 cubby-heights to the floor below the shelf.
+// Lives at scene-level (not parented to a cubby) so it crosses cubby
+// boundaries; sits forward of the maple wall (z > 0) so cubby dividers
+// don't slice it into segments.
+const WF_W = 0.40;
+const WF_TOP_Y = cubbies.D6.position.y - CUBBY_H / 2 + 0.02;   // just above the D6 floor
+const WF_BOT_Y = -GRID_H / 2 + 0.08;                           // anchor right under the cubbies (bottom plank)
+const WF_FALL  = WF_TOP_Y - WF_BOT_Y;
+const WF_X     = cubbies.D6.position.x + 0.22;                 // line up with castle (X_NUDGE)
+const WF_Z     = 0.06;                                         // in front of the maple wall
+
+// 16×128 pixelated canvas — pale cyan base with a few bright vertical streak
+// columns and dark speckles for depth. NearestFilter keeps it chunky.
+const wfCv = document.createElement('canvas');
+wfCv.width = 16; wfCv.height = 128;
+const wfCtx = wfCv.getContext('2d');
+wfCtx.fillStyle = 'rgba(150, 200, 235, 0.45)';
+wfCtx.fillRect(0, 0, 16, 128);
+wfCtx.fillStyle = 'rgba(225, 240, 255, 0.92)';
+for (const [x, w] of [[2, 1], [5, 2], [9, 1], [12, 2]]) wfCtx.fillRect(x, 0, w, 128);
+wfCtx.fillStyle = 'rgba(80, 130, 180, 0.55)';
+for (let i = 0; i < 36; i++) wfCtx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 128), 1, 2);
+const wfTex = new THREE.CanvasTexture(wfCv);
+wfTex.wrapS = wfTex.wrapT = THREE.RepeatWrapping;
+wfTex.magFilter = THREE.NearestFilter;
+wfTex.minFilter = THREE.NearestFilter;
+wfTex.repeat.set(1, WF_FALL / 0.8);   // each texture tile ~0.8m tall over the full fall
+
+const waterfall = new THREE.Mesh(
+  new THREE.PlaneGeometry(WF_W, WF_FALL),
+  new THREE.MeshBasicMaterial({ map: wfTex, transparent: true, depthWrite: false }),
+);
+waterfall.position.set(WF_X, (WF_TOP_Y + WF_BOT_Y) / 2, WF_Z);
+scene.add(waterfall);
+
+function updateWaterfall() {
+  wfTex.offset.y -= 0.0015;   // scroll DOWN → streaks read as falling (meditative pace)
+  puddleTex.offset.x += 0.0008;  // gentle horizontal ripple drift
+  sprayTex.offset.y  -= 0.004;   // sparse droplets reading as rising spray
+}
+
+// === Waterfall splash at impact point. Two stacked pixelated elements:
+// a wide horizontal puddle that ripples sideways, and a smaller spray
+// patch just above with sparse bright droplets scrolling upward.
+
+// --- Puddle: 32×8 canvas. Darker pool rows at the bottom, ripple pixels
+// above. Horizontal-scrolling texture sells the spreading water.
+const puddleCv = document.createElement('canvas');
+puddleCv.width = 32; puddleCv.height = 8;
+const puddleCtx = puddleCv.getContext('2d');
+puddleCtx.fillStyle = 'rgba(70, 120, 175, 0.78)';
+puddleCtx.fillRect(0, 4, 32, 4);                       // pool body
+puddleCtx.fillStyle = 'rgba(170, 210, 240, 0.85)';
+for (const x of [1, 5, 10, 15, 20, 25, 29]) puddleCtx.fillRect(x, 3, 2, 1);  // bright ripple crests
+puddleCtx.fillStyle = 'rgba(220, 240, 255, 0.65)';
+for (const x of [3, 7, 12, 17, 21, 26, 30]) puddleCtx.fillRect(x, 2, 1, 1);  // foam dots
+const puddleTex = new THREE.CanvasTexture(puddleCv);
+puddleTex.wrapS = puddleTex.wrapT = THREE.RepeatWrapping;
+puddleTex.magFilter = THREE.NearestFilter;
+puddleTex.minFilter = THREE.NearestFilter;
+const puddle = new THREE.Mesh(
+  new THREE.PlaneGeometry(WF_W * 2.2, 0.20),
+  new THREE.MeshBasicMaterial({ map: puddleTex, transparent: true, depthWrite: false }),
+);
+puddle.position.set(WF_X, WF_BOT_Y + 0.05, WF_Z + 0.01);
+scene.add(puddle);
+
+// --- Spray: 32×24, mostly transparent with sparse bright pixels at varied
+// heights. Scrolling UP gives the impression of droplets jumping out of
+// the impact, the empty rows breaking it up so it doesn't read as a stream.
+const sprayCv = document.createElement('canvas');
+sprayCv.width = 32; sprayCv.height = 24;
+const sprayCtx = sprayCv.getContext('2d');
+sprayCtx.clearRect(0, 0, 32, 24);
+sprayCtx.fillStyle = 'rgba(225, 240, 255, 0.90)';
+for (let i = 0; i < 35; i++) {
+  sprayCtx.fillRect(Math.floor(Math.random() * 32), Math.floor(Math.random() * 24), 1, 1);
+}
+sprayCtx.fillStyle = 'rgba(150, 195, 230, 0.70)';
+for (let i = 0; i < 23; i++) {
+  sprayCtx.fillRect(Math.floor(Math.random() * 32), Math.floor(Math.random() * 24), 1, 1);
+}
+const sprayTex = new THREE.CanvasTexture(sprayCv);
+sprayTex.wrapS = sprayTex.wrapT = THREE.RepeatWrapping;
+sprayTex.magFilter = THREE.NearestFilter;
+sprayTex.minFilter = THREE.NearestFilter;
+const spray = new THREE.Mesh(
+  new THREE.PlaneGeometry(WF_W * 1.75, 0.375),
+  new THREE.MeshBasicMaterial({ map: sprayTex, transparent: true, depthWrite: false }),
+);
+spray.position.set(WF_X, WF_BOT_Y + 0.22, WF_Z + 0.015);
+scene.add(spray);
+
 // Cursor over ANY part of the turntable → dust cover lifts open. Cursor off
 // → cover lerps back closed. Raycaster tests the whole player subtree, so
 // any mesh (plinth, platter, tonearm, even the cover itself) counts as a
@@ -1067,6 +1215,8 @@ function updateTilt() {
       // Merged bottom half shares its Group with the top half — tilt it once.
       if (isMergedBot(row, col)) continue;
       const cg = cubbies[row][col];
+      // D6 holds the castle model; tilting the back into it causes clipping.
+      if (cg === cubbies.D6) continue;
       const dx = (mouseWorld.x - cg.position.x) * TILT_SCALE;
       const dy = (mouseWorld.y - cg.position.y) * TILT_SCALE;
       _target.set(
@@ -1136,6 +1286,7 @@ function render(now) {
     updateAlbumState();
     updateRecordPlayerCover();
     updateDust();
+    updateWaterfall();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
