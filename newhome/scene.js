@@ -35,13 +35,21 @@ camera.lookAt(0, 0, 0);
 // with vertex colors and aren't affected. Three lights mimic the
 // pixel-art shading convention: soft ambient base, key from front-upper-left,
 // faint warm bottom-fill to echo the lit bottom plank of each cubby.
-scene.add(new THREE.AmbientLight(0xfff0d8, 0.45));
-const key = new THREE.DirectionalLight(0xfff4dc, 0.95);
+// Trophy Gallery lighting — warmer amber ambient, soft directional key,
+// gentle bottom fill from the carpet, plus an off-screen-right lamp glow
+// pooling onto the metallic objects (diamond / manifold / turntable).
+// Only standard-material objects pick up the lamp; the bookshelf wall is
+// MeshBasic so its tone is baked in.
+scene.add(new THREE.AmbientLight(0xffd6a0, 0.55));
+const key = new THREE.DirectionalLight(0xfff0c8, 0.85);
 key.position.set(-6, 8, 10);
 scene.add(key);
-const fill = new THREE.DirectionalLight(0xffc488, 0.22);
+const fill = new THREE.DirectionalLight(0xffc488, 0.20);
 fill.position.set(0, -6, 6);
 scene.add(fill);
+const lamp = new THREE.PointLight(0xffb060, 1.8, 22, 1.5);
+lamp.position.set(10, 2, 3);
+scene.add(lamp);
 
 // --- Procedural maple bookshelf wall: wood frame only (top/bottom planks +
 // side dividers), cubby interiors alpha=0 so the recessed-box geometry
@@ -130,22 +138,27 @@ const wallMat = new THREE.MeshBasicMaterial({
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(GRID_W, GRID_H), wallMat);
 scene.add(wall);
 
-// Black border quads around the 6×4 bookshelf so the outside scene only
-// shows through the hallway opening — not in the negative space around the
-// shelf when the screen is wider than the grid. Sit just behind the wall
-// plane (z = -0.01) and write depth, occluding sky/ground there.
+// Trophy Gallery room context — dark mahogany wood paneling on three
+// sides + plush burgundy carpet below, framing the bookshelf as if it's
+// mounted on the wall of a quiet, warm den. Sits just behind the wall
+// plane (z = -0.01) and writes depth, occluding the outside scene
+// everywhere except through the hallway opening. A brass-warm baseboard
+// trim sits at the bookshelf/carpet seam for that "real room" detail.
 {
   const M = 60;
-  const mat = new THREE.MeshBasicMaterial({ color: 0x1a1410 });
-  const add = (w, h, x, y) => {
+  const wallMat2 = new THREE.MeshBasicMaterial({ color: 0x281208 });   // dark mahogany
+  const floorMat = new THREE.MeshBasicMaterial({ color: 0x4a1418 });   // deep burgundy carpet
+  const trimMat  = new THREE.MeshBasicMaterial({ color: 0x5a3a1a });   // warm wood baseboard
+  const add = (mat, w, h, x, y, z = -0.01) => {
     const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
-    q.position.set(x, y, -0.01);
+    q.position.set(x, y, z);
     scene.add(q);
   };
-  add(M * 2, M, 0,  (GRID_H + M) / 2);
-  add(M * 2, M, 0, -(GRID_H + M) / 2);
-  add(M, GRID_H, -(GRID_W + M) / 2, 0);
-  add(M, GRID_H,  (GRID_W + M) / 2, 0);
+  add(wallMat2, M * 2, M,    0,  (GRID_H + M) / 2);                    // wall above
+  add(floorMat, M * 2, M,    0, -(GRID_H + M) / 2);                    // carpet below
+  add(wallMat2, M, GRID_H, -(GRID_W + M) / 2, 0);                      // left wall
+  add(wallMat2, M, GRID_H,  (GRID_W + M) / 2, 0);                      // right wall
+  add(trimMat,  GRID_W + 2, 0.3, 0, -GRID_H / 2 - 0.15, -0.005);       // baseboard
 }
 
 // --- Recessed cubby box: 5 inward-facing panels (back + top + bottom + 2
@@ -206,14 +219,7 @@ const cubbyGeom = makeCubbyGeom(CUBBY_W, CUBBY_H);
 // Merged cubby reads as a small indoor hallway: cream-painted ceiling,
 // warm beige plaster walls, dark hardwood floor — so the (now open) back
 // clearly looks like a DOORWAY onto the outside, not a deeper cubby hole.
-const mergedCubbyGeom = makeCubbyGeom(CUBBY_W, MERGED_H, {
-  omitBack: true,
-  colors: {
-    top:    [0.78, 0.74, 0.66],
-    bottom: [0.32, 0.20, 0.10],
-    sides:  [0.68, 0.60, 0.48],
-  },
-});
+const mergedCubbyGeom = makeCubbyGeom(CUBBY_W, MERGED_H, { omitBack: true });
 // Shader: shifts vertices flagged isBack=1 by per-cubby uBackOffset.xy.
 // Forwards the color attribute manually since ShaderMaterial doesn't auto-wire
 // the vertexColors flag like MeshBasicMaterial does.
@@ -561,7 +567,7 @@ fetch('WasaDiminds-02.obj').then(r => {
   const ctr  = geom.boundingBox.getCenter(new THREE.Vector3());
   const maxD = Math.max(size.x, size.y, size.z) || 1;
   geom.translate(-ctr.x, -ctr.y, -ctr.z);
-  const s = 0.85 / maxD;
+  const s = 1.20 / maxD;
   geom.scale(s, s, s);
   diamondGroup.add(new THREE.Mesh(geom, crystalMat));
   console.log('[newhome] WasaDiminds-02 parsed: verts=' + (verts.length / 3) + ' tris=' + (indices.length / 3));
@@ -609,6 +615,11 @@ const OPEN_Z_POP     = 0.55;         // albumRoot Z translation toward camera
 const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the user
 const VINYL_PEEK_X   = ALBUM_SIZE * 0.40;   // vinyl peeks out far enough that a slice of the orange label shows past the sleeve edge
 const VINYL_OUT_X    = ALBUM_SIZE * 0.95;   // fully popped out (label visible past the sleeve)
+// Lean: when closed, the cover leans back ~12° with its bottom edge
+// resting on the cubby floor — like a record on display. Lerps to flat
+// as the cover opens so the book-swing reads cleanly.
+const LEAN_ANGLE     = 0.21;                // rad (~12° back tilt)
+const LEAN_Y         = -0.143;              // y shift so the rotated cover's bottom touches the cubby floor
 
 // Procedural vinyl texture — dark base with faint concentric grooves so the
 // disc reads as a record rather than a flat black circle. One canvas shared
@@ -662,8 +673,27 @@ function placeAlbumCover(cubbyKey, texPath) {
   const matOpts = { depthTest: false, depthWrite: false, side: THREE.DoubleSide, transparent: true };
 
   const albumRoot = new THREE.Group();
-  albumRoot.position.set(0, 0, -CUBBY_D * 0.55);
+  albumRoot.position.set(0, LEAN_Y, -CUBBY_D * 0.55);
+  albumRoot.rotation.x = -LEAN_ANGLE;
   cubby.add(albumRoot);
+
+  // Easel — two thin diagonal back-supports flanking the cover, leaning at
+  // the same angle. Lives in the cubby (not albumRoot), so it stays put
+  // when the album pops forward to open, like a plate stand left on the
+  // shelf. Legs sit 0.10m outside the cover's edges (clear of the hover
+  // scale-up) and 0.025m behind the cover plane, so they read as a back
+  // support without poking through the front.
+  const EASEL_R = 0.025;
+  const easelGeom = new THREE.CylinderGeometry(EASEL_R, EASEL_R, ALBUM_SIZE, 12);
+  const easelMat = new THREE.MeshStandardMaterial({
+    color: 0x6b4423, metalness: 0.05, roughness: 0.75,
+  });
+  for (const sx of [-1, 1]) {
+    const leg = new THREE.Mesh(easelGeom, easelMat);
+    leg.position.set(sx * 0.80, LEAN_Y, -CUBBY_D * 0.55 - EASEL_R);
+    leg.rotation.x = -LEAN_ANGLE;
+    cubby.add(leg);
+  }
 
   // Cover pivot at the cover's LEFT edge. The cover mesh is shifted +x by
   // half its size so its center sits at the cubby cover position when closed,
@@ -983,6 +1013,12 @@ function updateAlbumState() {
     const ps = 1 + (OPEN_SCALE - 1) * o;
     s.albumRoot.scale.set(ps, ps, ps);
     s.albumRoot.position.z = -CUBBY_D * 0.55 + OPEN_Z_POP * o;
+    // Lean rolls flat as the cover opens: full -12° back-tilt at closed,
+    // 0° at fully open. Position.y follows so the bottom stays anchored
+    // while leaned but the cover re-centers when flat.
+    const lean = 1 - o;
+    s.albumRoot.rotation.x = -LEAN_ANGLE * lean;
+    s.albumRoot.position.y =  LEAN_Y     * lean;
     s.coverPivot.rotation.y = OPEN_COVER_ROT * o;
 
     // --- Vinyl pop-out (only meaningful when cover is open). When cover is
@@ -1042,6 +1078,50 @@ function updateTilt() {
   }
 }
 
+// === Dust motes — slow-drifting warm specks suspended in front of the
+// bookshelf, catching the amber lighting. Sells the hushed late-night
+// trophy-room atmosphere. High renderOrder so they pass over every other
+// layer (cubby panels, albums, manifold) instead of being occluded.
+const DUST_COUNT = 30;
+const dustGeom = new THREE.PlaneGeometry(0.026, 0.026);
+const dustMat = new THREE.MeshBasicMaterial({
+  color: 0xfff0c8, transparent: true, opacity: 0.32, depthWrite: false,
+});
+const dustMotes = [];
+for (let i = 0; i < DUST_COUNT; i++) {
+  const m = new THREE.Mesh(dustGeom, dustMat);
+  m.position.set(
+    (Math.random() - 0.5) * 14,
+    (Math.random() - 0.5) * 9,
+    (Math.random() - 0.5) * 3 + 4,                       // in front of the bookshelf
+  );
+  m.renderOrder = 20;
+  m.userData = {
+    vy:      -0.0033 - Math.random() * 0.0057,           // slow downward drift
+    baseX:    m.position.x,                              // sway pivots around the spawn x
+    swayAmp:  0.35 + Math.random() * 0.55,               // ~0.35–0.9 m peak-to-pivot horizontal swing
+    rotAmp:   0.30 + Math.random() * 0.40,               // gentle tilt — leaf catching air
+    phase:    Math.random() * Math.PI * 2,
+    freq:     0.55 + Math.random() * 0.70,               // ~0.55–1.25 rad/s
+  };
+  scene.add(m);
+  dustMotes.push(m);
+}
+function updateDust() {
+  const t = performance.now() / 1000;
+  for (const m of dustMotes) {
+    const ud = m.userData;
+    m.position.y += ud.vy;
+    const swing = Math.sin(t * ud.freq + ud.phase);
+    m.position.x   = ud.baseX + swing * ud.swayAmp;                       // swing around base x
+    m.rotation.z   = Math.cos(t * ud.freq + ud.phase) * ud.rotAmp;        // tilt leads the swing by 90°
+    if (m.position.y < -GRID_H / 2 - 1) {
+      m.position.y = GRID_H / 2 + 1;
+      ud.baseX     = (Math.random() - 0.5) * 14;
+    }
+  }
+}
+
 // Throttle the full render loop to ~30fps so the tilt reads as chunky/pixel-y
 // while staying responsive to fast cursor moves. The per-frame lerp factor
 // below was bumped to ~0.55 so the cubbies catch up to the cursor in 2–3
@@ -1055,6 +1135,7 @@ function render(now) {
     updateSculpture();
     updateAlbumState();
     updateRecordPlayerCover();
+    updateDust();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
