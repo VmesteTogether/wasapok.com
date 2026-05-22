@@ -646,6 +646,25 @@ const vinylTex = (() => {
     ctx.arc(cx, cy, r, 0, Math.PI * 2);
     ctx.stroke();
   }
+  // Short bright shine arcs scattered at varying radii + angles. Concentric
+  // grooves are rotationally symmetric (invisible when spinning), so these
+  // asymmetric highlights are what actually sells the rotation — they read
+  // as the iridescent reflections real vinyl catches.
+  ctx.lineWidth = 2.2;
+  ctx.strokeStyle = 'rgba(140, 145, 165, 0.38)';
+  const shines = [
+    { rT: 0.18, a0: 0.08, span: 0.18 },
+    { rT: 0.36, a0: 0.55, span: 0.14 },
+    { rT: 0.58, a0: 1.15, span: 0.20 },
+    { rT: 0.74, a0: 1.62, span: 0.16 },
+    { rT: 0.90, a0: 0.32, span: 0.12 },
+  ];
+  for (const s of shines) {
+    const r = minR + s.rT * (maxR - minR);
+    ctx.beginPath();
+    ctx.arc(cx, cy, r, s.a0 * Math.PI * 2, (s.a0 + s.span) * Math.PI * 2);
+    ctx.stroke();
+  }
   const tex = new THREE.CanvasTexture(cv);
   tex.magFilter = THREE.NearestFilter;
   tex.minFilter = THREE.NearestFilter;
@@ -655,6 +674,7 @@ const vinylTex = (() => {
 })();
 
 const albumCoverMeshes = [];         // front-cover meshes (toggle-on-click targets)
+const albumVinylMeshes = [];         // vinyl + label meshes (hover-to-spin targets)
 const albumAllMeshes   = [];         // every interactive album mesh (hit-test "outside?")
 const albumStates      = [];
 const _hoverLocal      = new THREE.Vector3();
@@ -736,6 +756,16 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   label.renderOrder = 6;
   label.userData.kind = 'albumLabel';
   vinylGroup.add(label);
+  // Spindle hole at the label center. Hits register as the label so clicks
+  // / hover-spin on the dead-center still behave the same as the label.
+  const hole = new THREE.Mesh(
+    new THREE.CircleGeometry(ALBUM_SIZE * 0.013, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, ...matOpts }),
+  );
+  hole.position.z = 0.002;
+  hole.renderOrder = 7;
+  hole.userData.kind = 'albumLabel';
+  vinylGroup.add(hole);
 
   // Inside panel — paperboard interior of the sleeve. renderOrder=7 so it
   // sits ON TOP of the vinyl/label, hiding whatever portion of the vinyl is
@@ -753,7 +783,8 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   cubby.userData.albumCover = front;
   cubby.userData.albumRoot  = albumRoot;
   albumCoverMeshes.push(front);
-  albumAllMeshes.push(front, inside, vinyl, label);
+  albumVinylMeshes.push(vinyl, label, hole);
+  albumAllMeshes.push(front, inside, vinyl, label, hole);
   const state = {
     albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label,
     isOpen: false, openness: 0,
@@ -766,6 +797,7 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   inside.userData.albumState = state;
   vinyl.userData.albumState = state;
   label.userData.albumState = state;
+  hole.userData.albumState = state;
   albumStates.push(state);
 }
 // Audio + label color per album. Drop matching MP3 (or OGG) files into
@@ -860,15 +892,27 @@ function buildRecordPlayer() {
   recordLabel.position.y = 0.0005;
   recordLabel.renderOrder = 11;
   spinGroup.add(recordLabel);
+  // Spindle hole — slightly wider than the chrome spindle (r=0.010) so a
+  // black ring reads around the spindle's base where it meets the disc.
+  const recordHole = new THREE.Mesh(
+    new THREE.CircleGeometry(0.020, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, side: THREE.DoubleSide, ...matOpts }),
+  );
+  recordHole.rotation.x = -Math.PI / 2;
+  recordHole.position.y = 0.0008;
+  recordHole.renderOrder = 12;
+  spinGroup.add(recordHole);
   spinGroup.visible = false;        // empty turntable until a record is loaded
   player.userData.spinGroup         = spinGroup;
   player.userData.recordLabel       = recordLabel;
   player.userData.defaultLabelColor = LABEL_COLOR;
 
-  // Spindle through the record's center hole
+  // Spindle through the record's center hole — renderOrder 13 keeps it on
+  // top of the black spindle-hole disc (renderOrder 12) so chrome reads in
+  // the middle of the hole instead of the hole overpainting it.
   const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.060, 16), chromeMat);
   spindle.position.set(platterX, platterTopY + 0.055, 0);
-  ro(spindle, 12);
+  ro(spindle, 13);
 
   // Tonearm BASE — black plastic housing on the back-right
   const housing = new THREE.Mesh(new THREE.CylinderGeometry(0.075, 0.080, 0.080, 24), blackPlastic);
@@ -996,6 +1040,13 @@ function buildFlyingRecord(labelColor) {
   label.position.z = 0.001;
   label.renderOrder = 21;
   g.add(label);
+  const hole = new THREE.Mesh(
+    new THREE.CircleGeometry(ALBUM_SIZE * 0.013, 16),
+    new THREE.MeshBasicMaterial({ color: 0x000000, ...matOpts }),
+  );
+  hole.position.z = 0.002;
+  hole.renderOrder = 22;
+  g.add(hole);
   return g;
 }
 
@@ -1258,6 +1309,11 @@ function updateAlbumState() {
   const hits = raycaster.intersectObjects(albumCoverMeshes, false);
   const hovered = hits.length ? hits[0].object : null;
   const hitPt   = hits.length ? hits[0].point  : null;
+  // Separate raycast against the slid-out vinyl meshes for hover-spin preview.
+  // Raycaster auto-skips hidden meshes, so a record loaded on the turntable
+  // (source vinylGroup invisible) is naturally excluded.
+  const vinylHits = raycaster.intersectObjects(albumVinylMeshes, false);
+  const vinylHoveredState = vinylHits.length ? vinylHits[0].object.userData.albumState : null;
 
   for (const s of albumStates) {
     // --- Hover (closed only) — scale + nearest-corner tip on the cover mesh.
@@ -1300,6 +1356,14 @@ function updateAlbumState() {
     s.vinylness += (targetV - s.vinylness) * OPEN_LERP;
     const v = s.vinylness;
     s.vinylGroup.position.x = (VINYL_PEEK_X + (VINYL_OUT_X - VINYL_PEEK_X) * v) * o;
+
+    // Hover-spin preview: when cursor is over the slid-out vinyl, spin it
+    // around its own normal (Z axis in album-local space) at the same rate
+    // as the turntable. Stops the instant the cursor leaves — last rotation
+    // value persists so it doesn't snap back to zero.
+    if (s.isOpen && s.vinylOut && s === vinylHoveredState) {
+      s.vinylGroup.rotation.z -= 0.06;
+    }
   }
 }
 
