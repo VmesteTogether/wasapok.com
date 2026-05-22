@@ -659,7 +659,7 @@ const albumAllMeshes   = [];         // every interactive album mesh (hit-test "
 const albumStates      = [];
 const _hoverLocal      = new THREE.Vector3();
 
-function placeAlbumCover(cubbyKey, texPath) {
+function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) {
   const cubby = cubbies[cubbyKey];
   const tex = new THREE.TextureLoader().load(texPath);
   tex.magFilter = THREE.NearestFilter;
@@ -730,7 +730,7 @@ function placeAlbumCover(cubbyKey, texPath) {
   vinylGroup.add(vinyl);
   const label = new THREE.Mesh(
     new THREE.CircleGeometry(ALBUM_SIZE * 0.13, 24),
-    new THREE.MeshBasicMaterial({ color: LABEL_COLOR, ...matOpts }),
+    new THREE.MeshBasicMaterial({ color: labelColor, ...matOpts }),
   );
   label.position.z = 0.001;
   label.renderOrder = 6;
@@ -758,6 +758,7 @@ function placeAlbumCover(cubbyKey, texPath) {
     albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label,
     isOpen: false, openness: 0,
     vinylOut: false, vinylness: 0,
+    audioSrc, labelColor, audio: null,   // audio lazy-initialized on first play
   };
   // Back-references so the click handler can find a state from any of its
   // meshes without a search.
@@ -767,9 +768,12 @@ function placeAlbumCover(cubbyKey, texPath) {
   label.userData.albumState = state;
   albumStates.push(state);
 }
-placeAlbumCover('C2', 'BiomePlain_Album.png');
-placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png');
-placeAlbumCover('B3', 'Periphsisha_Cover.png');
+// Audio + label color per album. Drop matching MP3 (or OGG) files into
+// newhome/ when you have clips ready — they'll loop on the turntable when
+// the record is loaded. Until the files exist, .play() fails silently.
+placeAlbumCover('C2', 'BiomePlain_Album.png',   'BiomePlain.mp3',    0x4ea84e);   // forest green
+placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png','PalmTreeSyrup.mp3', 0xe8a730);   // amber
+placeAlbumCover('B3', 'Periphsisha_Cover.png',  'Periphsisha.mp3',   0xb8651a);   // burnt orange (default)
 
 // === Cubby B2: harman/kardon T25 turntable. Procedurally modeled to match
 // reference photos — light champagne plinth, bright aluminum platter rim,
@@ -841,15 +845,25 @@ function buildRecordPlayer() {
   centerDisc.position.set(platterX, platterTopY + 0.027, 0);
   ro(centerDisc, 9);
 
-  // Vinyl record loaded on top (uses the shared grooved texture)
+  // Vinyl record loaded on top (uses the shared grooved texture). Wrapped in
+  // a spin-group so the playback loop can rotate the record+label around
+  // their shared center while music is playing.
+  const spinGroup = new THREE.Group();
+  spinGroup.position.set(platterX, platterTopY + 0.029, 0);
+  player.add(spinGroup);
   const record = new THREE.Mesh(new THREE.CircleGeometry(feltR * 0.94, 48), recordVinylMat);
   record.rotation.x = -Math.PI / 2;
-  record.position.set(platterX, platterTopY + 0.029, 0);
-  ro(record, 10);
+  record.renderOrder = 10;
+  spinGroup.add(record);
   const recordLabel = new THREE.Mesh(new THREE.CircleGeometry(feltR * 0.30, 24), labelMat);
   recordLabel.rotation.x = -Math.PI / 2;
-  recordLabel.position.set(platterX, platterTopY + 0.0295, 0);
-  ro(recordLabel, 11);
+  recordLabel.position.y = 0.0005;
+  recordLabel.renderOrder = 11;
+  spinGroup.add(recordLabel);
+  spinGroup.visible = false;        // empty turntable until a record is loaded
+  player.userData.spinGroup         = spinGroup;
+  player.userData.recordLabel       = recordLabel;
+  player.userData.defaultLabelColor = LABEL_COLOR;
 
   // Spindle through the record's center hole
   const spindle = new THREE.Mesh(new THREE.CylinderGeometry(0.010, 0.010, 0.060, 16), chromeMat);
@@ -948,6 +962,105 @@ recordPlayer.rotation.x = 0;                                                // f
 recordPlayer.position.set(0, -CUBBY_H / 2 + (0.12 / 2) + 0.04, -CUBBY_D * 0.40);
 cubbies.B2.add(recordPlayer);
 cubbies.B2.userData.recordPlayer = recordPlayer;
+
+// === Turntable record-loading + playback. One record may be on the platter
+// at a time. A temporary "flying" vinyl mesh tweens between the source
+// album's slot and the platter — arcing slightly forward so it passes in
+// front of the maple wall instead of getting clipped behind it. Audio
+// starts on arrival (load) or stops immediately (unload, then animates
+// the return flight).
+let currentRecord = null;     // { state } when a record is loaded; null otherwise
+let flightAnim = null;        // active fly tween; clicks are locked out while non-null
+const FLIGHT_MS = 600;
+const TURNTABLE_VINYL_SCALE = 0.42;   // album-vinyl geom ÷ turntable-vinyl geom radius
+
+const easeInOutCubic = t => t < 0.5 ? 4*t*t*t : 1 - Math.pow(-2*t + 2, 3) / 2;
+
+function buildFlyingRecord(labelColor) {
+  // Stand-alone copy of the album's vinyl + label, parented to the scene so
+  // it can travel between the cubby and the turntable in world coordinates.
+  // depthTest off + high renderOrder so it always reads in front of the
+  // maple wall and any cubby panels during the arc.
+  const matOpts = { depthTest: false, depthWrite: false, transparent: true, side: THREE.DoubleSide };
+  const g = new THREE.Group();
+  const vinyl = new THREE.Mesh(
+    new THREE.CircleGeometry(ALBUM_SIZE * 0.46, 48),
+    new THREE.MeshBasicMaterial({ color: 0xffffff, map: vinylTex, ...matOpts }),
+  );
+  vinyl.renderOrder = 20;
+  g.add(vinyl);
+  const label = new THREE.Mesh(
+    new THREE.CircleGeometry(ALBUM_SIZE * 0.13, 24),
+    new THREE.MeshBasicMaterial({ color: labelColor, ...matOpts }),
+  );
+  label.position.z = 0.001;
+  label.renderOrder = 21;
+  g.add(label);
+  return g;
+}
+
+function startFlight(fromVec, toVec, fromRotX, toRotX, fromScale, toScale, labelColor, onArrive) {
+  const mesh = buildFlyingRecord(labelColor);
+  mesh.position.copy(fromVec);
+  mesh.rotation.x = fromRotX;
+  mesh.scale.setScalar(fromScale);
+  scene.add(mesh);
+  flightAnim = { mesh, fromVec: fromVec.clone(), toVec: toVec.clone(),
+                 fromRotX, toRotX, fromScale, toScale, startMs: performance.now(), onArrive };
+}
+
+function updateFlight() {
+  if (!flightAnim) return;
+  const t = Math.min(1, (performance.now() - flightAnim.startMs) / FLIGHT_MS);
+  const e = easeInOutCubic(t);
+  flightAnim.mesh.position.lerpVectors(flightAnim.fromVec, flightAnim.toVec, e);
+  flightAnim.mesh.position.z += Math.sin(e * Math.PI) * 0.35;   // forward arc to clear the maple wall
+  flightAnim.mesh.rotation.x = THREE.MathUtils.lerp(flightAnim.fromRotX, flightAnim.toRotX, e);
+  flightAnim.mesh.rotation.z = e * Math.PI * 0.6;               // gentle spin during flight
+  const s = THREE.MathUtils.lerp(flightAnim.fromScale, flightAnim.toScale, e);
+  flightAnim.mesh.scale.setScalar(s);
+  if (t >= 1) {
+    flightAnim.onArrive?.();
+    scene.remove(flightAnim.mesh);
+    flightAnim = null;
+  }
+}
+
+function loadRecord(state) {
+  if (flightAnim || currentRecord) return;
+  currentRecord = { state };
+  recordPlayer.userData.recordLabel.material.color.set(state.labelColor);
+  const fromVec  = state.vinyl.getWorldPosition(new THREE.Vector3());
+  const toVec    = recordPlayer.userData.spinGroup.getWorldPosition(new THREE.Vector3());
+  const fromScl  = state.vinyl.getWorldScale(new THREE.Vector3()).x;
+  state.vinylGroup.visible = false;
+  startFlight(fromVec, toVec, 0, -Math.PI / 2, fromScl, TURNTABLE_VINYL_SCALE, state.labelColor, () => {
+    recordPlayer.userData.spinGroup.visible = true;
+    if (!state.audioSrc) return;
+    if (!state.audio) { state.audio = new Audio(state.audioSrc); state.audio.loop = true; }
+    state.audio.currentTime = 0;
+    state.audio.play().catch(err => console.warn('[turntable] play failed', state.audioSrc, err.message));
+  });
+}
+
+function unloadRecord() {
+  if (flightAnim || !currentRecord) return;
+  const { state } = currentRecord;
+  if (state.audio) { state.audio.pause(); state.audio.currentTime = 0; }
+  const fromVec = recordPlayer.userData.spinGroup.getWorldPosition(new THREE.Vector3());
+  const toVec   = state.vinyl.getWorldPosition(new THREE.Vector3());
+  const toScl   = state.vinyl.getWorldScale(new THREE.Vector3()).x;
+  recordPlayer.userData.spinGroup.visible = false;
+  currentRecord = null;
+  startFlight(fromVec, toVec, -Math.PI / 2, 0, TURNTABLE_VINYL_SCALE, toScl, state.labelColor, () => {
+    state.vinylGroup.visible = true;
+    recordPlayer.userData.recordLabel.material.color.set(recordPlayer.userData.defaultLabelColor);
+  });
+}
+
+function updateTurntable() {
+  if (currentRecord && !flightAnim) recordPlayer.userData.spinGroup.rotation.y -= 0.06;
+}
 
 // === Top-right cubby D6: shrunk Temmys-Castle3 icon GLB, sitting on the
 // shelf like a trophy. Fit by bbox to ~85% of the cubby's tightest dimension,
@@ -1106,11 +1219,17 @@ function updateRecordPlayerCover() {
 }
 
 window.addEventListener('click', (e) => {
+  if (flightAnim) return;                                     // lock input during fly-to/from animations
   const clickNdc = new THREE.Vector2(
      (e.clientX / window.innerWidth)  * 2 - 1,
     -((e.clientY / window.innerHeight) * 2 - 1),
   );
   raycaster.setFromCamera(clickNdc, camera);
+  // Click anywhere on the turntable while a record is loaded → eject.
+  if (currentRecord && raycaster.intersectObject(recordPlayer, true).length) {
+    unloadRecord();
+    return;
+  }
   const anyHits = raycaster.intersectObjects(albumAllMeshes, false);
   if (!anyHits.length) {
     // Empty space — close every open album (vinyls retract along with covers).
@@ -1124,7 +1243,11 @@ window.addEventListener('click', (e) => {
     state.isOpen = !state.isOpen;
     if (!state.isOpen) state.vinylOut = false;     // closing cover pulls vinyl back in
   } else if (hit.userData.kind === 'albumVinyl' || hit.userData.kind === 'albumLabel') {
-    if (state.isOpen) state.vinylOut = !state.vinylOut;
+    if (!state.isOpen) return;
+    // First click on the peeking vinyl slides it fully out; a second click
+    // on the slid-out vinyl loads it onto the turntable and starts playback.
+    if (state.vinylOut) loadRecord(state);
+    else                state.vinylOut = true;
   }
   // Clicking the inside panel of an open album is a no-op for now.
 });
@@ -1285,6 +1408,8 @@ function render(now) {
     updateSculpture();
     updateAlbumState();
     updateRecordPlayerCover();
+    updateTurntable();
+    updateFlight();
     updateDust();
     updateWaterfall();
     renderer.render(scene, camera);
