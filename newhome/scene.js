@@ -21,6 +21,7 @@ const canvas = document.getElementById('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: false });
 renderer.setPixelRatio(1);
 renderer.setClearColor(0x1a1410, 1);
+renderer.localClippingEnabled = true;     // each merged-cubby material gets world-space clip planes to its own footprint so the hallway's sky/ground can't bleed into adjacent cubby openings
 
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x1a1410);
@@ -42,25 +43,55 @@ const fill = new THREE.DirectionalLight(0xffc488, 0.22);
 fill.position.set(0, -6, 6);
 scene.add(fill);
 
-// --- Procedural maple bookshelf tile: wood frame only (top/bottom planks +
-// side dividers), cubby interior alpha=0 so the recessed-box geometry behind
-// shows through. Same texture recipe as the castle bookshelf.
+// --- Procedural maple bookshelf wall: wood frame only (top/bottom planks +
+// side dividers), cubby interiors alpha=0 so the recessed-box geometry
+// behind shows through. Drawn at full grid resolution into one canvas (not
+// a repeated tile) so the divider between A5 and B5 can be selectively
+// omitted — those two cells merge into one tall doorway opening onto the
+// outside scene.
 const TPX = 256, PLANK = 22, SIDE = 8;
 const top = PLANK, bottom = TPX - PLANK;
 const left = SIDE, right = TPX - SIDE;
+
+// Merged-cubby spec — A5+B5 share one tall opening at col 4, rows 2-3
+// (row 0 = top in the row-indexed grid).
+const MERGED_TOP_ROW = 2, MERGED_BOT_ROW = 3, MERGED_COL = 4;
+const isMergedTop = (r, c) => r === MERGED_TOP_ROW && c === MERGED_COL;
+const isMergedBot = (r, c) => r === MERGED_BOT_ROW && c === MERGED_COL;
+
+const WALL_PX_W = COLS * TPX;
+const WALL_PX_H = ROWS * TPX;
 const tc = document.createElement('canvas');
-tc.width = TPX; tc.height = TPX;
+tc.width = WALL_PX_W; tc.height = WALL_PX_H;
 const tx = tc.getContext('2d');
 tx.imageSmoothingEnabled = false;
+
+// Cut openings per tile via an evenodd clip, then fill the remaining wood
+// frame. The merged top half's opening extends down through the bottom
+// half; the bottom half is skipped so the divider plank between them never
+// gets cut as a separate hole.
 tx.save();
 tx.beginPath();
-tx.rect(0, 0, TPX, TPX);
-tx.rect(left, top, right - left, bottom - top);
+tx.rect(0, 0, WALL_PX_W, WALL_PX_H);
+for (let r = 0; r < ROWS; r++) {
+  for (let c = 0; c < COLS; c++) {
+    if (isMergedBot(r, c)) continue;
+    const x0 = c * TPX + SIDE;
+    const y0 = r * TPX + PLANK;
+    const x1 = (c + 1) * TPX - SIDE;
+    const y1 = isMergedTop(r, c)
+      ? (r + 2) * TPX - PLANK
+      : (r + 1) * TPX - PLANK;
+    tx.rect(x0, y0, x1 - x0, y1 - y0);
+  }
+}
 tx.clip('evenodd');
 tx.fillStyle = '#d2a574';
-tx.fillRect(0, 0, TPX, TPX);
-for (let i = 0; i < 28; i++) {
-  const gy = Math.random() * TPX;
+tx.fillRect(0, 0, WALL_PX_W, WALL_PX_H);
+// Wood grain — scaled to the full canvas area so density matches the
+// original per-tile look.
+for (let i = 0; i < 28 * ROWS * COLS; i++) {
+  const gy = Math.random() * WALL_PX_H;
   const rr = 125 + (Math.random() * 35 | 0);
   const gg =  82 + (Math.random() * 22 | 0);
   const bb =  42 + (Math.random() * 22 | 0);
@@ -68,20 +99,29 @@ for (let i = 0; i < 28; i++) {
   tx.lineWidth = 1;
   tx.beginPath();
   tx.moveTo(0, gy);
-  tx.lineTo(TPX, gy + (Math.random() - 0.5) * 5);
+  tx.lineTo(WALL_PX_W, gy + (Math.random() - 0.5) * 5);
   tx.stroke();
 }
 tx.restore();
-tx.fillStyle = 'rgba(255,232,188,0.35)';
-tx.fillRect(0, 0, TPX, 2);
-tx.fillStyle = 'rgba(30,15,5,0.65)';
-tx.fillRect(0, TPX - 3, TPX, 3);
+// Per-tile plank highlights (light top edge, dark bottom edge). Skip the
+// edges of the removed divider between A5 and B5.
+for (let r = 0; r < ROWS; r++) {
+  for (let c = 0; c < COLS; c++) {
+    const ox = c * TPX, oy = r * TPX;
+    if (!isMergedBot(r, c)) {
+      tx.fillStyle = 'rgba(255,232,188,0.35)';
+      tx.fillRect(ox, oy, TPX, 2);
+    }
+    if (!isMergedTop(r, c)) {
+      tx.fillStyle = 'rgba(30,15,5,0.65)';
+      tx.fillRect(ox, oy + TPX - 3, TPX, 3);
+    }
+  }
+}
 
 const shelfTex = new THREE.CanvasTexture(tc);
-shelfTex.wrapS = shelfTex.wrapT = THREE.RepeatWrapping;
 shelfTex.magFilter = THREE.NearestFilter;
 shelfTex.minFilter = THREE.NearestFilter;
-shelfTex.repeat.set(COLS, ROWS);
 shelfTex.needsUpdate = true;
 
 const wallMat = new THREE.MeshBasicMaterial({
@@ -89,6 +129,24 @@ const wallMat = new THREE.MeshBasicMaterial({
 });
 const wall = new THREE.Mesh(new THREE.PlaneGeometry(GRID_W, GRID_H), wallMat);
 scene.add(wall);
+
+// Black border quads around the 6×4 bookshelf so the outside scene only
+// shows through the hallway opening — not in the negative space around the
+// shelf when the screen is wider than the grid. Sit just behind the wall
+// plane (z = -0.01) and write depth, occluding sky/ground there.
+{
+  const M = 60;
+  const mat = new THREE.MeshBasicMaterial({ color: 0x1a1410 });
+  const add = (w, h, x, y) => {
+    const q = new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+    q.position.set(x, y, -0.01);
+    scene.add(q);
+  };
+  add(M * 2, M, 0,  (GRID_H + M) / 2);
+  add(M * 2, M, 0, -(GRID_H + M) / 2);
+  add(M, GRID_H, -(GRID_W + M) / 2, 0);
+  add(M, GRID_H,  (GRID_W + M) / 2, 0);
+}
 
 // --- Recessed cubby box: 5 inward-facing panels (back + top + bottom + 2
 // sides, no front). Vertex colors fake painted shading — dark back, lit
@@ -98,10 +156,21 @@ const CUBBY_W = TILE_W * (right - left) / TPX;       // ~1.875m opening
 const CUBBY_H = TILE_H * (bottom - top) / TPX;       // ~1.656m opening
 const CUBBY_D = 0.7;                                 // depth into the wall
 const FRONT_INSET = 0.006;                           // recess opening behind wall plane to dodge z-fighting
-const cubbyGeom = (() => {
-  const w2 = CUBBY_W / 2, h2 = CUBBY_H / 2;
+// Merged A5+B5 opening: two tiles tall, divider plank gone. Adds two
+// plank-widths of vertical space on top of 2 × CUBBY_H.
+const MERGED_H = 2 * CUBBY_H + 2 * TILE_H * PLANK / TPX;     // ~3.656m opening
+
+const DEFAULT_CUBBY_COLORS = {
+  back:   [0.04, 0.025, 0.012],
+  top:    [0.06, 0.04,  0.02 ],
+  bottom: [0.20, 0.13,  0.07 ],
+  sides:  [0.06, 0.04,  0.02 ],
+};
+const makeCubbyGeom = (w, h, opts = {}) => {
+  const w2 = w / 2, h2 = h / 2;
   const zF = -FRONT_INSET, zB = -CUBBY_D - FRONT_INSET;
   const positions = [], normals = [], colors = [], isBack = [], indices = [];
+  const palette = { ...DEFAULT_CUBBY_COLORS, ...(opts.colors ?? {}) };
   // isBack: 1.0 for vertices at the back of the recessed box (z == zB),
   // 0.0 for front-facing vertices. The vertex shader shifts back verts by
   // uBackOffset.xy so each cubby's vanishing point tilts toward the cursor.
@@ -115,11 +184,16 @@ const cubbyGeom = (() => {
     for (let i = 0; i < 4; i++) colors.push(...col);
     indices.push(base, base + 1, base + 2, base, base + 2, base + 3);
   };
-  addQuad([[-w2,-h2,zB],[ w2,-h2,zB],[ w2, h2,zB],[-w2, h2,zB]], [0,0,1],  [0.04,0.025,0.012]);
-  addQuad([[-w2, h2,zB],[ w2, h2,zB],[ w2, h2,zF],[-w2, h2,zF]], [0,-1,0], [0.06,0.04, 0.02 ]);
-  addQuad([[-w2,-h2,zF],[ w2,-h2,zF],[ w2,-h2,zB],[-w2,-h2,zB]], [0, 1,0], [0.20,0.13, 0.07 ]);
-  addQuad([[-w2,-h2,zF],[-w2,-h2,zB],[-w2, h2,zB],[-w2, h2,zF]], [1, 0,0], [0.06,0.04, 0.02 ]);
-  addQuad([[ w2,-h2,zF],[ w2, h2,zF],[ w2, h2,zB],[ w2,-h2,zB]], [-1,0,0], [0.06,0.04, 0.02 ]);
+  // opts.omitBack=true skips the back panel entirely, leaving the rear
+  // wide open — the merged hallway uses this so the page bg shows through
+  // its whole back.
+  if (!opts.omitBack) {
+    addQuad([[-w2,-h2,zB],[ w2,-h2,zB],[ w2, h2,zB],[-w2, h2,zB]], [0,0,1], palette.back);
+  }
+  addQuad([[-w2, h2,zB],[ w2, h2,zB],[ w2, h2,zF],[-w2, h2,zF]], [0,-1,0], palette.top);
+  addQuad([[-w2,-h2,zF],[ w2,-h2,zF],[ w2,-h2,zB],[-w2,-h2,zB]], [0, 1,0], palette.bottom);
+  addQuad([[-w2,-h2,zF],[-w2,-h2,zB],[-w2, h2,zB],[-w2, h2,zF]], [1, 0,0], palette.sides);
+  addQuad([[ w2,-h2,zF],[ w2, h2,zF],[ w2, h2,zB],[ w2,-h2,zB]], [-1,0,0], palette.sides);
   const g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
   g.setAttribute('normal',   new THREE.Float32BufferAttribute(normals, 3));
@@ -127,11 +201,23 @@ const cubbyGeom = (() => {
   g.setAttribute('isBack',   new THREE.Float32BufferAttribute(isBack, 1));
   g.setIndex(indices);
   return g;
-})();
+};
+const cubbyGeom = makeCubbyGeom(CUBBY_W, CUBBY_H);
+// Merged cubby reads as a small indoor hallway: cream-painted ceiling,
+// warm beige plaster walls, dark hardwood floor — so the (now open) back
+// clearly looks like a DOORWAY onto the outside, not a deeper cubby hole.
+const mergedCubbyGeom = makeCubbyGeom(CUBBY_W, MERGED_H, {
+  omitBack: true,
+  colors: {
+    top:    [0.78, 0.74, 0.66],
+    bottom: [0.32, 0.20, 0.10],
+    sides:  [0.68, 0.60, 0.48],
+  },
+});
 // Shader: shifts vertices flagged isBack=1 by per-cubby uBackOffset.xy.
 // Forwards the color attribute manually since ShaderMaterial doesn't auto-wire
 // the vertexColors flag like MeshBasicMaterial does.
-const makeCubbyMat = () => new THREE.ShaderMaterial({
+const makeCubbyMat = (clippingPlanes) => new THREE.ShaderMaterial({
   uniforms: { uBackOffset: { value: new THREE.Vector2(0, 0) } },
   vertexShader: `
     uniform vec2 uBackOffset;
@@ -149,6 +235,7 @@ const makeCubbyMat = () => new THREE.ShaderMaterial({
     void main() { gl_FragColor = vec4(vColor, 1.0); }
   `,
   side: THREE.DoubleSide,
+  clippingPlanes,
 });
 
 // Build the 7×4 grid. cubbies[0] is the top row, cubbies[ROWS-1] the bottom.
@@ -157,13 +244,41 @@ window.cubbies = cubbies;
 for (let row = 0; row < ROWS; row++) {
   cubbies.push([]);
   for (let col = 0; col < COLS; col++) {
+    if (isMergedBot(row, col)) {
+      // Bottom half of the merged A5+B5 cubby — alias the same Group as
+      // the top half so cubbies.A5 and .B5 both resolve to it.
+      cubbies[row].push(cubbies[MERGED_TOP_ROW][col]);
+      continue;
+    }
     const cellX =  (col + 0.5) * TILE_W - GRID_W / 2;
     const cellY = -((row + 0.5) * TILE_H - GRID_H / 2);
+    const merged = isMergedTop(row, col);
     const cubbyGroup = new THREE.Group();
-    cubbyGroup.position.set(cellX, cellY, 0);
-    const cubbyMesh = new THREE.Mesh(cubbyGeom, makeCubbyMat());
+    // Merged group sits at the midpoint between the two cells it spans, so
+    // its local origin is the front-center of the combined opening.
+    cubbyGroup.position.set(cellX, merged ? cellY - TILE_H / 2 : cellY, 0);
+    // World-space clipping planes confine every material in this cubby's
+    // subtree (panels + child meshes like the hallway's sky/ground) to its
+    // own footprint — no leakage into neighbors regardless of how the
+    // parallax shader tilts the back.
+    const halfW = CUBBY_W / 2 + 0.002;
+    const halfH = (merged ? MERGED_H : CUBBY_H) / 2 + 0.002;
+    const wx = cubbyGroup.position.x;
+    const wy = cubbyGroup.position.y;
+    const clippingPlanes = [
+      new THREE.Plane(new THREE.Vector3( 1, 0, 0), -wx + halfW),
+      new THREE.Plane(new THREE.Vector3(-1, 0, 0),  wx + halfW),
+      new THREE.Plane(new THREE.Vector3( 0, 1, 0), -wy + halfH),
+      new THREE.Plane(new THREE.Vector3( 0,-1, 0),  wy + halfH),
+    ];
+    const cubbyMesh = new THREE.Mesh(
+      merged ? mergedCubbyGeom : cubbyGeom,
+      makeCubbyMat(clippingPlanes),
+    );
     cubbyGroup.add(cubbyMesh);
-    cubbyGroup.userData.cubbyMesh = cubbyMesh;     // for per-frame uBackOffset updates
+    cubbyGroup.userData.cubbyMesh      = cubbyMesh;     // for per-frame uBackOffset updates
+    cubbyGroup.userData.merged         = merged;
+    cubbyGroup.userData.clippingPlanes = clippingPlanes; // reused by the hallway's sky/ground
     scene.add(cubbyGroup);
     cubbies[row].push(cubbyGroup);
   }
@@ -176,6 +291,107 @@ for (let row = 0; row < ROWS; row++) {
     cubbies[ROW_LETTERS[ROWS - 1 - row] + (col + 1)] = cubbies[row][col];
   }
 }
+
+// === Outside scene behind the merged A5+B5 hallway — rolling hills under a
+// pale sky. Visible ONLY through the hallway opening: every other cubby
+// has an opaque back panel that depth-occludes the sky/ground behind it,
+// the front maple wall occludes everything outside the cubby openings,
+// and the border mask quads above kill the negative space around the
+// shelf. So the hills end up framed by the single hole that has nothing
+// in front of them — the hallway.
+const outsideScene = new THREE.Group();
+outsideScene.position.set(0, 0, -CUBBY_D - FRONT_INSET);
+cubbies.A5.add(outsideScene);
+
+// --- Sky backdrop: pale blue → hazy horizon gradient on a vertical plane
+// well behind the ground. Sized generously so the hallway's perspective
+// never reveals its edges.
+const skyTex = (() => {
+  const W = 256, H = 256;
+  const cv = document.createElement('canvas');
+  cv.width = W; cv.height = H;
+  const ctx = cv.getContext('2d');
+  ctx.imageSmoothingEnabled = false;
+  const grad = ctx.createLinearGradient(0, 0, 0, H);
+  grad.addColorStop(0,    '#9bc4e2');
+  grad.addColorStop(0.65, '#c8dfee');
+  grad.addColorStop(1,    '#e3ebec');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, W, H);
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  tex.needsUpdate = true;
+  return tex;
+})();
+const SKY_Z = -36;
+const sky = new THREE.Mesh(
+  new THREE.PlaneGeometry(100, 60),
+  new THREE.MeshBasicMaterial({ map: skyTex }),
+);
+sky.position.set(0, 0, SKY_Z);
+outsideScene.add(sky);
+
+// --- Ground: subdivided plane rotated horizontal, vertex y displaced by a
+// sum-of-sines hills function for organic rolling terrain. Vertex colors
+// bake in slope shading (skyward-facing flat tops brighter than side
+// slopes) and a distance haze mixing toward sky color at the far edge so
+// hills blend smoothly into the horizon.
+const GROUND_W = 36;
+const GROUND_D = 32;
+const GROUND_SEGS = 80;
+const groundGeom = new THREE.PlaneGeometry(GROUND_W, GROUND_D, GROUND_SEGS, GROUND_SEGS);
+groundGeom.rotateX(-Math.PI / 2);
+
+const groundPos = groundGeom.attributes.position;
+const bigHills = (x, z) =>
+   1.00 * Math.sin(x * 0.30 + 1.2) +
+   0.75 * Math.cos(z * 0.28 - 0.5) +
+   1.20 * Math.sin(x * 0.13 + z * 0.18 + 2.4) +
+   0.40 * Math.cos(x * 0.55 + z * 0.42 + 1.0);
+const smallHills = (x, z) =>
+   0.12 * Math.sin(x * 1.70 + 3.1) +
+   0.10 * Math.cos(z * 1.90 + 1.8) +
+   0.09 * Math.sin(x * 2.50 + z * 2.30 + 0.7);
+const smallContrib = new Float32Array(groundPos.count);
+for (let i = 0; i < groundPos.count; i++) {
+  const x = groundPos.getX(i);
+  const z = groundPos.getZ(i);
+  // 0 at far edge → 1 at near edge, squared so small hills concentrate
+  // in the closer foreground and fade out before the horizon.
+  const t = (z + GROUND_D / 2) / GROUND_D;
+  const nearW = Math.max(0, Math.min(1, t)) ** 2;
+  const small = smallHills(x, z) * nearW;
+  groundPos.setY(i, bigHills(x, z) + small);
+  smallContrib[i] = Math.abs(small);
+}
+groundPos.needsUpdate = true;
+groundGeom.computeVertexNormals();
+
+const groundNorm = groundGeom.attributes.normal;
+const groundColors = new Float32Array(groundPos.count * 3);
+const BASE_R = 0.28, BASE_G = 0.70, BASE_B = 0.18;     // saturated ACME grass
+const HAZE_R = 0.78, HAZE_G = 0.87, HAZE_B = 0.92;     // approach sky color
+const quant = (v, steps) => Math.round(v * steps) / steps;
+for (let i = 0; i < groundPos.count; i++) {
+  const dist = 0.5 - groundPos.getZ(i) / GROUND_D;
+  const distMix = quant(Math.pow(Math.max(0, Math.min(1, dist)), 1.4), 5);
+  const ny = Math.max(0, groundNorm.getY(i));
+  const lit = quant(0.60 + 0.40 * ny, 4);
+  const tint = quant(1 - Math.min(0.55, smallContrib[i] * 3.0), 4);
+  groundColors[i*3]     = (BASE_R + (HAZE_R - BASE_R) * distMix) * lit * tint;
+  groundColors[i*3 + 1] = (BASE_G + (HAZE_G - BASE_G) * distMix) * lit * tint;
+  groundColors[i*3 + 2] = (BASE_B + (HAZE_B - BASE_B) * distMix) * lit * tint;
+}
+groundGeom.setAttribute('color', new THREE.BufferAttribute(groundColors, 3));
+
+const ground = new THREE.Mesh(
+  groundGeom,
+  new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.DoubleSide }),
+);
+ground.position.set(0, -MERGED_H / 2, -GROUND_D / 2);
+outsideScene.add(ground);
 
 // --- Auto-fit: pick the camera distance that makes the grid fully visible
 // on both axes (letterboxing on whichever axis is shorter than the grid's
@@ -812,6 +1028,8 @@ function updateTilt() {
   }
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
+      // Merged bottom half shares its Group with the top half — tilt it once.
+      if (isMergedBot(row, col)) continue;
       const cg = cubbies[row][col];
       const dx = (mouseWorld.x - cg.position.x) * TILT_SCALE;
       const dy = (mouseWorld.y - cg.position.y) * TILT_SCALE;
