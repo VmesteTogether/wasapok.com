@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
 
 // 6×4 maple-frame bookshelf cubby grid, head-on static view. Same pixelated
 // wood-tile + recessed-cubby-box construction as castle/hallway2/scene.js
@@ -503,37 +504,47 @@ for (const [dx, dz] of HOSE_DIRS) {
 }
 baseGroup.traverse(o => { if (o.isMesh) o.renderOrder = 5; });
 
-// --- Cel-shaded crystal material + inverted-hull outline, same recipe as
-// the main hall. 4-band cyan-blue toon gradient + ice-white outline.
-const diamondToonCv = document.createElement('canvas');
-diamondToonCv.width = 4; diamondToonCv.height = 1;
-const dtctx = diamondToonCv.getContext('2d');
-dtctx.fillStyle = '#1e3a78'; dtctx.fillRect(0, 0, 1, 1);
-dtctx.fillStyle = '#4c84d0'; dtctx.fillRect(1, 0, 1, 1);
-dtctx.fillStyle = '#84c6ff'; dtctx.fillRect(2, 0, 1, 1);
-dtctx.fillStyle = '#c4e4ff'; dtctx.fillRect(3, 0, 1, 1);
-const diamondToonGrad = new THREE.CanvasTexture(diamondToonCv);
-diamondToonGrad.minFilter = THREE.NearestFilter;
-diamondToonGrad.magFilter = THREE.NearestFilter;
-diamondToonGrad.needsUpdate = true;
+// --- Polished metallic diamond — full metalness, low roughness so every
+// facet throws sharp specular highlights from the warm directional key
+// and the blue point light nested inside the diamond group. Base color is
+// brushed silver; the surrounding lighting tints it cool from inside and
+// warm from above for a chrome-jewelry read.
+// Generate a soft studio cube map via PMREM from RoomEnvironment, then
+// attach it only to the diamond material so other PBR meshes (turntable,
+// manifold, easels) aren't disturbed by global lighting changes.
+const pmrem = new THREE.PMREMGenerator(renderer);
+const diamondEnvMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+pmrem.dispose();
 
-// Opaque toon material (main hall uses 0.62 alpha but that washes into the
-// dark cubby back without the surrounding orb/fog). Bumped emissive too.
-const crystalMat = new THREE.MeshToonMaterial({
-  color: 0x84c6ff, emissive: 0x3070ff, emissiveIntensity: 2.0,
-  gradientMap: diamondToonGrad,
+const crystalMat = new THREE.MeshStandardMaterial({
+  color: 0xd6dde6,
+  metalness: 1.0,
+  roughness: 0.10,
+  envMap: diamondEnvMap,
+  envMapIntensity: 3.7,
   side: THREE.DoubleSide,
 });
-const diamondOutlineMat = new THREE.MeshBasicMaterial({
-  color: 0xb8d8ff, side: THREE.BackSide,
-});
+
+let diamondMesh = null;       // assigned when WasaDiminds-02.obj finishes loading
+let diamondDrag = null;       // { lastX } while user is dragging to spin
+let diamondSpinVel = 0;       // angular velocity (rad/frame) — gives the spin inertia after release
 
 const diamondGroup = new THREE.Group();
-const DIAMOND_BASE_Y = 0.05;        // anchor — bob oscillates around this
+const DIAMOND_BASE_Y = 0.015;       // anchor — bob oscillates around this
 diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 diamondGroup.rotation.x = Math.PI / 2;   // 90° tilt
 topLeftCubby.add(diamondGroup);
 diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
+
+// Soft blue spotlight from the manifold base ring shining down onto the
+// diamond — short throw, wide cone, heavy penumbra so it reads as a
+// glow halo rather than a sharp beam. Parented to the cubby (not the
+// bobbing diamond) so the light source stays anchored at the base.
+const baseSpot = new THREE.SpotLight(0x8ec4ff, 16.0, 1.4, Math.PI / 5, 0.7, 1.2);
+baseSpot.position.set(0, CEILING_Y - 0.18, SCULPT_Z);
+baseSpot.target.position.set(0, -CUBBY_H / 2 + 0.2, SCULPT_Z);
+topLeftCubby.add(baseSpot);
+topLeftCubby.add(baseSpot.target);
 
 // Minimal inline OBJ parser — read vertex (v) and face (f) lines, triangulate
 // quads via fan, build a BufferGeometry. Skips materials/textures/normals
@@ -570,7 +581,8 @@ fetch('WasaDiminds-02.obj').then(r => {
   geom.translate(-ctr.x, -ctr.y, -ctr.z);
   const s = 1.20 / maxD;
   geom.scale(s, s, s);
-  diamondGroup.add(new THREE.Mesh(geom, crystalMat));
+  diamondMesh = new THREE.Mesh(geom, crystalMat);
+  diamondGroup.add(diamondMesh);
   console.log('[newhome] WasaDiminds-02 parsed: verts=' + (verts.length / 3) + ' tris=' + (indices.length / 3));
 }).catch(err => { console.error('[newhome] WasaDiminds-02.obj failed:', err); });
 
@@ -578,6 +590,12 @@ const _sculptT0 = performance.now();
 function updateSculpture() {
   const t = (performance.now() - _sculptT0) / 1000;
   diamondGroup.position.y = DIAMOND_BASE_Y + Math.sin(t * Math.PI * 2 / 4.0) * 0.06;
+  // Carry-over spin after the user releases the drag — multiplicative decay
+  // (0.95 per 30fps frame ≈ ~2s glide before fully stopping).
+  if (!diamondDrag && Math.abs(diamondSpinVel) > 0.0005) {
+    diamondGroup.rotateOnWorldAxis(_diamondYAxis, diamondSpinVel);
+    diamondSpinVel *= 0.95;
+  }
 }
 
 // === Album covers — single-pocket sleeves that "open like a book toward
@@ -1281,6 +1299,9 @@ window.addEventListener('click', (e) => {
     unloadRecord();
     return;
   }
+  // Diamond clicks are handled by the drag interaction — ignore here so
+  // an undrag click doesn't trigger the "close all open albums" path.
+  if (diamondMesh && raycaster.intersectObject(diamondMesh, false).length) return;
   const anyHits = raycaster.intersectObjects(albumAllMeshes, false);
   if (!anyHits.length) {
     // Empty space — close every open album (vinyls retract along with covers).
@@ -1381,7 +1402,33 @@ window.addEventListener('mousemove', (e) => {
   ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
   ndc.y = -((e.clientY / window.innerHeight) * 2 - 1);
   mouseSeen = true;
+  if (diamondDrag) {
+    const dx = e.clientX - diamondDrag.lastX;
+    diamondDrag.lastX = e.clientX;
+    const deltaRot = dx * 0.012;                                 // ~7° per 10px drag
+    diamondGroup.rotateOnWorldAxis(_diamondYAxis, deltaRot);
+    // Track a smoothed velocity from recent drag input — heavy weight on the
+    // latest delta so a slow-down before release reduces the carry-over spin.
+    diamondSpinVel = diamondSpinVel * 0.5 + deltaRot * 0.5;
+  }
 });
+const _diamondYAxis = new THREE.Vector3(0, 1, 0);
+
+// Drag-to-spin on the D1 diamond. Mousedown on the mesh starts the drag,
+// horizontal cursor movement rotates the diamondGroup around world Y
+// (so the existing 90° tilt is preserved), mouseup anywhere releases.
+window.addEventListener('mousedown', (e) => {
+  if (!diamondMesh) return;
+  const downNdc = new THREE.Vector2(
+     (e.clientX / window.innerWidth)  * 2 - 1,
+    -((e.clientY / window.innerHeight) * 2 - 1),
+  );
+  raycaster.setFromCamera(downNdc, camera);
+  if (raycaster.intersectObject(diamondMesh, false).length) {
+    diamondDrag = { lastX: e.clientX };
+  }
+});
+window.addEventListener('mouseup', () => { diamondDrag = null; });
 
 const TILT_SCALE = 0.12;                     // how strongly each cubby tilts per meter of cursor offset
 const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
