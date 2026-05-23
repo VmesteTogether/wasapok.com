@@ -63,11 +63,25 @@ const TPX = 256, PLANK = 22, SIDE = 8;
 const top = PLANK, bottom = TPX - PLANK;
 const left = SIDE, right = TPX - SIDE;
 
-// Merged-cubby spec — A5+B5 share one tall opening at col 4, rows 2-3
-// (row 0 = top in the row-indexed grid).
-const MERGED_TOP_ROW = 2, MERGED_BOT_ROW = 3, MERGED_COL = 4;
-const isMergedTop = (r, c) => r === MERGED_TOP_ROW && c === MERGED_COL;
-const isMergedBot = (r, c) => r === MERGED_BOT_ROW && c === MERGED_COL;
+// Merged-cubby spec — each entry defines a rectangular block of grid cells
+// that share one combined opening (inner plank/side dividers removed). The
+// top-left cell of each block is the "anchor": all cells in the block alias
+// the same THREE.Group, so cubbies.A5 === cubbies.B5, etc. Row indexing has
+// row 0 = top, ROWS-1 = bottom; col 0 = left.
+// omitBack=true leaves the back panel off (used by the A5+B5 doorway so
+// the outside scene shows through).
+const MERGES = [
+  { rowMin: 2, rowMax: 3, colMin: 4, colMax: 4, omitBack: true  },  // A5+B5 doorway
+  { rowMin: 0, rowMax: 1, colMin: 3, colMax: 4, omitBack: false },  // C4+C5+D4+D5 square
+];
+function mergeAt(r, c) {
+  for (const m of MERGES) {
+    if (r >= m.rowMin && r <= m.rowMax && c >= m.colMin && c <= m.colMax) return m;
+  }
+  return null;
+}
+const isMergeAnchor    = (r, c) => { const m = mergeAt(r, c); return !!m && r === m.rowMin && c === m.colMin; };
+const isMergeNonAnchor = (r, c) => { const m = mergeAt(r, c); return !!m && !(r === m.rowMin && c === m.colMin); };
 
 const WALL_PX_W = COLS * TPX;
 const WALL_PX_H = ROWS * TPX;
@@ -76,22 +90,23 @@ tc.width = WALL_PX_W; tc.height = WALL_PX_H;
 const tx = tc.getContext('2d');
 tx.imageSmoothingEnabled = false;
 
-// Cut openings per tile via an evenodd clip, then fill the remaining wood
-// frame. The merged top half's opening extends down through the bottom
-// half; the bottom half is skipped so the divider plank between them never
-// gets cut as a separate hole.
+// Cut openings via an evenodd clip, then fill the remaining wood frame.
+// Each MERGES entry contributes one rectangle spanning all its rows × cols
+// (inner dividers consumed); non-anchor merge cells are skipped so the
+// dividers between them aren't recut as separate holes.
 tx.save();
 tx.beginPath();
 tx.rect(0, 0, WALL_PX_W, WALL_PX_H);
 for (let r = 0; r < ROWS; r++) {
   for (let c = 0; c < COLS; c++) {
-    if (isMergedBot(r, c)) continue;
-    const x0 = c * TPX + SIDE;
-    const y0 = r * TPX + PLANK;
-    const x1 = (c + 1) * TPX - SIDE;
-    const y1 = isMergedTop(r, c)
-      ? (r + 2) * TPX - PLANK
-      : (r + 1) * TPX - PLANK;
+    if (isMergeNonAnchor(r, c)) continue;
+    const m = mergeAt(r, c);
+    const rMin = m ? m.rowMin : r, rMax = m ? m.rowMax : r;
+    const cMin = m ? m.colMin : c, cMax = m ? m.colMax : c;
+    const x0 = cMin * TPX + SIDE;
+    const y0 = rMin * TPX + PLANK;
+    const x1 = (cMax + 1) * TPX - SIDE;
+    const y1 = (rMax + 1) * TPX - PLANK;
     tx.rect(x0, y0, x1 - x0, y1 - y0);
   }
 }
@@ -113,16 +128,20 @@ for (let i = 0; i < 28 * ROWS * COLS; i++) {
   tx.stroke();
 }
 tx.restore();
-// Per-tile plank highlights (light top edge, dark bottom edge). Skip the
-// edges of the removed divider between A5 and B5.
+// Per-tile plank highlights (light top edge, dark bottom edge). Skip
+// edges that fall inside a merged region (i.e., a same-merge cell is
+// directly above for the top edge, or directly below for the bottom edge).
 for (let r = 0; r < ROWS; r++) {
   for (let c = 0; c < COLS; c++) {
     const ox = c * TPX, oy = r * TPX;
-    if (!isMergedBot(r, c)) {
+    const m = mergeAt(r, c);
+    const topInsideMerge = m && r > m.rowMin;
+    const botInsideMerge = m && r < m.rowMax;
+    if (!topInsideMerge) {
       tx.fillStyle = 'rgba(255,232,188,0.35)';
       tx.fillRect(ox, oy, TPX, 2);
     }
-    if (!isMergedTop(r, c)) {
+    if (!botInsideMerge) {
       tx.fillStyle = 'rgba(30,15,5,0.65)';
       tx.fillRect(ox, oy + TPX - 3, TPX, 3);
     }
@@ -171,9 +190,22 @@ const CUBBY_W = TILE_W * (right - left) / TPX;       // ~1.875m opening
 const CUBBY_H = TILE_H * (bottom - top) / TPX;       // ~1.656m opening
 const CUBBY_D = 0.7;                                 // depth into the wall
 const FRONT_INSET = 0.006;                           // recess opening behind wall plane to dodge z-fighting
-// Merged A5+B5 opening: two tiles tall, divider plank gone. Adds two
-// plank-widths of vertical space on top of 2 × CUBBY_H.
-const MERGED_H = 2 * CUBBY_H + 2 * TILE_H * PLANK / TPX;     // ~3.656m opening
+// Inner-divider widths (in world units) that get absorbed when cells merge.
+const INNER_SIDE_W  = 2 * TILE_W * SIDE  / TPX;   // ~0.125m horizontal divider between adjacent cells
+const INNER_PLANK_H = 2 * TILE_H * PLANK / TPX;   // ~0.344m vertical divider between stacked cells
+// Augment each MERGES entry with its combined opening size + front-center
+// world position.
+for (const m of MERGES) {
+  const nCols = m.colMax - m.colMin + 1;
+  const nRows = m.rowMax - m.rowMin + 1;
+  m.width   = nCols * CUBBY_W + (nCols - 1) * INNER_SIDE_W;
+  m.height  = nRows * CUBBY_H + (nRows - 1) * INNER_PLANK_H;
+  m.centerX = ((m.colMin + m.colMax) / 2 + 0.5) * TILE_W - GRID_W / 2;
+  m.centerY = -(((m.rowMin + m.rowMax) / 2 + 0.5) * TILE_H - GRID_H / 2);
+}
+// Back-compat: MERGED_H = height of the A5+B5 doorway, still referenced
+// by the outside scene's ground placement below.
+const MERGED_H = MERGES[0].height;
 
 const DEFAULT_CUBBY_COLORS = {
   back:   [0.04, 0.025, 0.012],
@@ -218,10 +250,13 @@ const makeCubbyGeom = (w, h, opts = {}) => {
   return g;
 };
 const cubbyGeom = makeCubbyGeom(CUBBY_W, CUBBY_H);
-// Merged cubby reads as a small indoor hallway: cream-painted ceiling,
-// warm beige plaster walls, dark hardwood floor — so the (now open) back
-// clearly looks like a DOORWAY onto the outside, not a deeper cubby hole.
-const mergedCubbyGeom = makeCubbyGeom(CUBBY_W, MERGED_H, { omitBack: true });
+// One recessed-box geometry per merge, sized to its combined opening.
+// omitBack=true (A5+B5 doorway) leaves the back open so the outside scene
+// shows through; everything else gets a normal back panel and reads as a
+// deeper cubby box.
+for (const m of MERGES) {
+  m.geom = makeCubbyGeom(m.width, m.height, { omitBack: m.omitBack });
+}
 // Shader: shifts vertices flagged isBack=1 by per-cubby uBackOffset.xy.
 // Forwards the color attribute manually since ShaderMaterial doesn't auto-wire
 // the vertexColors flag like MeshBasicMaterial does.
@@ -252,25 +287,25 @@ window.cubbies = cubbies;
 for (let row = 0; row < ROWS; row++) {
   cubbies.push([]);
   for (let col = 0; col < COLS; col++) {
-    if (isMergedBot(row, col)) {
-      // Bottom half of the merged A5+B5 cubby — alias the same Group as
-      // the top half so cubbies.A5 and .B5 both resolve to it.
-      cubbies[row].push(cubbies[MERGED_TOP_ROW][col]);
+    const m = mergeAt(row, col);
+    if (m && !(row === m.rowMin && col === m.colMin)) {
+      // Non-anchor cell of a merge — alias the anchor's Group so all keys
+      // for this merge (e.g., A5/B5, or C4/C5/D4/D5) resolve to one Group.
+      cubbies[row].push(cubbies[m.rowMin][m.colMin]);
       continue;
     }
-    const cellX =  (col + 0.5) * TILE_W - GRID_W / 2;
-    const cellY = -((row + 0.5) * TILE_H - GRID_H / 2);
-    const merged = isMergedTop(row, col);
+    const cellX     = m ? m.centerX : (col + 0.5) * TILE_W - GRID_W / 2;
+    const cellY     = m ? m.centerY : -((row + 0.5) * TILE_H - GRID_H / 2);
+    const openingW  = m ? m.width  : CUBBY_W;
+    const openingH  = m ? m.height : CUBBY_H;
+    const geom      = m ? m.geom   : cubbyGeom;
     const cubbyGroup = new THREE.Group();
-    // Merged group sits at the midpoint between the two cells it spans, so
-    // its local origin is the front-center of the combined opening.
-    cubbyGroup.position.set(cellX, merged ? cellY - TILE_H / 2 : cellY, 0);
+    cubbyGroup.position.set(cellX, cellY, 0);
     // World-space clipping planes confine every material in this cubby's
-    // subtree (panels + child meshes like the hallway's sky/ground) to its
-    // own footprint — no leakage into neighbors regardless of how the
-    // parallax shader tilts the back.
-    const halfW = CUBBY_W / 2 + 0.002;
-    const halfH = (merged ? MERGED_H : CUBBY_H) / 2 + 0.002;
+    // subtree to its own footprint — no leakage into neighbors regardless
+    // of how the parallax shader tilts the back.
+    const halfW = openingW / 2 + 0.002;
+    const halfH = openingH / 2 + 0.002;
     const wx = cubbyGroup.position.x;
     const wy = cubbyGroup.position.y;
     const clippingPlanes = [
@@ -279,13 +314,12 @@ for (let row = 0; row < ROWS; row++) {
       new THREE.Plane(new THREE.Vector3( 0, 1, 0), -wy + halfH),
       new THREE.Plane(new THREE.Vector3( 0,-1, 0),  wy + halfH),
     ];
-    const cubbyMesh = new THREE.Mesh(
-      merged ? mergedCubbyGeom : cubbyGeom,
-      makeCubbyMat(clippingPlanes),
-    );
+    const cubbyMesh = new THREE.Mesh(geom, makeCubbyMat(clippingPlanes));
     cubbyGroup.add(cubbyMesh);
     cubbyGroup.userData.cubbyMesh      = cubbyMesh;     // for per-frame uBackOffset updates
-    cubbyGroup.userData.merged         = merged;
+    cubbyGroup.userData.merge          = m || null;
+    cubbyGroup.userData.openingW       = openingW;
+    cubbyGroup.userData.openingH       = openingH;
     cubbyGroup.userData.clippingPlanes = clippingPlanes; // reused by the hallway's sky/ground
     scene.add(cubbyGroup);
     cubbies[row].push(cubbyGroup);
@@ -1446,8 +1480,8 @@ function updateTilt() {
   }
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      // Merged bottom half shares its Group with the top half — tilt it once.
-      if (isMergedBot(row, col)) continue;
+      // Non-anchor merge cells share their Group with the anchor — tilt once.
+      if (isMergeNonAnchor(row, col)) continue;
       const cg = cubbies[row][col];
       // D6 holds the castle model; tilting the back into it causes clipping.
       if (cg === cubbies.D6) continue;
@@ -1506,6 +1540,497 @@ function updateDust() {
   }
 }
 
+// === Stop-motion pigeon. Sits on a cubby's bottom edge, then arcs to
+// another cubby and perches there. Edit BIRD_PERCHES to add/remove
+// visitable cubbies — keys reference window.cubbies (A1..D6). Avoid
+// A5 (hallway window), B2 (record player), D6 (castle) unless you want
+// the bird overlapping those props.
+//
+// Wing flap is 4 discrete poses held for 1/BIRD_FPS sec each (no
+// tweening) — the chop is what sells the paper-cutout stop-motion feel.
+// Body scale.x flips so the bird always faces its travel direction.
+const BIRD_PERCHES   = ['A1', 'A4', 'B1', 'C1', 'C5', 'D2', 'D3', 'D4', 'D5'];
+const PERCH_MS_MIN   = 2800;
+const PERCH_MS_MAX   = 5500;
+const BIRD_FLIGHT_MS = 1900;
+const BIRD_FPS       = 8;
+const BIRD_ASSET_DIR = 'bird/';
+// Parrot-sized. Body small; head comically huge attached on top. Total
+// visible bird height ≈ BODY_H + HEAD_H − overlap.
+const BIRD_BODY_H    = 0.22;
+const BIRD_HEAD_H    = 0.55;
+const BIRD_WING_H    = 0.16;
+const BIRD_HEAD_Y    = 0.30;            // head center above body center; light overlap at neck
+
+const bird = new THREE.Group();
+scene.add(bird);
+
+// Wing pivots — wing sprite geometry is shifted so its inner edge sits at
+// pivot origin, so rotation.z behaves like a shoulder hinge.
+const wingLPivot = new THREE.Group();
+const wingRPivot = new THREE.Group();
+wingLPivot.position.set(-0.12, 0.02, 0.005);
+wingRPivot.position.set( 0.12, 0.02, 0.005);
+bird.add(wingLPivot);
+bird.add(wingRPivot);
+
+const birdSprites = {};
+
+function makeBirdSpriteMesh(tex, h, anchor) {
+  tex.magFilter = THREE.NearestFilter;
+  tex.minFilter = THREE.NearestFilter;
+  const w = h * (tex.image.width / tex.image.height);
+  const geom = new THREE.PlaneGeometry(w, h);
+  if (anchor === 'left')  geom.translate( w / 2, 0, 0);
+  if (anchor === 'right') geom.translate(-w / 2, 0, 0);
+  const mat = new THREE.MeshBasicMaterial({
+    map: tex, transparent: true, depthWrite: false, alphaTest: 0.5,
+  });
+  return new THREE.Mesh(geom, mat);
+}
+
+// Procedural body — mustard ellipse with thick dark outline + small tail.
+function makeBirdBodyTexture() {
+  const W = 256, H = 192;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#e0b233';
+  ctx.strokeStyle = '#2e2412';
+  ctx.lineWidth = 6;
+  ctx.beginPath();
+  ctx.ellipse(W / 2 - 10, H / 2, W / 2 - 20, H / 2 - 14, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.stroke();
+  // tail nub poking back-right
+  ctx.beginPath();
+  ctx.moveTo(W - 36, H / 2 - 4);
+  ctx.quadraticCurveTo(W - 8, H / 2 + 8, W - 20, H / 2 + 28);
+  ctx.quadraticCurveTo(W - 40, H / 2 + 16, W - 36, H / 2 - 4);
+  ctx.fill();
+  ctx.stroke();
+  return new THREE.CanvasTexture(c);
+}
+
+// Procedural wing — yellow paddle, pivot at the RIGHT edge of the canvas
+// (the shoulder). `mirror` flips it horizontally for the right-side wing.
+function makeBirdWingTexture(mirror) {
+  const W = 192, H = 128;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const ctx = c.getContext('2d');
+  ctx.fillStyle = '#e0b233';
+  ctx.strokeStyle = '#2e2412';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(W - 12, H / 2);
+  ctx.quadraticCurveTo(W * 0.55, 10, 18, H * 0.5);
+  ctx.quadraticCurveTo(W * 0.55, H - 14, W - 12, H / 2);
+  ctx.closePath();
+  ctx.fill();
+  ctx.stroke();
+  if (!mirror) return new THREE.CanvasTexture(c);
+  const c2 = document.createElement('canvas');
+  c2.width = W; c2.height = H;
+  const ctx2 = c2.getContext('2d');
+  ctx2.translate(W, 0);
+  ctx2.scale(-1, 1);
+  ctx2.drawImage(c, 0, 0);
+  return new THREE.CanvasTexture(c2);
+}
+
+// Body + wings: built synchronously from canvas textures.
+const bodyMesh = makeBirdSpriteMesh(makeBirdBodyTexture(), BIRD_BODY_H, 'center');
+bodyMesh.renderOrder = 25;
+bird.add(bodyMesh);
+birdSprites.body = bodyMesh;
+
+const wingLMesh = makeBirdSpriteMesh(makeBirdWingTexture(false), BIRD_WING_H, 'right');
+wingLMesh.renderOrder = 26;
+wingLPivot.add(wingLMesh);
+birdSprites.wingL = wingLMesh;
+
+const wingRMesh = makeBirdSpriteMesh(makeBirdWingTexture(true), BIRD_WING_H, 'left');
+wingRMesh.renderOrder = 26;
+wingRPivot.add(wingRMesh);
+birdSprites.wingR = wingRMesh;
+
+// Head: loaded from head.png (kept as the user-authored reference image).
+new THREE.TextureLoader().load(
+  BIRD_ASSET_DIR + 'head.png',
+  tex => {
+    const headMesh = makeBirdSpriteMesh(tex, BIRD_HEAD_H, 'center');
+    headMesh.position.set(0.02, BIRD_HEAD_Y, 0.01);
+    headMesh.renderOrder = 27;
+    bird.add(headMesh);
+    birdSprites.head = headMesh;
+  },
+  undefined,
+  () => console.warn('[bird] missing', BIRD_ASSET_DIR + 'head.png'),
+);
+
+// Wing flap cycle (radians about z, mirrored per wing). Index 0 = tucked
+// for idle perch. Flying cycles through all 4.
+const WING_POSES = [-0.15, 0.55, 1.0, 0.55];
+const BIRD_FRAME_MS = 1000 / BIRD_FPS;
+let birdFrameIdx = 0;
+let lastBirdTickMs = 0;
+
+let birdState     = 'perch';
+let birdPerchKey  = BIRD_PERCHES[0];
+let perchUntilMs  = performance.now() + 1500;
+let birdFlight    = null;
+
+function birdPerchPosition(cubbyKey) {
+  const cubby = cubbies[cubbyKey];
+  const h     = cubby.userData.openingH;
+  const wp = cubby.getWorldPosition(new THREE.Vector3());
+  wp.y -= h / 2 - BIRD_BODY_H / 2 - 0.04;     // body feet ~on bottom plank
+  wp.z  = 0.02;                                // just in front of maple wall
+  return wp;
+}
+
+function birdPickNextPerch() {
+  if (BIRD_PERCHES.length < 2) return birdPerchKey;
+  let next;
+  do { next = BIRD_PERCHES[(Math.random() * BIRD_PERCHES.length) | 0]; }
+  while (next === birdPerchKey);
+  return next;
+}
+
+try {
+  bird.position.copy(birdPerchPosition(birdPerchKey));
+} catch (err) {
+  console.error('[bird] init failed', err);
+}
+
+function updateBird() {
+  if (!cubbies[birdPerchKey]) return;
+  const now = performance.now();
+
+  // Stop-motion frame tick — pose held until interval elapses, no lerp.
+  if (now - lastBirdTickMs >= BIRD_FRAME_MS) {
+    lastBirdTickMs = now;
+    birdFrameIdx = (birdFrameIdx + 1) % WING_POSES.length;
+    const a = WING_POSES[birdState === 'fly' ? birdFrameIdx : 0];
+    wingLPivot.rotation.z =  a;
+    wingRPivot.rotation.z = -a;
+  }
+
+  if (birdState === 'perch') {
+    if (now < perchUntilMs) return;
+    const next = birdPickNextPerch();
+    const toVec = birdPerchPosition(next);
+    birdFlight = {
+      fromVec: bird.position.clone(),
+      toVec,
+      startMs: now,
+    };
+    bird.scale.x = toVec.x < bird.position.x ? -1 : 1;
+    birdPerchKey = next;
+    birdState    = 'fly';
+    return;
+  }
+
+  // 'fly' — arc forward & up, ease-in-out, stop-motion ticks the wings.
+  const t = Math.min(1, (now - birdFlight.startMs) / BIRD_FLIGHT_MS);
+  const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+  bird.position.lerpVectors(birdFlight.fromVec, birdFlight.toVec, e);
+  bird.position.z += Math.sin(e * Math.PI) * 0.6;
+  bird.position.y += Math.sin(e * Math.PI) * 0.25;
+  if (t >= 1) {
+    bird.position.copy(birdFlight.toVec);
+    perchUntilMs = now + PERCH_MS_MIN + Math.random() * (PERCH_MS_MAX - PERCH_MS_MIN);
+    birdState    = 'perch';
+    birdFlight   = null;
+  }
+}
+
+// === Pin art toy hanging in the C4+C5+D4+D5 merged cubby. A backing plate
+// holds a 32×32 grid of gunmetal pins; each pin's protrusion is driven by
+// pinDepthSource(u, v, t) → [0, 1]. Today the source is a procedural
+// double-ripple from center. To swap in an image later, replace the body
+// of pinDepthSource with a sampler that reads a CanvasTexture / ImageData
+// of image1..image7 and returns luminance at (u, v). Crossfading between
+// images, panning, etc. can layer on top of that without touching the
+// pin-rendering code.
+const PIN_COLS           = 32;
+const PIN_ROWS           = 32;
+const PIN_AREA_W         = 2.4;
+const PIN_AREA_H         = 2.4;
+const PIN_DIAMETER       = Math.min(PIN_AREA_W / PIN_COLS, PIN_AREA_H / PIN_ROWS);
+const PIN_RADIUS         = PIN_DIAMETER * 0.42;     // slight gap between pins
+const PIN_LENGTH         = 0.80;
+const PIN_MAX_PROTRUSION = 0.50;
+const PLATE_THICKNESS    = 0.05;
+const PIN_ART_CENTER_Y   = -0.10;                   // vertical offset within cubby (below center → leaves room for chains)
+const PIN_ART_Z          = -0.32;                   // plate front Z within the cubby (in local space of cubbies.D4)
+
+const pinArt = new THREE.Group();
+pinArt.position.set(0, PIN_ART_CENTER_Y, PIN_ART_Z);
+pinArt.scale.setScalar(1.20);
+cubbies.D4.add(pinArt);
+
+// Reuse the cubby's clipping planes so the pin art can't spill out of the
+// merged opening if the parallax shader tilts the back. (Necessary because
+// the StandardMaterials we use here are otherwise unclipped.)
+const pinClipPlanes = cubbies.D4.userData.clippingPlanes;
+
+// --- Backing plate. Slightly larger than the pin area; opaque dark so
+// the back ends of the pins (which slide through it) stay hidden.
+const plate = new THREE.Mesh(
+  new THREE.BoxGeometry(PIN_AREA_W + 0.06, PIN_AREA_H + 0.06, PLATE_THICKNESS),
+  new THREE.MeshStandardMaterial({
+    color: 0x141414, roughness: 0.85, metalness: 0.1,
+    clippingPlanes: pinClipPlanes,
+  }),
+);
+plate.position.set(0, 0, -PLATE_THICKNESS / 2);
+pinArt.add(plate);
+
+// --- Pin grid. One InstancedMesh, ~1024 instances, gunmetal. Cylinder
+// geometry is rotated so its axis aligns with +Z (pins point toward the
+// camera). The pin's local Z is the only thing the animation moves.
+const pinGeom = new THREE.CylinderGeometry(PIN_RADIUS, PIN_RADIUS * 0.85, PIN_LENGTH, 12);
+pinGeom.rotateX(Math.PI / 2);
+const pinMat = new THREE.MeshStandardMaterial({
+  color: 0x4a4e54, roughness: 0.45, metalness: 0.85,
+  clippingPlanes: pinClipPlanes,
+});
+const pins = new THREE.InstancedMesh(pinGeom, pinMat, PIN_COLS * PIN_ROWS);
+pinArt.add(pins);
+
+// Precompute each pin's base XY; only Z changes per frame.
+const pinXY = [];
+for (let row = 0; row < PIN_ROWS; row++) {
+  for (let col = 0; col < PIN_COLS; col++) {
+    const x = (col + 0.5) / PIN_COLS * PIN_AREA_W - PIN_AREA_W / 2;
+    const y = (row + 0.5) / PIN_ROWS * PIN_AREA_H - PIN_AREA_H / 2;
+    pinXY.push({ x, y, u: (col + 0.5) / PIN_COLS, v: (row + 0.5) / PIN_ROWS });
+  }
+}
+
+// Image source: image1..image7 downsampled to PIN_COLS × PIN_ROWS, stored
+// as 1-luminance (dark ink → high protrusion). Each map is a Float32Array
+// of length PIN_COLS*PIN_ROWS in image-row order (row 0 = top of image).
+// Cycle through them: hold for IMAGE_HOLD_MS, then smoothstep-crossfade to
+// the next over IMAGE_TRANSITION_MS, looping.
+const PIN_IMAGE_URLS    = ['images/image1.png', 'images/image2.png', 'images/image3.png', 'images/image4.png', 'images/image5.png', 'images/image6.png', 'images/image7.png'];
+const IMAGE_HOLD_MS       = 3500;
+const IMAGE_TRANSITION_MS = 1500;
+const IMAGE_CYCLE_MS      = IMAGE_HOLD_MS + IMAGE_TRANSITION_MS;
+const imageDepthMaps    = new Array(PIN_IMAGE_URLS.length).fill(null);
+const imageHoloTextures = new Array(PIN_IMAGE_URLS.length).fill(null);
+
+// Builds a hologram-tinted texture: ink pixels become bright cyan with
+// inverted-luminance alpha, paper pixels become fully transparent. Used by
+// the floating holo planes in front of the pin grid (additive blend → glow).
+function makeHologramTexture(img) {
+  const W = 256, H = 256;
+  const c = document.createElement('canvas');
+  c.width = W; c.height = H;
+  const cx = c.getContext('2d');
+  cx.imageSmoothingEnabled = true;
+  cx.fillStyle = '#ffffff';
+  cx.fillRect(0, 0, W, H);
+  cx.drawImage(img, 0, 0, W, H);
+  const d = cx.getImageData(0, 0, W, H);
+  const px = d.data;
+  const tr = 0xa8, tg = 0xe2, tb = 0xff;   // cyan-blue hologram tint
+  for (let p = 0; p < W * H; p++) {
+    const r = px[p * 4], g = px[p * 4 + 1], b = px[p * 4 + 2];
+    const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+    const inv = 1 - lum;
+    px[p * 4 + 0] = tr;
+    px[p * 4 + 1] = tg;
+    px[p * 4 + 2] = tb;
+    px[p * 4 + 3] = Math.round(Math.pow(inv, 3) * 255 * (Math.floor(p / W) % 2 ? 0.35 : 1));   // power curve + scanlines
+  }
+  cx.putImageData(d, 0, 0);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+for (let i = 0; i < PIN_IMAGE_URLS.length; i++) {
+  const img = new Image();
+  img.onload = () => {
+    // Downsample with browser's bilinear filter; white background underneath
+    // so any transparent pixels read as low protrusion (paper, not ink).
+    const c = document.createElement('canvas');
+    c.width = PIN_COLS; c.height = PIN_ROWS;
+    const cx = c.getContext('2d');
+    cx.imageSmoothingEnabled = true;
+    cx.fillStyle = '#ffffff';
+    cx.fillRect(0, 0, PIN_COLS, PIN_ROWS);
+    cx.drawImage(img, 0, 0, PIN_COLS, PIN_ROWS);
+    const data = cx.getImageData(0, 0, PIN_COLS, PIN_ROWS).data;
+    const map = new Float32Array(PIN_COLS * PIN_ROWS);
+    for (let p = 0; p < PIN_COLS * PIN_ROWS; p++) {
+      const r = data[p * 4], g = data[p * 4 + 1], b = data[p * 4 + 2];
+      const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
+      map[p] = 1 - lum;             // dark ink → protrude
+    }
+    imageDepthMaps[i] = map;
+    imageHoloTextures[i] = makeHologramTexture(img);
+  };
+  img.onerror = () => console.warn('[pinart] failed to load', PIN_IMAGE_URLS[i]);
+  img.src = PIN_IMAGE_URLS[i];
+}
+
+// Two hologram planes floating in front of the pin field. Crossfade with
+// the same HOLD/TRANSITION timing as the pin depth, so the projection and
+// the relief stay in sync. Additive blending makes the cyan glow.
+const HOLO_Z       = PIN_MAX_PROTRUSION + 0.10;   // sit just in front of fully-extended pin tips
+const HOLO_OPACITY = 0.45;
+const holoPlanes = [];
+for (let i = 0; i < 2; i++) {
+  const mat = new THREE.MeshBasicMaterial({
+    transparent: true, opacity: 0,
+    blending: THREE.AdditiveBlending, depthWrite: false,
+    clippingPlanes: pinClipPlanes,
+  });
+  const mesh = new THREE.Mesh(
+    new THREE.PlaneGeometry(PIN_AREA_W, PIN_AREA_H),
+    mat,
+  );
+  mesh.position.set(0, 0, HOLO_Z + i * 0.001);     // tiny z stagger to disambiguate sort
+  mesh.renderOrder = 30 + i;
+  pinArt.add(mesh);
+  holoPlanes.push(mesh);
+}
+
+// Hologram timing — appears only during HOLD (when pins are static), with
+// gentle fade-in once they settle and fade-out before the next morph. The
+// TRANSITION window stays empty so the projection doesn't show during
+// pin movement.
+const HOLO_FADE_MS = 700;
+function updateHologram() {
+  if (!imageHoloTextures.some(t => t)) return;
+  const now   = performance.now();
+  const phase = now % IMAGE_CYCLE_MS;
+  // TRANSITION phase: pins are morphing, hide hologram completely.
+  if (phase >= IMAGE_HOLD_MS) {
+    holoPlanes[0].material.opacity = 0;
+    holoPlanes[1].material.opacity = 0;
+    return;
+  }
+  // HOLD phase: smoothstep fade in at start, fade out near end.
+  let a;
+  if (phase < HOLO_FADE_MS) {
+    a = phase / HOLO_FADE_MS;
+  } else if (phase > IMAGE_HOLD_MS - HOLO_FADE_MS) {
+    a = (IMAGE_HOLD_MS - phase) / HOLO_FADE_MS;
+  } else {
+    a = 1;
+  }
+  const s = a * a * (3 - 2 * a);
+  const fromI   = Math.floor(now / IMAGE_CYCLE_MS) % imageHoloTextures.length;
+  const fromTex = imageHoloTextures[fromI];
+  if (fromTex && holoPlanes[0].material.map !== fromTex) {
+    holoPlanes[0].material.map = fromTex;
+    holoPlanes[0].material.needsUpdate = true;
+  }
+  holoPlanes[0].material.opacity = s * HOLO_OPACITY;
+  holoPlanes[1].material.opacity = 0;
+}
+
+// Depth source — sampled from the current image (with crossfade to the
+// next). If no images have loaded yet, falls back to a gentle ripple so
+// the toy isn't dead during the load.
+function pinDepthSource(u, v, t) {
+  const loaded = imageDepthMaps.filter(m => m);
+  if (loaded.length === 0) {
+    const du = u - 0.5, dv = v - 0.5;
+    const r = Math.sqrt(du * du + dv * dv);
+    return 0.5 + 0.5 * Math.sin(r * 22 - t * 2.8);
+  }
+  // Image data is y-down; pin v=0 is bottom, so flip Y when indexing.
+  const col = Math.min(PIN_COLS - 1, Math.max(0, Math.floor(u * PIN_COLS)));
+  const row = Math.min(PIN_ROWS - 1, Math.max(0, Math.floor((1 - v) * PIN_ROWS)));
+  const idx = row * PIN_COLS + col;
+  const tMs    = t * 1000;
+  const phase  = tMs % IMAGE_CYCLE_MS;
+  const fromI  = Math.floor(tMs / IMAGE_CYCLE_MS) % imageDepthMaps.length;
+  const toI    = (fromI + 1) % imageDepthMaps.length;
+  const dFrom  = imageDepthMaps[fromI] ? imageDepthMaps[fromI][idx] : 0;
+  const dTo    = imageDepthMaps[toI]   ? imageDepthMaps[toI][idx]   : dFrom;
+  if (phase < IMAGE_HOLD_MS) return dFrom;
+  const k = (phase - IMAGE_HOLD_MS) / IMAGE_TRANSITION_MS;
+  const s = k * k * (3 - 2 * k);    // smoothstep
+  return dFrom + (dTo - dFrom) * s;
+}
+
+// --- Volt: pixelated electrical pulse that crawls radially inward across
+// the pin grid the instant a new image finishes forming. No separate
+// geometry — the volt directly overrides pin depths within a contracting
+// circular wavefront. Per-frame random sampling inside the wavefront gives
+// the crackling pixel-static feel; the wavefront itself sweeps from
+// outside the grid edge through to center over VOLT_DURATION_MS, so the
+// activated band visibly creeps inward.
+const VOLT_DURATION_MS = 700;
+const VOLT_BAND        = 0.22;     // radial half-width of the activation cloud (in normalized r)
+const VOLT_PEAK_PROB   = 0.65;     // peak activation probability at the wavefront center
+
+let voltStartMs  = -Infinity;
+let lastCycleIdx = -1;
+function fireVolt() { voltStartMs = performance.now(); }
+
+const _pinDummy = new THREE.Object3D();
+function updatePinArt() {
+  const now = performance.now();
+  const t   = now / 1000;
+  // Detect image-cycle rollover → new image just finished forming → zap.
+  const cycleIdx = Math.floor(now / IMAGE_CYCLE_MS);
+  if (cycleIdx !== lastCycleIdx) {
+    if (lastCycleIdx >= 0) fireVolt();
+    lastCycleIdx = cycleIdx;
+  }
+  // Volt overlay: contracting radial wavefront from r=1.1 (just outside the
+  // grid) to r=-0.1 (just past center) over VOLT_DURATION_MS. Inside the
+  // wavefront, each pin is randomly snapped to full extension with a
+  // probability that peaks at the wavefront and falls linearly within
+  // VOLT_BAND — the soft falloff + per-frame re-roll gives the pixel-snow
+  // crackle. Outside the wavefront (or outside the volt window), pins
+  // follow the image depth normally.
+  const voltElapsed  = now - voltStartMs;
+  const voltActive   = voltElapsed >= 0 && voltElapsed <= VOLT_DURATION_MS;
+  const voltFront    = voltActive ? 1.1 - (voltElapsed / VOLT_DURATION_MS) * 1.2 : 0;
+  // baseZ = pin position when depth=0 (tip flush with plate front at z=0).
+  const baseZ = -PIN_LENGTH / 2 + 0.001;
+  for (let i = 0; i < pinXY.length; i++) {
+    const p = pinXY[i];
+    const d = Math.max(0, Math.min(1, pinDepthSource(p.u, p.v, t)));
+    _pinDummy.position.set(p.x, p.y, baseZ + d * PIN_MAX_PROTRUSION);
+    _pinDummy.updateMatrix();
+    pins.setMatrixAt(i, _pinDummy.matrix);
+  }
+  pins.instanceMatrix.needsUpdate = true;
+}
+updatePinArt();   // initial pose so it's not all stuck at z=0 before first tick
+
+// --- Two thin chains from the upper corners of the plate up to the
+// cubby's ceiling. Gunmetal cylinders — simple but reads as "hanging".
+{
+  const cubbyOpeningH = cubbies.D4.userData.openingH;
+  // Ceiling Y in pinArt-local space: cubby ceiling minus pinArt's Y offset,
+  // minus a small inset so the chain doesn't penetrate the cubby ceiling.
+  const ceilingY     = cubbyOpeningH / 2 - PIN_ART_CENTER_Y - 0.04;
+  const plateTopY    = PIN_AREA_H / 2 + 0.03;
+  const chainLength  = ceilingY - plateTopY;
+  const chainGeom    = new THREE.CylinderGeometry(0.014, 0.014, chainLength, 6);
+  const chainMat     = new THREE.MeshStandardMaterial({
+    color: 0x2a2c30, roughness: 0.6, metalness: 0.7,
+    clippingPlanes: pinClipPlanes,
+  });
+  const chainOffsetX = PIN_AREA_W / 2 - 0.08;
+  for (const sx of [-1, 1]) {
+    const chain = new THREE.Mesh(chainGeom, chainMat);
+    chain.position.set(sx * chainOffsetX, plateTopY + chainLength / 2, 0);
+    pinArt.add(chain);
+  }
+}
+
 // Throttle the full render loop to ~30fps so the tilt reads as chunky/pixel-y
 // while staying responsive to fast cursor moves. The per-frame lerp factor
 // below was bumped to ~0.55 so the cubbies catch up to the cursor in 2–3
@@ -1523,6 +2048,9 @@ function render(now) {
     updateFlight();
     updateDust();
     updateWaterfall();
+    updateBird();
+    updatePinArt();
+    updateHologram();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
