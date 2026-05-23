@@ -1129,6 +1129,23 @@ function updateFlight() {
   }
 }
 
+// === Web Audio analyser shared by the turntable + pin-art visualizer. The
+// playing record is routed element -> analyser -> speakers, and the pin art
+// reads analyser.getByteFrequencyData() each frame (see musicDepth). The
+// AudioContext is created/resumed on the first record load — a user gesture,
+// which satisfies the browser autoplay policy. createMediaElementSource can
+// only run once per <audio> element, so the source node is cached on state.
+let audioCtx = null, analyser = null, freqData = null, musicActive = false;
+function ensureAudioGraph() {
+  if (audioCtx) return;
+  audioCtx  = new (window.AudioContext || window.webkitAudioContext)();
+  analyser  = audioCtx.createAnalyser();
+  analyser.fftSize = 128;                  // 64 freq bins — coarse, matches 32 pin columns
+  analyser.smoothingTimeConstant = 0.68;   // balanced: 0.75 laggy, 0.6 slightly twitchy, 0.68 = sweet spot
+  freqData  = new Uint8Array(analyser.frequencyBinCount);
+  analyser.connect(audioCtx.destination);
+}
+
 function loadRecord(state) {
   if (flightAnim || currentRecord) return;
   currentRecord = { state };
@@ -1143,6 +1160,12 @@ function loadRecord(state) {
     if (!state.audio) { state.audio = new Audio(state.audioSrc); state.audio.loop = true; }
     state.audio.currentTime = 0;
     state.audio.play().catch(err => console.warn('[turntable] play failed', state.audioSrc, err.message));
+    // Tap the playback into the shared analyser so the pin art reacts.
+    ensureAudioGraph();
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+    if (!state.srcNode) state.srcNode = audioCtx.createMediaElementSource(state.audio);
+    state.srcNode.connect(analyser);
+    musicActive = true;
   });
 }
 
@@ -1150,6 +1173,7 @@ function unloadRecord() {
   if (flightAnim || !currentRecord) return;
   const { state } = currentRecord;
   if (state.audio) { state.audio.pause(); state.audio.currentTime = 0; }
+  musicActive = false;   // pins fall back to idle ripple + hover
   const fromVec = recordPlayer.userData.spinGroup.getWorldPosition(new THREE.Vector3());
   const toVec   = state.vinyl.getWorldPosition(new THREE.Vector3());
   const toScl   = state.vinyl.getWorldScale(new THREE.Vector3()).x;
@@ -1540,212 +1564,6 @@ function updateDust() {
   }
 }
 
-// === Stop-motion pigeon. Sits on a cubby's bottom edge, then arcs to
-// another cubby and perches there. Edit BIRD_PERCHES to add/remove
-// visitable cubbies — keys reference window.cubbies (A1..D6). Avoid
-// A5 (hallway window), B2 (record player), D6 (castle) unless you want
-// the bird overlapping those props.
-//
-// Wing flap is 4 discrete poses held for 1/BIRD_FPS sec each (no
-// tweening) — the chop is what sells the paper-cutout stop-motion feel.
-// Body scale.x flips so the bird always faces its travel direction.
-const BIRD_PERCHES   = ['A1', 'A4', 'B1', 'C1', 'C5', 'D2', 'D3', 'D4', 'D5'];
-const PERCH_MS_MIN   = 2800;
-const PERCH_MS_MAX   = 5500;
-const BIRD_FLIGHT_MS = 1900;
-const BIRD_FPS       = 8;
-const BIRD_ASSET_DIR = 'bird/';
-// Parrot-sized. Body small; head comically huge attached on top. Total
-// visible bird height ≈ BODY_H + HEAD_H − overlap.
-const BIRD_BODY_H    = 0.22;
-const BIRD_HEAD_H    = 0.55;
-const BIRD_WING_H    = 0.16;
-const BIRD_HEAD_Y    = 0.30;            // head center above body center; light overlap at neck
-
-const bird = new THREE.Group();
-scene.add(bird);
-
-// Wing pivots — wing sprite geometry is shifted so its inner edge sits at
-// pivot origin, so rotation.z behaves like a shoulder hinge.
-const wingLPivot = new THREE.Group();
-const wingRPivot = new THREE.Group();
-wingLPivot.position.set(-0.12, 0.02, 0.005);
-wingRPivot.position.set( 0.12, 0.02, 0.005);
-bird.add(wingLPivot);
-bird.add(wingRPivot);
-
-const birdSprites = {};
-
-function makeBirdSpriteMesh(tex, h, anchor) {
-  tex.magFilter = THREE.NearestFilter;
-  tex.minFilter = THREE.NearestFilter;
-  const w = h * (tex.image.width / tex.image.height);
-  const geom = new THREE.PlaneGeometry(w, h);
-  if (anchor === 'left')  geom.translate( w / 2, 0, 0);
-  if (anchor === 'right') geom.translate(-w / 2, 0, 0);
-  const mat = new THREE.MeshBasicMaterial({
-    map: tex, transparent: true, depthWrite: false, alphaTest: 0.5,
-  });
-  return new THREE.Mesh(geom, mat);
-}
-
-// Procedural body — mustard ellipse with thick dark outline + small tail.
-function makeBirdBodyTexture() {
-  const W = 256, H = 192;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#e0b233';
-  ctx.strokeStyle = '#2e2412';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.ellipse(W / 2 - 10, H / 2, W / 2 - 20, H / 2 - 14, 0, 0, Math.PI * 2);
-  ctx.fill();
-  ctx.stroke();
-  // tail nub poking back-right
-  ctx.beginPath();
-  ctx.moveTo(W - 36, H / 2 - 4);
-  ctx.quadraticCurveTo(W - 8, H / 2 + 8, W - 20, H / 2 + 28);
-  ctx.quadraticCurveTo(W - 40, H / 2 + 16, W - 36, H / 2 - 4);
-  ctx.fill();
-  ctx.stroke();
-  return new THREE.CanvasTexture(c);
-}
-
-// Procedural wing — yellow paddle, pivot at the RIGHT edge of the canvas
-// (the shoulder). `mirror` flips it horizontally for the right-side wing.
-function makeBirdWingTexture(mirror) {
-  const W = 192, H = 128;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const ctx = c.getContext('2d');
-  ctx.fillStyle = '#e0b233';
-  ctx.strokeStyle = '#2e2412';
-  ctx.lineWidth = 5;
-  ctx.beginPath();
-  ctx.moveTo(W - 12, H / 2);
-  ctx.quadraticCurveTo(W * 0.55, 10, 18, H * 0.5);
-  ctx.quadraticCurveTo(W * 0.55, H - 14, W - 12, H / 2);
-  ctx.closePath();
-  ctx.fill();
-  ctx.stroke();
-  if (!mirror) return new THREE.CanvasTexture(c);
-  const c2 = document.createElement('canvas');
-  c2.width = W; c2.height = H;
-  const ctx2 = c2.getContext('2d');
-  ctx2.translate(W, 0);
-  ctx2.scale(-1, 1);
-  ctx2.drawImage(c, 0, 0);
-  return new THREE.CanvasTexture(c2);
-}
-
-// Body + wings: built synchronously from canvas textures.
-const bodyMesh = makeBirdSpriteMesh(makeBirdBodyTexture(), BIRD_BODY_H, 'center');
-bodyMesh.renderOrder = 25;
-bird.add(bodyMesh);
-birdSprites.body = bodyMesh;
-
-const wingLMesh = makeBirdSpriteMesh(makeBirdWingTexture(false), BIRD_WING_H, 'right');
-wingLMesh.renderOrder = 26;
-wingLPivot.add(wingLMesh);
-birdSprites.wingL = wingLMesh;
-
-const wingRMesh = makeBirdSpriteMesh(makeBirdWingTexture(true), BIRD_WING_H, 'left');
-wingRMesh.renderOrder = 26;
-wingRPivot.add(wingRMesh);
-birdSprites.wingR = wingRMesh;
-
-// Head: loaded from head.png (kept as the user-authored reference image).
-new THREE.TextureLoader().load(
-  BIRD_ASSET_DIR + 'head.png',
-  tex => {
-    const headMesh = makeBirdSpriteMesh(tex, BIRD_HEAD_H, 'center');
-    headMesh.position.set(0.02, BIRD_HEAD_Y, 0.01);
-    headMesh.renderOrder = 27;
-    bird.add(headMesh);
-    birdSprites.head = headMesh;
-  },
-  undefined,
-  () => console.warn('[bird] missing', BIRD_ASSET_DIR + 'head.png'),
-);
-
-// Wing flap cycle (radians about z, mirrored per wing). Index 0 = tucked
-// for idle perch. Flying cycles through all 4.
-const WING_POSES = [-0.15, 0.55, 1.0, 0.55];
-const BIRD_FRAME_MS = 1000 / BIRD_FPS;
-let birdFrameIdx = 0;
-let lastBirdTickMs = 0;
-
-let birdState     = 'perch';
-let birdPerchKey  = BIRD_PERCHES[0];
-let perchUntilMs  = performance.now() + 1500;
-let birdFlight    = null;
-
-function birdPerchPosition(cubbyKey) {
-  const cubby = cubbies[cubbyKey];
-  const h     = cubby.userData.openingH;
-  const wp = cubby.getWorldPosition(new THREE.Vector3());
-  wp.y -= h / 2 - BIRD_BODY_H / 2 - 0.04;     // body feet ~on bottom plank
-  wp.z  = 0.02;                                // just in front of maple wall
-  return wp;
-}
-
-function birdPickNextPerch() {
-  if (BIRD_PERCHES.length < 2) return birdPerchKey;
-  let next;
-  do { next = BIRD_PERCHES[(Math.random() * BIRD_PERCHES.length) | 0]; }
-  while (next === birdPerchKey);
-  return next;
-}
-
-try {
-  bird.position.copy(birdPerchPosition(birdPerchKey));
-} catch (err) {
-  console.error('[bird] init failed', err);
-}
-
-function updateBird() {
-  if (!cubbies[birdPerchKey]) return;
-  const now = performance.now();
-
-  // Stop-motion frame tick — pose held until interval elapses, no lerp.
-  if (now - lastBirdTickMs >= BIRD_FRAME_MS) {
-    lastBirdTickMs = now;
-    birdFrameIdx = (birdFrameIdx + 1) % WING_POSES.length;
-    const a = WING_POSES[birdState === 'fly' ? birdFrameIdx : 0];
-    wingLPivot.rotation.z =  a;
-    wingRPivot.rotation.z = -a;
-  }
-
-  if (birdState === 'perch') {
-    if (now < perchUntilMs) return;
-    const next = birdPickNextPerch();
-    const toVec = birdPerchPosition(next);
-    birdFlight = {
-      fromVec: bird.position.clone(),
-      toVec,
-      startMs: now,
-    };
-    bird.scale.x = toVec.x < bird.position.x ? -1 : 1;
-    birdPerchKey = next;
-    birdState    = 'fly';
-    return;
-  }
-
-  // 'fly' — arc forward & up, ease-in-out, stop-motion ticks the wings.
-  const t = Math.min(1, (now - birdFlight.startMs) / BIRD_FLIGHT_MS);
-  const e = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
-  bird.position.lerpVectors(birdFlight.fromVec, birdFlight.toVec, e);
-  bird.position.z += Math.sin(e * Math.PI) * 0.6;
-  bird.position.y += Math.sin(e * Math.PI) * 0.25;
-  if (t >= 1) {
-    bird.position.copy(birdFlight.toVec);
-    perchUntilMs = now + PERCH_MS_MIN + Math.random() * (PERCH_MS_MAX - PERCH_MS_MIN);
-    birdState    = 'perch';
-    birdFlight   = null;
-  }
-}
-
 // === Pin art toy hanging in the C4+C5+D4+D5 merged cubby. A backing plate
 // holds a 32×32 grid of gunmetal pins; each pin's protrusion is a 0..1
 // depth that lerps toward a per-frame target. The target is the sum of a
@@ -1827,14 +1645,29 @@ const pinDepth = new Float32Array(PIN_COLS * PIN_ROWS);   // current protrusion 
 let hoverX = 0, hoverY = 0, hoverAmp = 0;
 const _pinHit = new THREE.Vector3();
 
-// Music hook (future): return extra 0..1 depth for the pin at (u, v). Wire a
-// Web Audio AnalyserNode here — feed playback through analyser.getByteFrequencyData()
-// and map bins onto u (or radius from center). Returns 0 until implemented.
-function musicDepth(u, v) { return 0; }
+// Music visualizer: extra 0..1 depth for the pin at (u, v) driven by the
+// turntable's AnalyserNode (see ensureAudioGraph). Equalizer bars — the
+// column (u) picks a frequency bin, its magnitude is the bar height, and a
+// pin lights when it sits below the bar top (v=0 is the bottom row). The soft
+// (m - v) ramp fades the bar's top edge instead of cutting a hard step. The
+// spectrum is sampled once per frame in updatePinArt, not per pin.
+const MUSIC_SPECTRUM_SPAN = 0.6;   // use the lower 60% of bins (where the energy is)
+const MUSIC_BAR_SOFTNESS  = 8;     // higher = crisper bar top
+const MUSIC_RELEASE       = 0.4;   // bar fall speed (vs PIN_RELEASE 0.09) — higher = snappier, beat-tight
+function musicDepth(u, v) {
+  if (!musicActive || !freqData) return 0;
+  const bins = freqData.length;
+  const idx  = Math.min(bins - 1, (u * bins * MUSIC_SPECTRUM_SPAN) | 0);
+  const m    = freqData[idx] / 255;              // 0..1 bar height for this column
+  return Math.max(0, Math.min(1, (m - v) * MUSIC_BAR_SOFTNESS));
+}
 
 const _pinDummy = new THREE.Object3D();
 function updatePinArt() {
   const t = performance.now() / 1000;
+
+  // Pull the current spectrum once per frame; musicDepth() then indexes it per pin.
+  if (musicActive && analyser) analyser.getByteFrequencyData(freqData);
 
   // Cursor → board. Raycast only the flat backing plate (never the pins) so
   // we get a stable (x, y) on the board plane no matter how far the pins are
@@ -1866,8 +1699,14 @@ function updatePinArt() {
     const bump = hoverAmp * HOVER_PEAK * Math.exp(-(hx * hx + hy * hy) / r2);
     const target = Math.max(0, Math.min(1, idle + bump + musicDepth(p.u, p.v)));
     // Asymmetric approach: snap up fast (the prick), settle down slow.
+    // While music plays, bars fall fast (MUSIC_RELEASE) so they punch to the
+    // beat — but pins under the cursor keep the slow trailing wake, blended in
+    // by the bump strength. With no music, fall stays PIN_RELEASE everywhere.
+    const fall = musicActive
+      ? MUSIC_RELEASE + (PIN_RELEASE - MUSIC_RELEASE) * Math.min(1, bump)
+      : PIN_RELEASE;
     const delta = target - pinDepth[i];
-    pinDepth[i] += delta * (delta > 0 ? PIN_ATTACK : PIN_RELEASE);
+    pinDepth[i] += delta * (delta > 0 ? PIN_ATTACK : fall);
     _pinDummy.position.set(p.x, p.y, baseZ + pinDepth[i] * PIN_MAX_PROTRUSION);
     _pinDummy.updateMatrix();
     pins.setMatrixAt(i, _pinDummy.matrix);
@@ -1915,7 +1754,6 @@ function render(now) {
     updateFlight();
     updateDust();
     updateWaterfall();
-    updateBird();
     updatePinArt();
     renderer.render(scene, camera);
   }
