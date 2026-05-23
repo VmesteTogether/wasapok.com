@@ -731,6 +731,7 @@ const albumAllMeshes   = [];         // every interactive album mesh (hit-test "
 const albumStates      = [];
 const _hoverLocal      = new THREE.Vector3();
 
+let albumZSeq = 0;   // bumped each time an album is opened/touched; orders the open stack
 function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) {
   const cubby = cubbies[cubbyKey];
   const tex = new THREE.TextureLoader().load(texPath);
@@ -838,9 +839,10 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   albumVinylMeshes.push(vinyl, label, hole);
   albumAllMeshes.push(front, inside, vinyl, label, hole);
   const state = {
-    albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label,
+    albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label, hole,
     isOpen: false, openness: 0,
     vinylOut: false, vinylness: 0,
+    z: 0,                                // activation order — higher draws atop other open albums
     audioSrc, labelColor, audio: null,   // audio lazy-initialized on first play
   };
   // Back-references so the click handler can find a state from any of its
@@ -1372,8 +1374,10 @@ window.addEventListener('click', (e) => {
   if (hit.userData.kind === 'albumCover') {
     state.isOpen = !state.isOpen;
     if (!state.isOpen) state.vinylOut = false;     // closing cover pulls vinyl back in
+    if (state.isOpen) state.z = ++albumZSeq;        // bring to the front of the open stack
   } else if (hit.userData.kind === 'albumVinyl' || hit.userData.kind === 'albumLabel') {
     if (!state.isOpen) return;
+    state.z = ++albumZSeq;                          // touching it raises it over other open albums
     // First click on the peeking vinyl slides it fully out; a second click
     // on the slid-out vinyl loads it onto the turntable and starts playback.
     if (state.vinylOut) loadRecord(state);
@@ -1393,6 +1397,14 @@ function updateAlbumState() {
   // (source vinylGroup invisible) is naturally excluded.
   const vinylHits = raycaster.intersectObjects(albumVinylMeshes, false);
   const vinylHoveredState = vinylHits.length ? vinylHits[0].object.userData.albumState : null;
+
+  // Layering: open albums pop forward, so they must render above closed
+  // neighbors (depthTest is off everywhere here, so renderOrder is the only
+  // arbiter). Rank the currently-open albums by activation recency and give
+  // each its own renderOrder band. Bands are 1 apart with fractional internal
+  // offsets, so even 3 stacked albums stay under the atmosphere layer (20).
+  const openStack = albumStates.filter(s => s.openness > 0.002).sort((a, b) => a.z - b.z);
+  openStack.forEach((s, i) => { s._band = 10 + i; });
 
   for (const s of albumStates) {
     // --- Hover (closed only) — scale + nearest-corner tip on the cover mesh.
@@ -1442,6 +1454,21 @@ function updateAlbumState() {
     // value persists so it doesn't snap back to zero.
     if (s.isOpen && s.vinylOut && s === vinylHoveredState) {
       s.vinylGroup.rotation.z -= 0.06;
+    }
+
+    // Apply the layering band. Open albums ride in their recency band (>=10);
+    // closed albums fall back to the original base orders. Internal order is
+    // preserved either way: vinyl < label < hole = inside < cover.
+    if (s.openness > 0.002) {
+      const b = s._band;
+      s.vinyl.renderOrder  = b;
+      s.label.renderOrder  = b + 0.25;
+      s.hole.renderOrder   = b + 0.5;
+      s.inside.renderOrder = b + 0.5;
+      s.front.renderOrder  = b + 0.75;
+    } else {
+      s.vinyl.renderOrder = 5; s.label.renderOrder = 6; s.hole.renderOrder = 7;
+      s.inside.renderOrder = 7; s.front.renderOrder = 8;
     }
   }
 }
