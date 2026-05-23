@@ -1747,13 +1747,11 @@ function updateBird() {
 }
 
 // === Pin art toy hanging in the C4+C5+D4+D5 merged cubby. A backing plate
-// holds a 32×32 grid of gunmetal pins; each pin's protrusion is driven by
-// pinDepthSource(u, v, t) → [0, 1]. Today the source is a procedural
-// double-ripple from center. To swap in an image later, replace the body
-// of pinDepthSource with a sampler that reads a CanvasTexture / ImageData
-// of image1..image7 and returns luminance at (u, v). Crossfading between
-// images, panning, etc. can layer on top of that without touching the
-// pin-rendering code.
+// holds a 32×32 grid of gunmetal pins; each pin's protrusion is a 0..1
+// depth that lerps toward a per-frame target. The target is the sum of a
+// faint idle ripple plus a soft bump that tracks the cursor when it hovers
+// over the board (see updatePinArt). A future music driver can feed the
+// same target via musicDepth() to visualize audio on the pins.
 const PIN_COLS           = 32;
 const PIN_ROWS           = 32;
 const PIN_AREA_W         = 2.4;
@@ -1761,7 +1759,7 @@ const PIN_AREA_H         = 2.4;
 const PIN_DIAMETER       = Math.min(PIN_AREA_W / PIN_COLS, PIN_AREA_H / PIN_ROWS);
 const PIN_RADIUS         = PIN_DIAMETER * 0.42;     // slight gap between pins
 const PIN_LENGTH         = 0.80;
-const PIN_MAX_PROTRUSION = 0.50;
+const PIN_MAX_PROTRUSION = 0.66;                    // how far a fully-pricked pin shoots out front (back end still hides behind the plate)
 const PLATE_THICKNESS    = 0.05;
 const PIN_ART_CENTER_Y   = -0.10;                   // vertical offset within cubby (below center → leaves room for chains)
 const PIN_ART_Z          = -0.32;                   // plate front Z within the cubby (in local space of cubbies.D4)
@@ -1810,198 +1808,67 @@ for (let row = 0; row < PIN_ROWS; row++) {
   }
 }
 
-// Image source: image1..image7 downsampled to PIN_COLS × PIN_ROWS, stored
-// as 1-luminance (dark ink → high protrusion). Each map is a Float32Array
-// of length PIN_COLS*PIN_ROWS in image-row order (row 0 = top of image).
-// Cycle through them: hold for IMAGE_HOLD_MS, then smoothstep-crossfade to
-// the next over IMAGE_TRANSITION_MS, looping.
-const PIN_IMAGE_URLS    = ['images/image1.png', 'images/image2.png', 'images/image3.png', 'images/image4.png', 'images/image5.png', 'images/image6.png', 'images/image7.png'];
-const IMAGE_HOLD_MS       = 3500;
-const IMAGE_TRANSITION_MS = 1500;
-const IMAGE_CYCLE_MS      = IMAGE_HOLD_MS + IMAGE_TRANSITION_MS;
-const imageDepthMaps    = new Array(PIN_IMAGE_URLS.length).fill(null);
-const imageHoloTextures = new Array(PIN_IMAGE_URLS.length).fill(null);
+// --- Hover-reactive depth field. The board idles with a faint breathing
+// ripple, and the few pins directly under the cursor prick up sharply when
+// it hovers over the plate — a tight bump plus a fast attack / slow release
+// so each pin snaps up crisply and eases back down after the cursor passes.
+const HOVER_RADIUS = 0.13;     // local-space falloff radius — a tight burst of pins under the cursor
+const HOVER_PEAK   = 1.0;      // depth added at the bump center (0..1) — full prick
+const IDLE_BASE    = 0.12;     // resting protrusion so pins aren't flush with the plate
+const IDLE_AMP     = 0.05;     // amplitude of the idle breathing ripple
+const PIN_ATTACK   = 0.85;     // near-instant rise — pins fire up the moment the cursor reaches them
+const PIN_RELEASE  = 0.09;     // slow per-frame fall — pricked pins linger, leaving a tall trailing wake
 
-// Builds a hologram-tinted texture: ink pixels become bright cyan with
-// inverted-luminance alpha, paper pixels become fully transparent. Used by
-// the floating holo planes in front of the pin grid (additive blend → glow).
-function makeHologramTexture(img) {
-  const W = 256, H = 256;
-  const c = document.createElement('canvas');
-  c.width = W; c.height = H;
-  const cx = c.getContext('2d');
-  cx.imageSmoothingEnabled = true;
-  cx.fillStyle = '#ffffff';
-  cx.fillRect(0, 0, W, H);
-  cx.drawImage(img, 0, 0, W, H);
-  const d = cx.getImageData(0, 0, W, H);
-  const px = d.data;
-  const tr = 0xa8, tg = 0xe2, tb = 0xff;   // cyan-blue hologram tint
-  for (let p = 0; p < W * H; p++) {
-    const r = px[p * 4], g = px[p * 4 + 1], b = px[p * 4 + 2];
-    const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-    const inv = 1 - lum;
-    px[p * 4 + 0] = tr;
-    px[p * 4 + 1] = tg;
-    px[p * 4 + 2] = tb;
-    px[p * 4 + 3] = Math.round(Math.pow(inv, 3) * 255 * (Math.floor(p / W) % 2 ? 0.35 : 1));   // power curve + scanlines
-  }
-  cx.putImageData(d, 0, 0);
-  const tex = new THREE.CanvasTexture(c);
-  tex.colorSpace = THREE.SRGBColorSpace;
-  return tex;
-}
+const pinDepth = new Float32Array(PIN_COLS * PIN_ROWS);   // current protrusion per pin
 
-for (let i = 0; i < PIN_IMAGE_URLS.length; i++) {
-  const img = new Image();
-  img.onload = () => {
-    // Downsample with browser's bilinear filter; white background underneath
-    // so any transparent pixels read as low protrusion (paper, not ink).
-    const c = document.createElement('canvas');
-    c.width = PIN_COLS; c.height = PIN_ROWS;
-    const cx = c.getContext('2d');
-    cx.imageSmoothingEnabled = true;
-    cx.fillStyle = '#ffffff';
-    cx.fillRect(0, 0, PIN_COLS, PIN_ROWS);
-    cx.drawImage(img, 0, 0, PIN_COLS, PIN_ROWS);
-    const data = cx.getImageData(0, 0, PIN_COLS, PIN_ROWS).data;
-    const map = new Float32Array(PIN_COLS * PIN_ROWS);
-    for (let p = 0; p < PIN_COLS * PIN_ROWS; p++) {
-      const r = data[p * 4], g = data[p * 4 + 1], b = data[p * 4 + 2];
-      const lum = (r * 0.299 + g * 0.587 + b * 0.114) / 255;
-      map[p] = 1 - lum;             // dark ink → protrude
-    }
-    imageDepthMaps[i] = map;
-    imageHoloTextures[i] = makeHologramTexture(img);
-  };
-  img.onerror = () => console.warn('[pinart] failed to load', PIN_IMAGE_URLS[i]);
-  img.src = PIN_IMAGE_URLS[i];
-}
+// Cursor in pinArt-local space, plus a 0..1 envelope that fades the bump in
+// while hovering and out when the cursor leaves, so it melts in place rather
+// than snapping off.
+let hoverX = 0, hoverY = 0, hoverAmp = 0;
+const _pinHit = new THREE.Vector3();
 
-// Two hologram planes floating in front of the pin field. Crossfade with
-// the same HOLD/TRANSITION timing as the pin depth, so the projection and
-// the relief stay in sync. Additive blending makes the cyan glow.
-const HOLO_Z       = PIN_MAX_PROTRUSION + 0.10;   // sit just in front of fully-extended pin tips
-const HOLO_OPACITY = 0.45;
-const holoPlanes = [];
-for (let i = 0; i < 2; i++) {
-  const mat = new THREE.MeshBasicMaterial({
-    transparent: true, opacity: 0,
-    blending: THREE.AdditiveBlending, depthWrite: false,
-    clippingPlanes: pinClipPlanes,
-  });
-  const mesh = new THREE.Mesh(
-    new THREE.PlaneGeometry(PIN_AREA_W, PIN_AREA_H),
-    mat,
-  );
-  mesh.position.set(0, 0, HOLO_Z + i * 0.001);     // tiny z stagger to disambiguate sort
-  mesh.renderOrder = 30 + i;
-  pinArt.add(mesh);
-  holoPlanes.push(mesh);
-}
-
-// Hologram timing — appears only during HOLD (when pins are static), with
-// gentle fade-in once they settle and fade-out before the next morph. The
-// TRANSITION window stays empty so the projection doesn't show during
-// pin movement.
-const HOLO_FADE_MS = 700;
-function updateHologram() {
-  if (!imageHoloTextures.some(t => t)) return;
-  const now   = performance.now();
-  const phase = now % IMAGE_CYCLE_MS;
-  // TRANSITION phase: pins are morphing, hide hologram completely.
-  if (phase >= IMAGE_HOLD_MS) {
-    holoPlanes[0].material.opacity = 0;
-    holoPlanes[1].material.opacity = 0;
-    return;
-  }
-  // HOLD phase: smoothstep fade in at start, fade out near end.
-  let a;
-  if (phase < HOLO_FADE_MS) {
-    a = phase / HOLO_FADE_MS;
-  } else if (phase > IMAGE_HOLD_MS - HOLO_FADE_MS) {
-    a = (IMAGE_HOLD_MS - phase) / HOLO_FADE_MS;
-  } else {
-    a = 1;
-  }
-  const s = a * a * (3 - 2 * a);
-  const fromI   = Math.floor(now / IMAGE_CYCLE_MS) % imageHoloTextures.length;
-  const fromTex = imageHoloTextures[fromI];
-  if (fromTex && holoPlanes[0].material.map !== fromTex) {
-    holoPlanes[0].material.map = fromTex;
-    holoPlanes[0].material.needsUpdate = true;
-  }
-  holoPlanes[0].material.opacity = s * HOLO_OPACITY;
-  holoPlanes[1].material.opacity = 0;
-}
-
-// Depth source — sampled from the current image (with crossfade to the
-// next). If no images have loaded yet, falls back to a gentle ripple so
-// the toy isn't dead during the load.
-function pinDepthSource(u, v, t) {
-  const loaded = imageDepthMaps.filter(m => m);
-  if (loaded.length === 0) {
-    const du = u - 0.5, dv = v - 0.5;
-    const r = Math.sqrt(du * du + dv * dv);
-    return 0.5 + 0.5 * Math.sin(r * 22 - t * 2.8);
-  }
-  // Image data is y-down; pin v=0 is bottom, so flip Y when indexing.
-  const col = Math.min(PIN_COLS - 1, Math.max(0, Math.floor(u * PIN_COLS)));
-  const row = Math.min(PIN_ROWS - 1, Math.max(0, Math.floor((1 - v) * PIN_ROWS)));
-  const idx = row * PIN_COLS + col;
-  const tMs    = t * 1000;
-  const phase  = tMs % IMAGE_CYCLE_MS;
-  const fromI  = Math.floor(tMs / IMAGE_CYCLE_MS) % imageDepthMaps.length;
-  const toI    = (fromI + 1) % imageDepthMaps.length;
-  const dFrom  = imageDepthMaps[fromI] ? imageDepthMaps[fromI][idx] : 0;
-  const dTo    = imageDepthMaps[toI]   ? imageDepthMaps[toI][idx]   : dFrom;
-  if (phase < IMAGE_HOLD_MS) return dFrom;
-  const k = (phase - IMAGE_HOLD_MS) / IMAGE_TRANSITION_MS;
-  const s = k * k * (3 - 2 * k);    // smoothstep
-  return dFrom + (dTo - dFrom) * s;
-}
-
-// --- Volt: pixelated electrical pulse that crawls radially inward across
-// the pin grid the instant a new image finishes forming. No separate
-// geometry — the volt directly overrides pin depths within a contracting
-// circular wavefront. Per-frame random sampling inside the wavefront gives
-// the crackling pixel-static feel; the wavefront itself sweeps from
-// outside the grid edge through to center over VOLT_DURATION_MS, so the
-// activated band visibly creeps inward.
-const VOLT_DURATION_MS = 700;
-const VOLT_BAND        = 0.22;     // radial half-width of the activation cloud (in normalized r)
-const VOLT_PEAK_PROB   = 0.65;     // peak activation probability at the wavefront center
-
-let voltStartMs  = -Infinity;
-let lastCycleIdx = -1;
-function fireVolt() { voltStartMs = performance.now(); }
+// Music hook (future): return extra 0..1 depth for the pin at (u, v). Wire a
+// Web Audio AnalyserNode here — feed playback through analyser.getByteFrequencyData()
+// and map bins onto u (or radius from center). Returns 0 until implemented.
+function musicDepth(u, v) { return 0; }
 
 const _pinDummy = new THREE.Object3D();
 function updatePinArt() {
-  const now = performance.now();
-  const t   = now / 1000;
-  // Detect image-cycle rollover → new image just finished forming → zap.
-  const cycleIdx = Math.floor(now / IMAGE_CYCLE_MS);
-  if (cycleIdx !== lastCycleIdx) {
-    if (lastCycleIdx >= 0) fireVolt();
-    lastCycleIdx = cycleIdx;
+  const t = performance.now() / 1000;
+
+  // Cursor → board. Raycast only the flat backing plate (never the pins) so
+  // we get a stable (x, y) on the board plane no matter how far the pins are
+  // pushed out. A hit steers the bump toward the cursor and drives the
+  // envelope up; a miss lets it fade so the bump dissolves where it sat.
+  raycaster.setFromCamera(ndc, camera);
+  const hit = raycaster.intersectObject(plate, false)[0];
+  if (hit) {
+    _pinHit.copy(hit.point);
+    pinArt.worldToLocal(_pinHit);
+    hoverX = _pinHit.x;
+    hoverY = _pinHit.y;
+    hoverAmp += (1 - hoverAmp) * 0.45;
+  } else {
+    hoverAmp += (0 - hoverAmp) * 0.15;
   }
-  // Volt overlay: contracting radial wavefront from r=1.1 (just outside the
-  // grid) to r=-0.1 (just past center) over VOLT_DURATION_MS. Inside the
-  // wavefront, each pin is randomly snapped to full extension with a
-  // probability that peaks at the wavefront and falls linearly within
-  // VOLT_BAND — the soft falloff + per-frame re-roll gives the pixel-snow
-  // crackle. Outside the wavefront (or outside the volt window), pins
-  // follow the image depth normally.
-  const voltElapsed  = now - voltStartMs;
-  const voltActive   = voltElapsed >= 0 && voltElapsed <= VOLT_DURATION_MS;
-  const voltFront    = voltActive ? 1.1 - (voltElapsed / VOLT_DURATION_MS) * 1.2 : 0;
+
   // baseZ = pin position when depth=0 (tip flush with plate front at z=0).
   const baseZ = -PIN_LENGTH / 2 + 0.001;
+  const r2 = HOVER_RADIUS * HOVER_RADIUS;
   for (let i = 0; i < pinXY.length; i++) {
     const p = pinXY[i];
-    const d = Math.max(0, Math.min(1, pinDepthSource(p.u, p.v, t)));
-    _pinDummy.position.set(p.x, p.y, baseZ + d * PIN_MAX_PROTRUSION);
+    // Idle breathing ripple radiating from center — low amplitude, always on.
+    const rad  = Math.sqrt(p.x * p.x + p.y * p.y);
+    const idle = IDLE_BASE + IDLE_AMP * Math.sin(rad * 4.5 - t * 2.0);
+    // Cursor bump — tight gaussian around the hover point so only the pin(s)
+    // beneath the cursor lift, scaled by the hover envelope.
+    const hx = p.x - hoverX, hy = p.y - hoverY;
+    const bump = hoverAmp * HOVER_PEAK * Math.exp(-(hx * hx + hy * hy) / r2);
+    const target = Math.max(0, Math.min(1, idle + bump + musicDepth(p.u, p.v)));
+    // Asymmetric approach: snap up fast (the prick), settle down slow.
+    const delta = target - pinDepth[i];
+    pinDepth[i] += delta * (delta > 0 ? PIN_ATTACK : PIN_RELEASE);
+    _pinDummy.position.set(p.x, p.y, baseZ + pinDepth[i] * PIN_MAX_PROTRUSION);
     _pinDummy.updateMatrix();
     pins.setMatrixAt(i, _pinDummy.matrix);
   }
@@ -2050,7 +1917,6 @@ function render(now) {
     updateWaterfall();
     updateBird();
     updatePinArt();
-    updateHologram();
     renderer.render(scene, camera);
   }
   requestAnimationFrame(render);
