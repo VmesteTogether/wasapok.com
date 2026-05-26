@@ -764,6 +764,7 @@ const OPEN_Z_POP     = 0.55;         // albumRoot Z translation toward camera
 const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the user
 const VINYL_PEEK_X   = ALBUM_SIZE * 0.40;   // vinyl peeks out far enough that a slice of the orange label shows past the sleeve edge
 const VINYL_OUT_X    = ALBUM_SIZE * 0.95;   // fully popped out (label visible past the sleeve)
+const VINYL_FAR_OUT_X = (2 * TILE_W) / OPEN_SCALE;  // mobile rightmost-col vinyls travel ~2 columns left into the empty cubbies (÷OPEN_SCALE since the albumRoot is scaled when open)
 // Lean: when closed, the cover leans back ~12° with its bottom edge
 // resting on the cubby floor — like a record on display. Lerps to flat
 // as the cover opens so the book-swing reads cleanly.
@@ -1575,9 +1576,12 @@ function updateAlbumState() {
     const v = s.vinylness;
     // Vinyl normally slides out to the right. On mobile the view is one
     // 3-column half, so a record in the rightmost column of that half (col 3
-    // or 6) would slide off-screen — flip it to slide left instead.
-    const slideSign = (paginated && s.col % 3 === 0) ? -1 : 1;
-    s.vinylGroup.position.x = (VINYL_PEEK_X + (VINYL_OUT_X - VINYL_PEEK_X) * v) * o * slideSign;
+    // or 6) would slide off-screen — instead send it ~2 columns to the LEFT,
+    // popping out into the empty cubbies clear of the neighbor album/turntable.
+    const farSlide  = paginated && s.col % 3 === 0;
+    const slideSign = farSlide ? -1 : 1;
+    const outX      = farSlide ? VINYL_FAR_OUT_X : VINYL_OUT_X;
+    s.vinylGroup.position.x = (VINYL_PEEK_X + (outX - VINYL_PEEK_X) * v) * o * slideSign;
 
     // Hover-spin preview: when cursor is over the slid-out vinyl, spin it
     // around its own normal (Z axis in album-local space) at the same rate
