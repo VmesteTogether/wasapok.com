@@ -478,6 +478,39 @@ function goToPage(p) {
   updatePageUI();
 }
 
+// === Homepage overlay — a thin, non-interactive DOM layer over the canvas so
+// the diorama reads as a site landing, not just an art piece. Keeps the scene
+// as the hero: just a wordmark for identity and fading hints that teach
+// newcomers the diorama is interactive, then get out of the way.
+const BRAND   = 'wasapok angleur';
+const TAGLINE = '';          // optional: set a short tagline to show under the wordmark ('' hides it)
+
+const overlay = document.createElement('div');
+overlay.style.cssText =
+  'position:fixed;inset:0;pointer-events:none;z-index:9;color:#f3dcb0;' +
+  'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
+document.body.appendChild(overlay);
+
+// Wordmark (top-left), warm cream over a soft shadow, fades in just after load.
+const brandBox = document.createElement('div');
+brandBox.style.cssText =
+  'position:absolute;top:20px;left:24px;text-shadow:0 1px 4px rgba(0,0,0,0.55);' +
+  'opacity:0;transition:opacity 1.2s ease 0.25s;';
+const wordmark = document.createElement('div');
+wordmark.textContent = BRAND;
+wordmark.style.cssText =
+  'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;';
+brandBox.appendChild(wordmark);
+if (TAGLINE) {
+  const tag = document.createElement('div');
+  tag.textContent = TAGLINE;
+  tag.style.cssText = 'margin-top:6px;font-size:11px;letter-spacing:0.14em;opacity:0.75;';
+  brandBox.appendChild(tag);
+}
+overlay.appendChild(brandBox);
+
+requestAnimationFrame(() => { brandBox.style.opacity = '1'; });        // fade the wordmark in
+
 // Shared touch state. The actual touchstart/move/end listeners live further
 // down, next to the mouse handlers, so they can reach `raycaster`/`diamond*`
 // for tap hit-testing and drag-spin. A swipe pages between halves; taps are
