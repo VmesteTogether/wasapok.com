@@ -435,26 +435,97 @@ const ground = new THREE.Mesh(
 ground.position.set(0, -MERGED_H / 2, -GROUND_D / 2);
 outsideScene.add(ground);
 
-// --- Auto-fit: pick the camera distance that makes the grid fully visible
-// on both axes (letterboxing on whichever axis is shorter than the grid's
-// 14:8 ratio). Low-res render buffer + CSS pixelated upscaling gives the
-// chunky pixel-art look.
+// --- Mobile pagination. On touch devices held in portrait the full 6-column
+// grid renders too small, so the view splits into two 3-column halves the
+// user swipes between: page 0 = the vinyl side (diamond + turntable +
+// records, cols 1–3), page 1 = pin art + door hallway + castle trophy
+// (cols 4–6). Desktop keeps the whole grid (panTargetX stays 0).
+const HALF_W = GRID_W / 2;
+const PAGE_CENTER_X = [-GRID_W / 4, GRID_W / 4];   // camera x to center each page on
+let paginated = false;
+let currentPage = 0;
+let panTargetX = 0;            // camera x the view eases toward
+let panCurrentX = 0;           // current eased camera x (driven in the render loop)
+
+// Page-dot indicator (shown only while paginated) so the second half is
+// discoverable. Pure DOM overlay, styled to match the warm maple palette.
+const pageDots = document.createElement('div');
+pageDots.style.cssText =
+  'position:fixed;left:0;right:0;bottom:18px;display:none;justify-content:center;' +
+  'gap:10px;pointer-events:none;z-index:10;';
+for (let i = 0; i < 2; i++) {
+  const d = document.createElement('div');
+  d.style.cssText =
+    'width:9px;height:9px;border-radius:50%;background:#d2a574;opacity:0.35;' +
+    'transition:opacity .25s,transform .25s;box-shadow:0 0 4px rgba(0,0,0,.55);';
+  pageDots.appendChild(d);
+}
+document.body.appendChild(pageDots);
+function updatePageUI() {
+  pageDots.style.display = paginated ? 'flex' : 'none';
+  for (let i = 0; i < pageDots.children.length; i++) {
+    const on = i === currentPage;
+    pageDots.children[i].style.opacity   = on ? '0.95' : '0.35';
+    pageDots.children[i].style.transform = on ? 'scale(1.3)' : 'scale(1)';
+  }
+}
+function goToPage(p) {
+  p = Math.max(0, Math.min(1, p));
+  if (p === currentPage) return;
+  currentPage = p;
+  panTargetX = PAGE_CENTER_X[currentPage];
+  updatePageUI();
+}
+
+// Horizontal swipe flips pages; vertical or short touches fall through as
+// taps so records & turntable stay tappable. A registered swipe suppresses
+// the trailing synthetic click so it doesn't also open/eject an album.
+let touchStartX = 0, touchStartY = 0, touchTracking = false, suppressClickUntil = 0;
+const SWIPE_PX = 45;
+window.addEventListener('touchstart', (e) => {
+  if (!paginated || e.touches.length !== 1) { touchTracking = false; return; }
+  touchTracking = true;
+  touchStartX = e.touches[0].clientX;
+  touchStartY = e.touches[0].clientY;
+}, { passive: true });
+window.addEventListener('touchend', (e) => {
+  if (!touchTracking) return;
+  touchTracking = false;
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+  if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.3) {
+    suppressClickUntil = performance.now() + 400;   // eat the trailing click if one fires
+    goToPage(currentPage + (dx < 0 ? 1 : -1));
+  }
+}, { passive: true });
+
+// --- Auto-fit: pick the camera distance that fits the visible region — the
+// full grid on desktop, one 3-column half on mobile — on both axes,
+// letterboxing the shorter axis. Low-res render buffer + CSS pixelated
+// upscaling gives the chunky pixel-art look.
 const onResize = () => {
   const w = window.innerWidth, h = window.innerHeight;
   const aspect = w / h;
   camera.aspect = aspect;
+  paginated = window.matchMedia('(pointer: coarse)').matches && h > w;
+  if (!paginated) currentPage = 0;
+  const fitW = paginated ? HALF_W : GRID_W;
   const fovV = camera.fov * Math.PI / 180;
   const distH = (GRID_H / 2) / Math.tan(fovV / 2);
   const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
-  const distW = (GRID_W / 2) / Math.tan(fovH / 2);
+  const distW = (fitW / 2) / Math.tan(fovH / 2);
   camera.position.z = Math.max(distH, distW) * 1.02;
+  panTargetX = paginated ? PAGE_CENTER_X[currentPage] : 0;
   camera.updateProjectionMatrix();
   renderer.setSize(Math.floor(w / PIXELATION), Math.floor(h / PIXELATION), false);
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
+  updatePageUI();
 };
 window.addEventListener('resize', onResize);
 onResize();
+panCurrentX = panTargetX;                  // snap on first load — no pan-in animation
+camera.position.x = panCurrentX;
 
 // === Top-left cubby: same floating-diamond sculpture as the main hall of
 // /castle — cel-shaded WasaDiminds-02 crystal with inverted-hull outline,
@@ -1348,6 +1419,7 @@ function updateRecordPlayerCover() {
 }
 
 window.addEventListener('click', (e) => {
+  if (performance.now() < suppressClickUntil) { suppressClickUntil = 0; return; }  // trailing click after a page swipe
   if (flightAnim) return;                                     // lock input during fly-to/from animations
   const clickNdc = new THREE.Vector2(
      (e.clientX / window.innerWidth)  * 2 - 1,
@@ -1536,12 +1608,16 @@ function updateTilt() {
       const cg = cubbies[row][col];
       // D6 holds the castle model; tilting the back into it causes clipping.
       if (cg === cubbies.D6) continue;
-      const dx = (mouseWorld.x - cg.position.x) * TILT_SCALE;
-      const dy = (mouseWorld.y - cg.position.y) * TILT_SCALE;
-      _target.set(
-        Math.max(-TILT_MAX_X, Math.min(TILT_MAX_X, dx)),
-        Math.max(-TILT_MAX_Y, Math.min(TILT_MAX_Y, dy)),
-      );
+      if (mouseSeen) {
+        const dx = (mouseWorld.x - cg.position.x) * TILT_SCALE;
+        const dy = (mouseWorld.y - cg.position.y) * TILT_SCALE;
+        _target.set(
+          Math.max(-TILT_MAX_X, Math.min(TILT_MAX_X, dx)),
+          Math.max(-TILT_MAX_Y, Math.min(TILT_MAX_Y, dy)),
+        );
+      } else {
+        _target.set(0, 0);                  // no pointer (touch): rest head-on
+      }
       cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.55);
     }
   }
@@ -1770,9 +1846,17 @@ updatePinArt();   // initial pose so it's not all stuck at z=0 before first tick
 // ticks rather than gliding sluggishly behind it.
 const FRAME_MS = 1000 / 30;
 let lastFrame = 0;
+// Eased camera pan between mobile pages. No-op on desktop (panTargetX === 0).
+function updatePan() {
+  panCurrentX += (panTargetX - panCurrentX) * 0.18;
+  if (Math.abs(panTargetX - panCurrentX) < 0.0015) panCurrentX = panTargetX;
+  camera.position.x = panCurrentX;
+  camera.lookAt(panCurrentX, 0, 0);
+}
 function render(now) {
   if (now - lastFrame >= FRAME_MS) {
     lastFrame = now;
+    updatePan();
     updateTilt();
     updateSculpture();
     updateAlbumState();
