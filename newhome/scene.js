@@ -446,6 +446,7 @@ let paginated = false;
 let currentPage = 0;
 let panTargetX = 0;            // camera x the view eases toward
 let panCurrentX = 0;           // current eased camera x (driven in the render loop)
+const isTouch = window.matchMedia('(pointer: coarse)').matches;   // phone/tablet — drives touch input + half-split
 
 // Page-dot indicator (shown only while paginated) so the second half is
 // discoverable. Pure DOM overlay, styled to match the warm maple palette.
@@ -477,27 +478,13 @@ function goToPage(p) {
   updatePageUI();
 }
 
-// Horizontal swipe flips pages; vertical or short touches fall through as
-// taps so records & turntable stay tappable. A registered swipe suppresses
-// the trailing synthetic click so it doesn't also open/eject an album.
+// Shared touch state. The actual touchstart/move/end listeners live further
+// down, next to the mouse handlers, so they can reach `raycaster`/`diamond*`
+// for tap hit-testing and drag-spin. A swipe pages between halves; taps are
+// handled directly (real phones don't reliably fire a `click` on the canvas).
 let touchStartX = 0, touchStartY = 0, touchTracking = false, suppressClickUntil = 0;
-const SWIPE_PX = 45;
-window.addEventListener('touchstart', (e) => {
-  if (!paginated || e.touches.length !== 1) { touchTracking = false; return; }
-  touchTracking = true;
-  touchStartX = e.touches[0].clientX;
-  touchStartY = e.touches[0].clientY;
-}, { passive: true });
-window.addEventListener('touchend', (e) => {
-  if (!touchTracking) return;
-  touchTracking = false;
-  const t = e.changedTouches[0];
-  const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
-  if (Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.3) {
-    suppressClickUntil = performance.now() + 400;   // eat the trailing click if one fires
-    goToPage(currentPage + (dx < 0 ? 1 : -1));
-  }
-}, { passive: true });
+const SWIPE_PX = 45;     // horizontal travel that counts as a page swipe
+const TAP_PX   = 22;     // max travel still counted as a tap (forgiving for shaky fingers)
 
 // --- Auto-fit: pick the camera distance that fits the visible region — the
 // full grid on desktop, one 3-column half on mobile — on both axes,
@@ -507,7 +494,7 @@ const onResize = () => {
   const w = window.innerWidth, h = window.innerHeight;
   const aspect = w / h;
   camera.aspect = aspect;
-  paginated = window.matchMedia('(pointer: coarse)').matches && h > w;
+  paginated = isTouch && h > w;
   if (!paginated) currentPage = 0;
   const fitW = paginated ? HALF_W : GRID_W;
   const fovV = camera.fov * Math.PI / 180;
@@ -1412,27 +1399,32 @@ function updateRecordPlayerCover() {
   const ch = recordPlayer.userData.coverHinge;
   raycaster.setFromCamera(ndc, camera);
   const hits = raycaster.intersectObject(recordPlayer, true);
-  const target = hits.length
+  // Touch has no hover, so lift the lid whenever a record is loaded; otherwise
+  // (desktop) follow the cursor as before.
+  const open = hits.length || (isTouch && currentRecord);
+  const target = open
     ? recordPlayer.userData.coverOpenRot
     : recordPlayer.userData.coverClosedRot;
   ch.rotation.x += (target - ch.rotation.x) * 0.20;
 }
 
-window.addEventListener('click', (e) => {
-  if (performance.now() < suppressClickUntil) { suppressClickUntil = 0; return; }  // trailing click after a page swipe
+// Shared tap/click resolver — raycasts the scene at a screen point and runs
+// the album/turntable interaction. Driven by mouse `click` (desktop) and by
+// `touchend` taps (mobile, where a synthetic canvas click can't be relied on).
+function handleTapAt(clientX, clientY) {
   if (flightAnim) return;                                     // lock input during fly-to/from animations
-  const clickNdc = new THREE.Vector2(
-     (e.clientX / window.innerWidth)  * 2 - 1,
-    -((e.clientY / window.innerHeight) * 2 - 1),
+  const tapNdc = new THREE.Vector2(
+     (clientX / window.innerWidth)  * 2 - 1,
+    -((clientY / window.innerHeight) * 2 - 1),
   );
-  raycaster.setFromCamera(clickNdc, camera);
-  // Click anywhere on the turntable while a record is loaded → eject.
+  raycaster.setFromCamera(tapNdc, camera);
+  // Tap anywhere on the turntable while a record is loaded → eject.
   if (currentRecord && raycaster.intersectObject(recordPlayer, true).length) {
     unloadRecord();
     return;
   }
-  // Diamond clicks are handled by the drag interaction — ignore here so
-  // an undrag click doesn't trigger the "close all open albums" path.
+  // Diamond taps are handled by the drag interaction — ignore here so
+  // an un-drag tap doesn't trigger the "close all open albums" path.
   if (diamondMesh && raycaster.intersectObject(diamondMesh, false).length) return;
   const anyHits = raycaster.intersectObjects(albumAllMeshes, false);
   if (!anyHits.length) {
@@ -1450,12 +1442,16 @@ window.addEventListener('click', (e) => {
   } else if (hit.userData.kind === 'albumVinyl' || hit.userData.kind === 'albumLabel') {
     if (!state.isOpen) return;
     state.z = ++albumZSeq;                          // touching it raises it over other open albums
-    // First click on the peeking vinyl slides it fully out; a second click
+    // First tap on the peeking vinyl slides it fully out; a second tap
     // on the slid-out vinyl loads it onto the turntable and starts playback.
     if (state.vinylOut) loadRecord(state);
     else                state.vinylOut = true;
   }
-  // Clicking the inside panel of an open album is a no-op for now.
+  // Tapping the inside panel of an open album is a no-op for now.
+}
+window.addEventListener('click', (e) => {
+  if (performance.now() < suppressClickUntil) { suppressClickUntil = 0; return; }  // already handled by a touch tap/swipe
+  handleTapAt(e.clientX, e.clientY);
 });
 
 function updateAlbumState() {
@@ -1586,6 +1582,60 @@ window.addEventListener('mousedown', (e) => {
   }
 });
 window.addEventListener('mouseup', () => { diamondDrag = null; });
+
+// === Touch input (phones/tablets). Routes taps straight into handleTapAt
+// because a real device often won't deliver a usable synthetic `click` to
+// the WebGL canvas. A touch that lands on the diamond becomes a drag-spin
+// (mirrors the mouse path); a horizontal swipe pages between halves; a
+// near-stationary touch is a tap.
+let touchDragDiamond = false;
+window.addEventListener('touchstart', (e) => {
+  if (e.touches.length !== 1) { touchTracking = false; return; }
+  const tt = e.touches[0];
+  touchTracking = true;
+  touchStartX = tt.clientX;
+  touchStartY = tt.clientY;
+  touchDragDiamond = false;
+  if (diamondMesh) {                                          // start a drag-spin if the touch hit the diamond
+    const dn = new THREE.Vector2(
+       (tt.clientX / window.innerWidth)  * 2 - 1,
+      -((tt.clientY / window.innerHeight) * 2 - 1),
+    );
+    raycaster.setFromCamera(dn, camera);
+    if (raycaster.intersectObject(diamondMesh, false).length) {
+      diamondDrag = { lastX: tt.clientX };
+      touchDragDiamond = true;
+    }
+  }
+}, { passive: true });
+window.addEventListener('touchmove', (e) => {
+  if (!touchDragDiamond || !diamondDrag || e.touches.length !== 1) return;
+  const x = e.touches[0].clientX;
+  const dx = x - diamondDrag.lastX;
+  diamondDrag.lastX = x;
+  const deltaRot = dx * 0.012;
+  diamondGroup.rotateOnWorldAxis(_diamondYAxis, deltaRot);
+  diamondSpinVel = diamondSpinVel * 0.5 + deltaRot * 0.5;
+}, { passive: true });
+window.addEventListener('touchend', (e) => {
+  const wasDiamond = touchDragDiamond;
+  touchDragDiamond = false;
+  diamondDrag = null;                                         // release drag-spin (momentum carries via updateSculpture)
+  if (!touchTracking) return;
+  touchTracking = false;
+  if (wasDiamond) return;                                     // diamond drag — not a tap or swipe
+  const t = e.changedTouches[0];
+  const dx = t.clientX - touchStartX, dy = t.clientY - touchStartY;
+  if (paginated && Math.abs(dx) > SWIPE_PX && Math.abs(dx) > Math.abs(dy) * 1.3) {
+    suppressClickUntil = performance.now() + 600;             // eat the trailing synthetic click
+    goToPage(currentPage + (dx < 0 ? 1 : -1));
+    return;
+  }
+  if (Math.abs(dx) < TAP_PX && Math.abs(dy) < TAP_PX) {       // near-stationary → a tap
+    suppressClickUntil = performance.now() + 600;             // de-dupe: handled here, ignore the synthetic click
+    handleTapAt(t.clientX, t.clientY);
+  }
+}, { passive: true });
 
 const TILT_SCALE = 0.12;                     // how strongly each cubby tilts per meter of cursor offset
 const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
