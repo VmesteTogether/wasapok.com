@@ -478,10 +478,12 @@ function goToPage(p) {
   updatePageUI();
 }
 
-// === Homepage overlay — a thin, non-interactive DOM layer over the canvas so
-// the diorama reads as a site landing, not just an art piece. Keeps the scene
-// as the hero: just a wordmark for identity and fading hints that teach
-// newcomers the diorama is interactive, then get out of the way.
+// === Homepage overlay — a thin DOM layer over the canvas so the diorama
+// reads as a site landing, not just an art piece. Keeps the scene as the
+// hero: a top-left wordmark for identity plus a ☰ menu (built further down,
+// once the interactive objects exist) that drops down one identical
+// "wasapok angleur" link per clickable element. The overlay itself ignores
+// pointer events; only the menu icon and links opt back in.
 const BRAND   = 'wasapok angleur';
 const TAGLINE = '';          // optional: set a short tagline to show under the wordmark ('' hides it)
 
@@ -500,7 +502,10 @@ const wordmark = document.createElement('div');
 wordmark.textContent = BRAND;
 wordmark.style.cssText =
   'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;';
-brandBox.appendChild(wordmark);
+const brandRow = document.createElement('div');     // wordmark + ☰ menu icon, side by side
+brandRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
+brandRow.appendChild(wordmark);
+brandBox.appendChild(brandRow);
 if (TAGLINE) {
   const tag = document.createElement('div');
   tag.textContent = TAGLINE;
@@ -1502,6 +1507,7 @@ function handleTapAt(clientX, clientY) {
   // Tapping the inside panel of an open album is a no-op for now.
 }
 window.addEventListener('click', (e) => {
+  if (overlay.contains(e.target)) return;                                          // overlay menu handles its own clicks
   if (performance.now() < suppressClickUntil) { suppressClickUntil = 0; return; }  // already handled by a touch tap/swipe
   handleTapAt(e.clientX, e.clientY);
 });
@@ -1623,7 +1629,7 @@ const _diamondYAxis = new THREE.Vector3(0, 1, 0);
 // horizontal cursor movement rotates the diamondGroup around world Y
 // (so the existing 90° tilt is preserved), mouseup anywhere releases.
 window.addEventListener('mousedown', (e) => {
-  if (!diamondMesh) return;
+  if (!diamondMesh || overlay.contains(e.target)) return;     // don't start a diamond drag from the overlay menu
   const downNdc = new THREE.Vector2(
      (e.clientX / window.innerWidth)  * 2 - 1,
     -((e.clientY / window.innerHeight) * 2 - 1),
@@ -1642,7 +1648,7 @@ window.addEventListener('mouseup', () => { diamondDrag = null; });
 // near-stationary touch is a tap.
 let touchDragDiamond = false;
 window.addEventListener('touchstart', (e) => {
-  if (e.touches.length !== 1) { touchTracking = false; return; }
+  if (e.touches.length !== 1 || overlay.contains(e.target)) { touchTracking = false; return; }  // overlay menu handles its own taps
   const tt = e.touches[0];
   touchTracking = true;
   touchStartX = tt.clientX;
@@ -1688,6 +1694,80 @@ window.addEventListener('touchend', (e) => {
     handleTapAt(t.clientX, t.clientY);
   }
 }, { passive: true });
+
+// === Drop-down menu (☰ next to the wordmark). Opening it reveals one
+// identical "wasapok angleur" link per interactive element; clicking a link
+// runs that element's interaction, exactly as tapping the object in the scene
+// would. Album links advance through their own stages on repeated clicks
+// (open → reveal vinyl → play → stop). The window click/touch handlers above
+// ignore anything inside the overlay, so a menu click never also pokes the 3D
+// scene behind it.
+function activateAlbum(state) {
+  if (flightAnim) return;                                   // ignore while a record flies to/from the deck
+  if (currentRecord && currentRecord.state === state) {     // this one is playing → stop it and tuck it away
+    unloadRecord();
+    state.isOpen = false; state.vinylOut = false;
+    return;
+  }
+  if (currentRecord) { unloadRecord(); return; }            // a different record is playing → clear the deck first
+  if (!state.isOpen || !state.vinylOut) {                   // closed → open the sleeve and slide the vinyl out
+    state.isOpen = true; state.vinylOut = true; state.z = ++albumZSeq;
+    return;
+  }
+  state.z = ++albumZSeq;                                    // already revealed → drop it on the turntable and play
+  loadRecord(state);
+}
+
+// One action per clickable element, in display order: the records, then the
+// doorway, then the diamond. Tied to albumStates, so adding a record adds a
+// link automatically — the menu length tracks the interactive elements.
+const menuActions = [
+  ...albumStates.map((s) => () => activateAlbum(s)),
+  () => { window.location.href = CASTLE_URL; },             // doorway → /castle
+  () => { diamondSpinVel += 0.12; },                        // give the floating diamond a spin
+];
+
+const menu = document.createElement('div');
+menu.style.cssText = 'display:none;flex-direction:column;gap:7px;margin-top:12px;';
+for (const action of menuActions) {
+  const item = document.createElement('div');
+  item.textContent = BRAND;                                // every link is an identical "wasapok angleur"
+  item.style.cssText =                                     // match the wordmark's type exactly
+    'pointer-events:auto;cursor:pointer;width:fit-content;' +
+    'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;' +
+    'opacity:0.62;transition:opacity .15s;';
+  item.addEventListener('mouseenter', () => { item.style.opacity = '1'; });
+  item.addEventListener('mouseleave', () => { item.style.opacity = '0.62'; });
+  item.addEventListener('click', action);
+  menu.appendChild(item);
+}
+
+// Credit line beneath the last "wasapok angleur" → vmestetogether.com (new tab).
+const credit = document.createElement('div');
+credit.textContent = 'v.meste together';
+credit.style.cssText =
+  'pointer-events:auto;cursor:pointer;width:fit-content;margin-top:5px;' +
+  'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;' +
+  'opacity:0.5;transition:opacity .15s;';
+credit.addEventListener('mouseenter', () => { credit.style.opacity = '0.85'; });
+credit.addEventListener('mouseleave', () => { credit.style.opacity = '0.5'; });
+credit.addEventListener('click', () => window.open('https://vmestetogether.com', '_blank', 'noopener'));
+menu.appendChild(credit);
+
+brandBox.appendChild(menu);
+
+const menuIcon = document.createElement('div');
+menuIcon.textContent = '☰';
+menuIcon.title = 'menu';
+menuIcon.style.cssText =
+  'pointer-events:auto;cursor:pointer;user-select:none;font-size:18px;line-height:1;' +
+  'opacity:0.7;transition:opacity .15s;';
+menuIcon.addEventListener('click', () => {
+  const opening = menu.style.display === 'none';
+  menu.style.display = opening ? 'flex' : 'none';
+  menuIcon.style.opacity = opening ? '1' : '0.7';
+});
+brandRow.appendChild(menuIcon);
 
 const TILT_SCALE = 0.12;                     // how strongly each cubby tilts per meter of cursor offset
 const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
