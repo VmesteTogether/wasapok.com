@@ -939,6 +939,7 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
     isOpen: false, openness: 0,
     vinylOut: false, vinylness: 0,
     z: 0,                                // activation order — higher draws atop other open albums
+    col: parseInt(cubbyKey.slice(1), 10), // grid column (1–6) — used to flip slide-out on mobile
     audioSrc, labelColor, audio: null,   // audio lazy-initialized on first play
   };
   // Back-references so the click handler can find a state from any of its
@@ -1572,7 +1573,11 @@ function updateAlbumState() {
     const targetV = s.vinylOut ? 1 : 0;
     s.vinylness += (targetV - s.vinylness) * OPEN_LERP;
     const v = s.vinylness;
-    s.vinylGroup.position.x = (VINYL_PEEK_X + (VINYL_OUT_X - VINYL_PEEK_X) * v) * o;
+    // Vinyl normally slides out to the right. On mobile the view is one
+    // 3-column half, so a record in the rightmost column of that half (col 3
+    // or 6) would slide off-screen — flip it to slide left instead.
+    const slideSign = (paginated && s.col % 3 === 0) ? -1 : 1;
+    s.vinylGroup.position.x = (VINYL_PEEK_X + (VINYL_OUT_X - VINYL_PEEK_X) * v) * o * slideSign;
 
     // Hover-spin preview: when cursor is over the slid-out vinyl, spin it
     // around its own normal (Z axis in album-local space) at the same rate
