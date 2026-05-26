@@ -1408,6 +1408,23 @@ function updateRecordPlayerCover() {
   ch.rotation.x += (target - ch.rotation.x) * 0.20;
 }
 
+// The A5/B5 hallway doorway is a link to /newcastle. The green outside scene
+// is visible only through this opening, and nothing is ever placed or pops out
+// in front of it, so a ray passing through the opening rectangle (at the z=0
+// mouth) landed on the hills/sky — not on a cubby, album, or frame. Anything
+// physically in front would be a nearer hit and is handled before we get here.
+const DOORWAY = cubbies.A5;
+const NEWCASTLE_URL = '/newcastle';
+function rayHitsDoorway(ray) {
+  if (Math.abs(ray.direction.z) < 1e-6) return false;
+  const t = -ray.origin.z / ray.direction.z;                 // intersect the opening plane (z = 0)
+  if (t < 0) return false;
+  const wx = ray.origin.x + ray.direction.x * t;
+  const wy = ray.origin.y + ray.direction.y * t;
+  return Math.abs(wx - DOORWAY.position.x) <= DOORWAY.userData.openingW / 2
+      && Math.abs(wy - DOORWAY.position.y) <= DOORWAY.userData.openingH / 2;
+}
+
 // Shared tap/click resolver — raycasts the scene at a screen point and runs
 // the album/turntable interaction. Driven by mouse `click` (desktop) and by
 // `touchend` taps (mobile, where a synthetic canvas click can't be relied on).
@@ -1418,6 +1435,8 @@ function handleTapAt(clientX, clientY) {
     -((clientY / window.innerHeight) * 2 - 1),
   );
   raycaster.setFromCamera(tapNdc, camera);
+  // Tapping through the doorway (the green outside scene) → /newcastle.
+  if (rayHitsDoorway(raycaster.ray)) { window.location.href = NEWCASTLE_URL; return; }
   // Tap anywhere on the turntable while a record is loaded → eject.
   if (currentRecord && raycaster.intersectObject(recordPlayer, true).length) {
     unloadRecord();
@@ -1670,6 +1689,13 @@ function updateTilt() {
       }
       cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.55);
     }
+  }
+  // Affordance: pointer cursor while the mouse hovers the doorway link.
+  if (mouseSeen) {
+    const overDoor =
+      Math.abs(mouseWorld.x - DOORWAY.position.x) <= DOORWAY.userData.openingW / 2 &&
+      Math.abs(mouseWorld.y - DOORWAY.position.y) <= DOORWAY.userData.openingH / 2;
+    canvas.style.cursor = overDoor ? 'pointer' : '';
   }
 }
 
