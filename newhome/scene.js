@@ -764,7 +764,6 @@ const OPEN_Z_POP     = 0.55;         // albumRoot Z translation toward camera
 const OPEN_COVER_ROT = -1.95;        // ~-112°, cover swings open toward the user
 const VINYL_PEEK_X   = ALBUM_SIZE * 0.40;   // vinyl peeks out far enough that a slice of the orange label shows past the sleeve edge
 const VINYL_OUT_X    = ALBUM_SIZE * 0.95;   // fully popped out (label visible past the sleeve)
-const COVER_SHIFT_X  = 2 * TILE_W;          // mobile: a rightmost-col album cover slides ~2 columns left when open, so its record can pop right and stay on-screen
 // Lean: when closed, the cover leans back ~12° with its bottom edge
 // resting on the cubby floor — like a record on display. Lerps to flat
 // as the cover opens so the book-swing reads cleanly.
@@ -940,7 +939,12 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
     isOpen: false, openness: 0,
     vinylOut: false, vinylness: 0,
     z: 0,                                // activation order — higher draws atop other open albums
-    col: parseInt(cubbyKey.slice(1), 10), // grid column (1–6) — used to flip slide-out on mobile
+    col: parseInt(cubbyKey.slice(1), 10), // grid column (1–6) — used to relocate on mobile
+    // Offset from this album's own cubby to BiomePlain's (C2): on mobile, the
+    // rightmost-column albums glide here as they open so they (and their
+    // popping record) stay on-screen.
+    openShiftX: cubbies.C2.position.x - cubby.position.x,
+    openShiftY: cubbies.C2.position.y - cubby.position.y,
     audioSrc, labelColor, audio: null,   // audio lazy-initialized on first play
   };
   // Back-references so the click handler can find a state from any of its
@@ -1560,17 +1564,17 @@ function updateAlbumState() {
     s.albumRoot.scale.set(ps, ps, ps);
     s.albumRoot.position.z = -CUBBY_D * 0.55 + OPEN_Z_POP * o;
     // On mobile, a rightmost-column album (col 3 or 6) would pop its record off
-    // the screen edge. Instead slide the whole cover ~2 columns left as it
-    // opens; the record then pops out to the right as normal, landing back
-    // near the original column and staying on-screen.
-    const farSlide = paginated && s.col % 3 === 0;
-    s.albumRoot.position.x = farSlide ? -COVER_SHIFT_X * o : 0;
+    // the screen edge. Instead, as it opens it glides over to BiomePlain's
+    // cubby (C2, the center of the visible half); the record then pops right
+    // as normal and stays on-screen. shiftK ramps the move in with openness.
+    const shiftK = (paginated && s.col % 3 === 0) ? o : 0;
+    s.albumRoot.position.x = s.openShiftX * shiftK;
     // Lean rolls flat as the cover opens: full -12° back-tilt at closed,
     // 0° at fully open. Position.y follows so the bottom stays anchored
     // while leaned but the cover re-centers when flat.
     const lean = 1 - o;
     s.albumRoot.rotation.x = -LEAN_ANGLE * lean;
-    s.albumRoot.position.y =  LEAN_Y     * lean;
+    s.albumRoot.position.y =  LEAN_Y * lean + s.openShiftY * shiftK;
     s.coverPivot.rotation.y = OPEN_COVER_ROT * o;
 
     // --- Vinyl pop-out (only meaningful when cover is open). When cover is
