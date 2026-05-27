@@ -644,43 +644,159 @@ function goToPage(p) {
   updatePageUI();
 }
 
-// === Homepage overlay — a thin DOM layer over the canvas so the diorama
-// reads as a site landing, not just an art piece. Keeps the scene as the
-// hero: a top-left wordmark for identity plus a ☰ menu (built further down,
-// once the interactive objects exist) that drops down one identical
-// "wasapok angleur" link per clickable element. The overlay itself ignores
-// pointer events; only the menu icon and links opt back in.
+// === Homepage overlay — wordmark + ☰ menu, drawn to a 2D canvas and rendered
+// through the SAME barrel-distortion as the scene so the type bulges with the
+// room instead of sitting flat on top. The overlay canvas is full-screen and
+// 1:1 with CSS pixels; a dedicated warp pass (overlayWarpMat, same lens math as
+// fisheyeMat but no grade/vignette) composites it over the warped scene. Clicks
+// are forward-warped via pointerNDC into this canvas's space for hit-testing.
 const BRAND   = 'wasapok angleur';
-const TAGLINE = '';          // optional: set a short tagline to show under the wordmark ('' hides it)
+const FONT    = 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+const LSP     = 0.18;        // letter-spacing as a fraction of font size (matches the old 0.18em)
 
-const overlay = document.createElement('div');
-overlay.style.cssText =
-  'position:fixed;inset:0;pointer-events:none;z-index:9;color:#f3dcb0;' +
-  'font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;';
-document.body.appendChild(overlay);
+const ovlCanvas = document.createElement('canvas');
+const ovlCtx    = ovlCanvas.getContext('2d');
+const ovlTex    = new THREE.CanvasTexture(ovlCanvas);
+ovlTex.colorSpace = THREE.SRGBColorSpace;
+ovlTex.minFilter = THREE.LinearFilter;          // NPOT canvas → no mipmaps
+ovlTex.generateMipmaps = false;
 
-// Wordmark (top-left), warm cream over a soft shadow, fades in just after load.
-const brandBox = document.createElement('div');
-brandBox.style.cssText =
-  'position:absolute;top:20px;left:24px;text-shadow:0 1px 4px rgba(0,0,0,0.55);' +
-  'opacity:0;transition:opacity 1.2s ease 0.25s;';
-const wordmark = document.createElement('div');
-wordmark.textContent = BRAND;
-wordmark.style.cssText =
-  'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;';
-const brandRow = document.createElement('div');     // wordmark + ☰ menu icon, side by side
-brandRow.style.cssText = 'display:flex;align-items:center;gap:10px;';
-brandRow.appendChild(wordmark);
-brandBox.appendChild(brandRow);
-if (TAGLINE) {
-  const tag = document.createElement('div');
-  tag.textContent = TAGLINE;
-  tag.style.cssText = 'margin-top:6px;font-size:11px;letter-spacing:0.14em;opacity:0.75;';
-  brandBox.appendChild(tag);
+// Overlay lens: a barrel warp anchored at the wordmark's OWN corner (top-left)
+// instead of the screen center — so the type keeps a lens-like curl but stays
+// pinned to the screen edge rather than being dragged into the scene's central
+// bulge. Independent of the scene fisheye (FISHEYE_STRENGTH); OVERLAY_WARP is
+// the knob for how much it curls. OVL_PIVOT is UV space, y-up: (0,1)=top-left.
+const OVERLAY_WARP = 0.26;                    // curvature amount; 0.26 matches the scene fisheye's "angle"
+const OVL_PIVOT = new THREE.Vector2(0.0, 1.0);   // the point kept fixed under the curve (top-left corner)
+
+const overlayWarpScene = new THREE.Scene();
+const overlayWarpCam   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const overlayWarpMat   = new THREE.ShaderMaterial({
+  transparent: true, depthTest: false, depthWrite: false,
+  uniforms: {
+    tOverlay:  { value: ovlTex },
+    uStrength: { value: OVERLAY_WARP },
+    uAspect:   { value: 1 },
+    uOpacity:  { value: 0 },                  // fades in just after load
+    uPivot:    { value: OVL_PIVOT },          // corner anchor — keeps the curl pinned to the edge
+  },
+  vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tOverlay;
+    uniform float uStrength, uAspect, uOpacity;
+    uniform vec2 uPivot;
+    void main() {
+      // Center-anchored barrel curvature (same angle as the scene fisheye) plus a
+      // constant offset that re-pins uPivot — so the type curves like the lens but
+      // sits at the corner instead of being dragged toward the middle.
+      vec2 cc  = uPivot - 0.5;
+      vec2 cca = vec2(cc.x * uAspect, cc.y);
+      vec2 offset = uPivot - (0.5 + cc * (1.0 + uStrength * dot(cca, cca)));
+      vec2 c  = vUv - 0.5;
+      vec2 ca = vec2(c.x * uAspect, c.y);
+      vec2 src = 0.5 + c * (1.0 + uStrength * dot(ca, ca)) + offset;
+      if (src.x < 0.0 || src.x > 1.0 || src.y < 0.0 || src.y > 1.0) discard;
+      vec4 t = texture2D(tOverlay, src);
+      gl_FragColor = vec4(t.rgb, t.a * uOpacity);
+    }
+  `,
+});
+overlayWarpScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), overlayWarpMat));
+
+// The overlay gets its OWN full-resolution, transparent canvas stacked above the
+// pixelated scene canvas — so the warped type stays crisp/readable (the main
+// renderer draws at 1/3 res). pointer-events:none so clicks fall through to the
+// window handlers, which already resolve overlay hits via pointerNDC.
+const ovlGLCanvas = document.createElement('canvas');
+ovlGLCanvas.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:10;';
+document.body.appendChild(ovlGLCanvas);
+const ovlGL = new THREE.WebGLRenderer({ canvas: ovlGLCanvas, alpha: true, antialias: true });
+ovlGL.setClearColor(0x000000, 0);
+
+// Overlay state + layout. menuActions is assigned further down (it needs the
+// interactive objects); overlayReady gates drawing until then so the first
+// onResize() doesn't touch it.
+let menuOpen = false, hoverKey = null, overlayReady = false, ovlFadeStart = 0;
+let ovlElements = [];            // {key, x, y, w, h, action} hit-rects in canvas-pixel space
+const _ovlN = new THREE.Vector2();
+
+// Draw text with manual letter-spacing; returns total width (for hit-rects).
+function drawSpaced(text, x, y, size) {
+  const sp = size * LSP;
+  let cx = x;
+  for (const ch of text) { ovlCtx.fillText(ch, cx, y); cx += ovlCtx.measureText(ch).width + sp; }
+  return cx - sp - x;
 }
-overlay.appendChild(brandBox);
+function measureSpaced(text, size) {
+  const sp = size * LSP;
+  let w = 0;
+  for (const ch of text) w += ovlCtx.measureText(ch).width + sp;
+  return w - sp;
+}
 
-requestAnimationFrame(() => { brandBox.style.opacity = '1'; });        // fade the wordmark in
+// Lay out + paint the overlay canvas, rebuilding ovlElements for hit-testing.
+function layoutAndDraw() {
+  const W = ovlCanvas.width, H = ovlCanvas.height;
+  ovlCtx.clearRect(0, 0, W, H);
+  ovlCtx.textBaseline = 'top';
+  ovlCtx.shadowColor = 'rgba(0,0,0,0.55)'; ovlCtx.shadowBlur = 4; ovlCtx.shadowOffsetY = 1;
+  ovlElements = [];
+  const left = 130, top = 115;
+  const FS = 38.5, IFS = 31.5;     // 1.75× the originals (22 / 18)
+  // Wordmark (display only — clicks pass through to the diamond behind it).
+  ovlCtx.fillStyle = '#f3dcb0';
+  ovlCtx.globalAlpha = 1;
+  ovlCtx.font = `700 ${FS}px ${FONT}`;
+  const wmW = drawSpaced(BRAND, left, top, FS);
+  // ☰ menu icon, just right of the wordmark.
+  ovlCtx.font = `${IFS}px ${FONT}`;
+  const iconX = left + wmW + 12, iconY = top + 1;
+  const iconW = ovlCtx.measureText('☰').width;
+  ovlCtx.globalAlpha = (menuOpen || hoverKey === 'icon') ? 1 : 0.7;
+  ovlCtx.fillText('☰', iconX, iconY);
+  ovlElements.push({ key: 'icon', x: iconX, y: top, w: iconW, h: 24, action: toggleMenu });
+  // Dropdown — one identical "wasapok angleur" link per interactive element.
+  if (menuOpen) {
+    ovlCtx.font = `700 ${FS}px ${FONT}`;
+    let yy = top + FS + 12;
+    menuActions.forEach((act, i) => {
+      ovlCtx.globalAlpha = (hoverKey === 'item' + i) ? 1 : 0.62;
+      const w = drawSpaced(BRAND, left, yy, FS);
+      ovlElements.push({ key: 'item' + i, x: left, y: yy, w, h: FS, action: act });
+      yy += FS + 7;
+    });
+    yy += 5;
+    ovlCtx.globalAlpha = (hoverKey === 'credit') ? 0.85 : 0.5;
+    const cw = drawSpaced('v.meste together', left, yy, FS);
+    ovlElements.push({ key: 'credit', x: left, y: yy, w: cw, h: FS, action: openCredit });
+  }
+  ovlCtx.globalAlpha = 1; ovlCtx.shadowBlur = 0; ovlCtx.shadowOffsetY = 0;
+  ovlTex.needsUpdate = true;
+}
+const toggleMenu = () => { menuOpen = !menuOpen; layoutAndDraw(); };
+const openCredit = () => window.open('https://vmestetogether.com', '_blank', 'noopener');
+
+// Forward-warp a screen point into the overlay canvas and return the hit element
+// (clickable rects only), so clicks land on the warped glyphs, not flat boxes.
+function overlayHitAt(clientX, clientY) {
+  if (!overlayReady) return null;
+  // Forward-warp the click with the SAME corner-anchored lens as the shader, so
+  // hits land on the curled glyphs where they actually appear on screen.
+  const A = overlayWarpMat.uniforms.uAspect.value;
+  const ccx = OVL_PIVOT.x - 0.5, ccy = OVL_PIVOT.y - 0.5;
+  const wC = 1 + OVERLAY_WARP * ((ccx * A) * (ccx * A) + ccy * ccy);
+  const offX = OVL_PIVOT.x - (0.5 + ccx * wC), offY = OVL_PIVOT.y - (0.5 + ccy * wC);
+  const cx = clientX / window.innerWidth - 0.5;
+  const cy = (1 - clientY / window.innerHeight) - 0.5;             // y-up
+  const w = 1 + OVERLAY_WARP * ((cx * A) * (cx * A) + cy * cy);
+  const px = (0.5 + cx * w + offX) * ovlCanvas.width;
+  const py = (1 - (0.5 + cy * w + offY)) * ovlCanvas.height;
+  for (const el of ovlElements) {
+    if (px >= el.x - 3 && px <= el.x + el.w + 3 && py >= el.y - 3 && py <= el.y + el.h + 4) return el;
+  }
+  return null;
+}
 
 // Shared touch state. The actual touchstart/move/end listeners live further
 // down, next to the mouse handlers, so they can reach `raycaster`/`diamond*`
@@ -715,6 +831,10 @@ const onResize = () => {
   fisheyeMat.uniforms.uAspect.value = rw / rh;
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
+  ovlCanvas.width = w; ovlCanvas.height = h;     // overlay drawn 1:1 with CSS pixels
+  ovlGL.setSize(w, h);                           // full-res overlay layer (crisp), 1:1 with the source canvas
+  overlayWarpMat.uniforms.uAspect.value = rw / rh;
+  if (overlayReady) layoutAndDraw();             // re-lay out the warped overlay at the new size
   updatePageUI();
 };
 window.addEventListener('resize', onResize);
@@ -1741,6 +1861,8 @@ function rayHitsDoorway(ray) {
 function handleTapAt(clientX, clientY) {
   if (flightAnim) return;                                     // lock input during fly-to/from animations
   if (focusPainting) { focusPainting = null; return; }        // zoomed in on a painting → any click returns to the wall
+  const ovl = overlayHitAt(clientX, clientY);                 // warped wordmark/☰/menu click → run its action, don't poke the scene
+  if (ovl) { ovl.action(); return; }
   raycaster.setFromCamera(pointerNDC(clientX, clientY), camera);
   // Click a wall painting → zoom the camera in to view it head-on.
   const artHits = raycaster.intersectObjects(paintingMeshes, false);
@@ -1779,9 +1901,8 @@ function handleTapAt(clientX, clientY) {
   // Tapping the inside panel of an open album is a no-op for now.
 }
 window.addEventListener('click', (e) => {
-  if (overlay.contains(e.target)) return;                                          // overlay menu handles its own clicks
   if (performance.now() < suppressClickUntil) { suppressClickUntil = 0; return; }  // already handled by a touch tap/swipe
-  handleTapAt(e.clientX, e.clientY);
+  handleTapAt(e.clientX, e.clientY);                                               // overlay hits are resolved inside handleTapAt
 });
 
 function updateAlbumState() {
@@ -1906,7 +2027,7 @@ const _diamondYAxis = new THREE.Vector3(0, 1, 0);
 // horizontal cursor movement rotates the diamondGroup around world Y
 // (so the existing 90° tilt is preserved), mouseup anywhere releases.
 window.addEventListener('mousedown', (e) => {
-  if (!diamondMesh || overlay.contains(e.target)) return;     // don't start a diamond drag from the overlay menu
+  if (!diamondMesh || overlayHitAt(e.clientX, e.clientY)) return;     // don't start a diamond drag from a warped overlay element
   raycaster.setFromCamera(pointerNDC(e.clientX, e.clientY), camera);
   if (raycaster.intersectObject(diamondMesh, false).length) {
     diamondDrag = { lastX: e.clientX };
@@ -1921,7 +2042,9 @@ window.addEventListener('mouseup', () => { diamondDrag = null; });
 // near-stationary touch is a tap.
 let touchDragDiamond = false;
 window.addEventListener('touchstart', (e) => {
-  if (e.touches.length !== 1 || overlay.contains(e.target)) { touchTracking = false; return; }  // overlay menu handles its own taps
+  if (e.touches.length !== 1) { touchTracking = false; return; }
+  const ovl = overlayHitAt(e.touches[0].clientX, e.touches[0].clientY);   // tap a warped overlay element → run it now, eat the trailing click
+  if (ovl) { ovl.action(); touchTracking = false; suppressClickUntil = performance.now() + 600; return; }
   const tt = e.touches[0];
   touchTracking = true;
   touchStartX = tt.clientX;
@@ -1996,47 +2119,23 @@ const menuActions = [
   () => { diamondSpinVel += 0.12; },                        // give the floating diamond a spin
 ];
 
-const menu = document.createElement('div');
-menu.style.cssText = 'display:none;flex-direction:column;gap:7px;margin-top:12px;';
-for (const action of menuActions) {
-  const item = document.createElement('div');
-  item.textContent = BRAND;                                // every link is an identical "wasapok angleur"
-  item.style.cssText =                                     // match the wordmark's type exactly
-    'pointer-events:auto;cursor:pointer;width:fit-content;' +
-    'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;' +
-    'opacity:0.62;transition:opacity .15s;';
-  item.addEventListener('mouseenter', () => { item.style.opacity = '1'; });
-  item.addEventListener('mouseleave', () => { item.style.opacity = '0.62'; });
-  item.addEventListener('click', action);
-  menu.appendChild(item);
-}
+// The warped overlay can render now that menuActions exists: enable drawing,
+// paint the initial wordmark + ☰, and start the fade-in (matches the old CSS:
+// ~0.25s delay, ~1.2s ease). The render loop composites it through the warp.
+overlayReady = true;
+layoutAndDraw();
+ovlFadeStart = performance.now() + 250;
 
-// Credit line beneath the last "wasapok angleur" → vmestetogether.com (new tab).
-const credit = document.createElement('div');
-credit.textContent = 'v.meste together';
-credit.style.cssText =
-  'pointer-events:auto;cursor:pointer;width:fit-content;margin-top:5px;' +
-  'font-size:22px;font-weight:700;letter-spacing:0.18em;text-transform:lowercase;line-height:1;' +
-  'opacity:0.5;transition:opacity .15s;';
-credit.addEventListener('mouseenter', () => { credit.style.opacity = '0.85'; });
-credit.addEventListener('mouseleave', () => { credit.style.opacity = '0.5'; });
-credit.addEventListener('click', () => window.open('https://vmestetogether.com', '_blank', 'noopener'));
-menu.appendChild(credit);
-
-brandBox.appendChild(menu);
-
-const menuIcon = document.createElement('div');
-menuIcon.textContent = '☰';
-menuIcon.title = 'menu';
-menuIcon.style.cssText =
-  'pointer-events:auto;cursor:pointer;user-select:none;font-size:18px;line-height:1;' +
-  'opacity:0.7;transition:opacity .15s;';
-menuIcon.addEventListener('click', () => {
-  const opening = menu.style.display === 'none';
-  menu.style.display = opening ? 'flex' : 'none';
-  menuIcon.style.opacity = opening ? '1' : '0.7';
+// Hover: forward-warp the cursor onto the overlay element under it, bump its
+// opacity (redraw only on change), and flag a pointer cursor for the per-frame
+// cursor logic. Touch devices have no hover and skip this.
+let overlayHover = false;
+window.addEventListener('mousemove', (e) => {
+  const el = overlayHitAt(e.clientX, e.clientY);
+  overlayHover = !!el;
+  const key = el ? el.key : null;
+  if (key !== hoverKey) { hoverKey = key; layoutAndDraw(); }
 });
-brandRow.appendChild(menuIcon);
 
 const TILT_SCALE = 0.12;                     // how strongly each cubby tilts per meter of cursor offset
 const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
@@ -2077,7 +2176,7 @@ function updateTilt() {
     const overDoor =
       Math.abs(mouseWorld.x - DOORWAY.position.x) <= DOORWAY.userData.openingW / 2 &&
       Math.abs(mouseWorld.y - DOORWAY.position.y) <= DOORWAY.userData.openingH / 2;
-    canvas.style.cursor = overDoor ? 'pointer' : '';
+    canvas.style.cursor = (overDoor || overlayHover) ? 'pointer' : '';
   }
 }
 
@@ -2359,6 +2458,13 @@ function render(now) {
     renderer.render(scene, camera);
     renderer.setRenderTarget(null);          // → screen, warped through the fisheye quad
     renderer.render(fisheyeScene, fisheyeCam);
+    // Warped homepage overlay, composited on top with the SAME lens math and a
+    // post-load fade. autoClear off so it doesn't wipe the scene just drawn.
+    if (overlayReady) {
+      overlayWarpMat.uniforms.uAspect.value   = fisheyeMat.uniforms.uAspect.value;   // same w/h ratio as the scene
+      overlayWarpMat.uniforms.uOpacity.value  = Math.max(0, Math.min(1, (now - ovlFadeStart) / 1200));
+      ovlGL.render(overlayWarpScene, overlayWarpCam);   // crisp, full-res, corner-anchored warp on its own layer
+    }
   }
   requestAnimationFrame(render);
 }
