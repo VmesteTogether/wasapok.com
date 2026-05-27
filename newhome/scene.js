@@ -83,6 +83,7 @@ const FISHEYE_STRENGTH = 0.26;             // 0 = off; higher = more bulge (lowe
 const COLOR_SAT = .92;                     // global saturation multiplier (1 = unchanged)
 const COLOR_VAL = 1.00;                     // global value/brightness multiplier (1 = unchanged)
 const COVER_SAT = 0.65;                     // album-cover ART ONLY: extra saturation multiplier baked into the cover material (1 = unchanged, 0 = greyscale); applied before the global grade
+const PAINTING_HAZE = 0.32;                 // wall-painting ART ONLY: atmospheric veil toward the room's dark air (0 = none); pushes the paintings "further back" than the cubbies
 const fisheyeRT = new THREE.WebGLRenderTarget(2, 2, {
   magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter,
 });
@@ -317,6 +318,26 @@ const paintingMeshes = [];
       pic.material.needsUpdate = true;
     });
     pic.material.map.colorSpace = THREE.SRGBColorSpace;
+    // Atmospheric recession (haze veil): after the texel is sampled, desaturate
+    // slightly and mix toward the room's dark warm air, DENSER toward the top of
+    // the frame (vMapUv.y→1), so the painting reads as set back in dimmer space
+    // behind the cubbies. Linear-space fog color ≈ surround #1a1410. The strength
+    // is a uniform so updatePan can ease it to 0 on the focused painting — haze
+    // clears as you "step up" to view the art (see paintingMeshes loop).
+    pic.material.userData.haze = { value: PAINTING_HAZE };
+    pic.material.onBeforeCompile = (shader) => {
+      shader.uniforms.uHaze = pic.material.userData.haze;
+      shader.fragmentShader = 'uniform float uHaze;\n' + shader.fragmentShader.replace(
+        '#include <map_fragment>',
+        `#include <map_fragment>
+         {
+           float _luma = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
+           diffuseColor.rgb = mix(vec3(_luma), diffuseColor.rgb, mix(1.0, 0.85, uHaze / max(${PAINTING_HAZE.toFixed(3)}, 1e-4)));  // desaturate, scaled by haze
+           float _haze = uHaze * mix(0.70, 1.0, clamp(vMapUv.y, 0.0, 1.0));
+           diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.011, 0.006, 0.004), _haze);  // veil toward dark warm air
+         }`,
+      );
+    };
     pic.userData.kind = 'painting';
     paintingMeshes.push(pic);
     scene.add(frame, mat, pic);
@@ -2311,6 +2332,13 @@ function updatePan() {
   camLookY += (ly - camLookY) * k;
   camera.lookAt(camLookX, camLookY, 0);
   fisheyeMat.uniforms.uStrength.value += (tFish - fisheyeMat.uniforms.uStrength.value) * k;
+
+  // Haze clears on the painting you've stepped up to; others stay veiled.
+  for (const p of paintingMeshes) {
+    const u = p.material.userData.haze;
+    const tgt = (p === focusPainting) ? 0 : PAINTING_HAZE;
+    u.value += (tgt - u.value) * k;
+  }
 }
 function render(now) {
   if (now - lastFrame >= FRAME_MS) {
