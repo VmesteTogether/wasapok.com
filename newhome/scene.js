@@ -32,6 +32,13 @@ const camera = new THREE.PerspectiveCamera(40, 1, 0.1, 100);
 camera.position.set(0, 0, 20);
 camera.lookAt(0, 0, 0);
 
+// Painting focus state: clicking a wall painting zooms the camera in to view
+// it head-on; clicking anywhere returns. updatePan() lerps the camera toward
+// the focus target (and eases the fisheye to 0) when focusPainting is set.
+let focusPainting = null;        // the painting pic mesh currently zoomed, or null
+let camRestZ = 20;               // resting camera z (set by onResize); focus overrides it
+let camLookX = 0, camLookY = 0;  // lerped lookAt point so the turn-to-art is smooth
+
 // Lighting for future user-added shaded meshes (MeshStandardMaterial,
 // MeshToonMaterial, etc.). Cubby walls themselves use MeshBasicMaterial
 // with vertex colors and aren't affected. Three lights mimic the
@@ -72,9 +79,10 @@ mkRoom(RD, GRID_H, 0, -Math.PI / 2,  RW / 2, 0, RD / 2);   // right wall
 // values, so the warp is a pure passthrough — colors/lighting are unchanged,
 // only the geometry bulges. Revert: set FISHEYE_STRENGTH = 0, or delete this
 // block + the two-pass render and restore a plain pointerNDC + render.
-const FISHEYE_STRENGTH = 0.42;             // 0 = off; higher = more bulge
-const COLOR_SAT = 1.00;                     // global saturation multiplier (1 = unchanged)
+const FISHEYE_STRENGTH = 0.26;             // 0 = off; higher = more bulge (lowered so the warp's background frame is thin and the room reaches the screen edges)
+const COLOR_SAT = .92;                     // global saturation multiplier (1 = unchanged)
 const COLOR_VAL = 1.00;                     // global value/brightness multiplier (1 = unchanged)
+const COVER_SAT = 0.65;                     // album-cover ART ONLY: extra saturation multiplier baked into the cover material (1 = unchanged, 0 = greyscale); applied before the global grade
 const fisheyeRT = new THREE.WebGLRenderTarget(2, 2, {
   magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter,
 });
@@ -130,7 +138,7 @@ const fisheyeMat = new THREE.ShaderMaterial({
       // natural daylight: brighter + warm from the upper-left "window", cooler low
       float key = 0.9 + 0.22 * clamp((1.0 - vUv.x) * 0.5 + vUv.y * 0.7, 0.0, 1.0);
       outc *= key * mix(vec3(0.95, 0.98, 1.05), vec3(1.06, 1.02, 0.9), vUv.y);
-      float vig = smoothstep(0.72, 0.26, length(vUv - 0.5));   // fade the room into the dark surround — no border
+      float vig = smoothstep(0.98, 0.62, length(vUv - 0.5));   // room fills to the screen edges; only the far corners fall off
       outc = mix(uBg, outc, vig);
       gl_FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
     }
@@ -280,6 +288,43 @@ scene.add(wall);
   add(wallMat2, M, GRID_H, -(GRID_W + M) / 2, 0);                      // left wall
   add(wallMat2, M, GRID_H,  (GRID_W + M) / 2, 0);                      // right wall
   add(trimMat,  GRID_W + 2, 0.3, 0, -GRID_H / 2 - 0.15, -0.005);       // baseboard
+}
+
+// --- Framed paintings hung on the mahogany wall flanking the cubby grid (grid
+// spans x ±6, y ±4). Deliberately SMALLER than the album covers and built as
+// gallery frames (dark frame + cream mat + image) so they read as wall art,
+// not vinyls. Each pic is auto-sized to its own aspect at a fixed height H.
+// Clicking a pic sets focusPainting → the camera zooms in head-on (updatePan);
+// clicking anywhere returns. Move/resize via the hang(file, x, y, H) calls.
+const paintingMeshes = [];
+{
+  const artLoader = new THREE.TextureLoader();
+  const hang = (file, x, y, h) => {
+    const frame = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0x171310 }));  // dark gallery frame
+    const mat   = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial({ color: 0xe9e2d0 }));  // cream mat border
+    const pic   = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), new THREE.MeshBasicMaterial());
+    const place = (w) => {                       // size frame/mat/pic around a w×h image
+      frame.scale.set(w + 0.30, h + 0.30, 1);
+      mat.scale.set(w + 0.14, h + 0.14, 1);
+      pic.scale.set(w, h, 1);
+    };
+    place(h);                                    // square until the image loads
+    frame.position.set(x, y, 0.020);
+    mat.position.set(x, y, 0.025);
+    pic.position.set(x, y, 0.030);
+    pic.material.map = artLoader.load(file, (t) => {
+      place(h * (t.image.width / t.image.height));   // honor the image's aspect ratio
+      pic.material.needsUpdate = true;
+    });
+    pic.material.map.colorSpace = THREE.SRGBColorSpace;
+    pic.userData.kind = 'painting';
+    paintingMeshes.push(pic);
+    scene.add(frame, mat, pic);
+  };
+  hang('paintings/photo1.png', -7.6,  1.4, 2.4);   // LEFT column: photo1 above photo2
+  hang('paintings/photo2.png', -7.6, -1.4, 2.4);
+  hang('paintings/photo3.png',  7.6,  1.4, 2.4);   // RIGHT column: photo3 above photo4
+  hang('paintings/photo4.png',  7.6, -1.4, 2.4);
 }
 
 // --- Recessed cubby box: 5 inward-facing panels (back + top + bottom + 2
@@ -639,7 +684,8 @@ const onResize = () => {
   const distH = (GRID_H / 2) / Math.tan(fovV / 2);
   const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
   const distW = (fitW / 2) / Math.tan(fovH / 2);
-  camera.position.z = Math.max(distH, distW) * 1.12;   // ~88% zoom
+  camRestZ = Math.max(distH, distW) * 1.30;   // rest distance: pulled back enough that the bigger wall paintings are in view
+  if (!focusPainting) camera.position.z = camRestZ;   // while zoomed on a painting, leave z to the focus lerp
   panTargetX = paginated ? PAGE_CENTER_X[currentPage] : 0;
   camera.updateProjectionMatrix();
   const rw = Math.floor(w / PIXELATION), rh = Math.floor(h / PIXELATION);
@@ -750,11 +796,11 @@ const diamondEnvMap = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
 pmrem.dispose();
 
 const crystalMat = new THREE.MeshStandardMaterial({
-  color: 0xd6dde6,
+  color: 0xedf1f6,
   metalness: 1.0,
   roughness: 0.10,
   envMap: diamondEnvMap,
-  envMapIntensity: 3.7,
+  envMapIntensity: 5.4,             // brighter reflections so the metallic facets read clearly against the wall
   side: THREE.DoubleSide,
 });
 
@@ -1041,13 +1087,13 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   // shelf. Legs sit 0.10m outside the cover's edges (clear of the hover
   // scale-up) and 0.025m behind the cover plane, so they read as a back
   // support without poking through the front.
-  const EASEL_R = 0.025;
+  const EASEL_R = 0.045;
   const easelGeom = new THREE.CylinderGeometry(EASEL_R, EASEL_R, ALBUM_SIZE, 12);
   // depthTest/depthWrite off + renderOrder=5 so the tilting cubby side
   // walls never sweep over the easel during cursor parallax (same trick
   // the biopunk manifold uses). Stays under album covers (renderOrder 8).
   const easelMat = new THREE.MeshStandardMaterial({
-    color: 0x6b4423, metalness: 0.05, roughness: 0.75,
+    color: 0xc99a5b, metalness: 0.05, roughness: 0.6,
     depthTest: false, depthWrite: false,
   });
   for (const sx of [-1, 1]) {
@@ -1064,9 +1110,20 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   const coverPivot = new THREE.Group();
   coverPivot.position.x = -ALBUM_SIZE / 2;
   albumRoot.add(coverPivot);
+  // Cover art only: desaturate the sampled texels toward their luminance by
+  // COVER_SAT, injected into the MeshBasic shader so it touches just this
+  // material (not the vinyl/label/wall) and stacks under the global grade.
+  const coverMat = new THREE.MeshBasicMaterial({ map: tex, ...matOpts });
+  coverMat.onBeforeCompile = (shader) => {
+    shader.fragmentShader = shader.fragmentShader.replace(
+      '#include <map_fragment>',
+      `#include <map_fragment>
+       diffuseColor.rgb = mix(vec3(dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114))), diffuseColor.rgb, ${COVER_SAT.toFixed(3)});`,
+    );
+  };
   const front = new THREE.Mesh(
     new THREE.PlaneGeometry(ALBUM_SIZE, ALBUM_SIZE),
-    new THREE.MeshBasicMaterial({ map: tex, ...matOpts }),
+    coverMat,
   );
   front.position.x = ALBUM_SIZE / 2;
   front.renderOrder = 8;             // top of the stack so it covers vinyl/inside when closed
@@ -1662,7 +1719,11 @@ function rayHitsDoorway(ray) {
 // `touchend` taps (mobile, where a synthetic canvas click can't be relied on).
 function handleTapAt(clientX, clientY) {
   if (flightAnim) return;                                     // lock input during fly-to/from animations
+  if (focusPainting) { focusPainting = null; return; }        // zoomed in on a painting → any click returns to the wall
   raycaster.setFromCamera(pointerNDC(clientX, clientY), camera);
+  // Click a wall painting → zoom the camera in to view it head-on.
+  const artHits = raycaster.intersectObjects(paintingMeshes, false);
+  if (artHits.length) { focusPainting = artHits[0].object; return; }
   // Tapping through the doorway (the green outside scene) → /castle.
   if (rayHitsDoorway(raycaster.ray)) { window.location.href = CASTLE_URL; return; }
   // Tap anywhere on the turntable while a record is loaded → eject.
@@ -2227,8 +2288,29 @@ let lastFrame = 0;
 function updatePan() {
   panCurrentX += (panTargetX - panCurrentX) * 0.18;
   if (Math.abs(panTargetX - panCurrentX) < 0.0015) panCurrentX = panTargetX;
-  camera.position.x = panCurrentX;
-  camera.lookAt(panCurrentX, 0, 0);
+
+  // Pick the camera + lookAt + fisheye targets: a focused painting (zoom in,
+  // head-on, flat) vs the resting wall view. Lerp toward whichever each frame.
+  let tx, ty, tz, lx, ly, tFish;
+  if (focusPainting) {
+    const p = focusPainting, w = p.scale.x, h = p.scale.y;
+    const fovV = camera.fov * Math.PI / 180;
+    const fovH = 2 * Math.atan(Math.tan(fovV / 2) * camera.aspect);
+    const dz = Math.max((h / 2) / Math.tan(fovV / 2), (w / 2) / Math.tan(fovH / 2)) * 1.12;  // distance that fills the FOV with a small margin
+    tx = p.position.x; ty = p.position.y; tz = p.position.z + dz;
+    lx = p.position.x; ly = p.position.y; tFish = 0;          // ease the warp out so the art reads true
+  } else {
+    tx = panCurrentX; ty = 0; tz = camRestZ;
+    lx = panCurrentX; ly = 0; tFish = FISHEYE_STRENGTH;
+  }
+  const k = 0.12;
+  camera.position.x += (tx - camera.position.x) * k;
+  camera.position.y += (ty - camera.position.y) * k;
+  camera.position.z += (tz - camera.position.z) * k;
+  camLookX += (lx - camLookX) * k;
+  camLookY += (ly - camLookY) * k;
+  camera.lookAt(camLookX, camLookY, 0);
+  fisheyeMat.uniforms.uStrength.value += (tFish - fisheyeMat.uniforms.uStrength.value) * k;
 }
 function render(now) {
   if (now - lastFrame >= FRAME_MS) {
