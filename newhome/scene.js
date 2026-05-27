@@ -42,7 +42,7 @@ camera.lookAt(0, 0, 0);
 // pooling onto the metallic objects (diamond / manifold / turntable).
 // Only standard-material objects pick up the lamp; the bookshelf wall is
 // MeshBasic so its tone is baked in.
-scene.add(new THREE.AmbientLight(0xffd6a0, 0.55));
+scene.add(new THREE.AmbientLight(0xffd6a0, 0.95));
 const key = new THREE.DirectionalLight(0xfff0c8, 0.85);
 key.position.set(-6, 8, 10);
 scene.add(key);
@@ -52,6 +52,91 @@ scene.add(fill);
 const lamp = new THREE.PointLight(0xffb060, 1.8, 22, 1.5);
 lamp.position.set(10, 2, 3);
 scene.add(lamp);
+
+// === Fisheye post-processing. The scene renders into a target, then a
+// barrel/lens-distortion shader on a fullscreen quad warps it so the room
+// bulges. The target is tagged sRGB and the background is fed as raw display
+// values, so the warp is a pure passthrough — colors/lighting are unchanged,
+// only the geometry bulges. Revert: set FISHEYE_STRENGTH = 0, or delete this
+// block + the two-pass render and restore a plain pointerNDC + render.
+const FISHEYE_STRENGTH = 0.42;             // 0 = off; higher = more bulge
+const COLOR_SAT = 1.00;                     // global saturation multiplier (1 = unchanged)
+const COLOR_VAL = 1.00;                     // global value/brightness multiplier (1 = unchanged)
+const fisheyeRT = new THREE.WebGLRenderTarget(2, 2, {
+  magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter,
+});
+fisheyeRT.texture.colorSpace = THREE.SRGBColorSpace;   // store display-ready pixels → no color shift on passthrough
+const fisheyeScene = new THREE.Scene();
+const fisheyeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+const fisheyeMat = new THREE.ShaderMaterial({
+  uniforms: {
+    tDiffuse:  { value: fisheyeRT.texture },
+    uStrength: { value: FISHEYE_STRENGTH },
+    uAspect:   { value: 1 },
+    uBg:       { value: new THREE.Vector3(0x1a / 255, 0x14 / 255, 0x10 / 255) },  // raw sRGB of the clear color
+    uSat:      { value: COLOR_SAT },
+    uVal:      { value: COLOR_VAL },
+  },
+  vertexShader: `
+    varying vec2 vUv;
+    void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
+  `,
+  fragmentShader: `
+    varying vec2 vUv;
+    uniform sampler2D tDiffuse;
+    uniform float uStrength;
+    uniform float uAspect;
+    uniform float uSat;
+    uniform float uVal;
+    uniform vec3  uBg;
+    vec3 rgb2hsv(vec3 c) {
+      vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
+      vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
+      vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
+      float d = q.x - min(q.w, q.y);
+      float e = 1.0e-10;
+      return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
+    }
+    vec3 hsv2rgb(vec3 c) {
+      vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
+      vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+      return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+    }
+    void main() {
+      vec2 c  = vUv - 0.5;
+      vec2 ca = vec2(c.x * uAspect, c.y);     // aspect-correct so the bulge stays round
+      float warp = 1.0 + uStrength * dot(ca, ca);
+      vec2 src = 0.5 + c * warp;
+      vec3 col = (src.x < 0.0 || src.x > 1.0 || src.y < 0.0 || src.y > 1.0)
+        ? uBg                                 // outside the source → background
+        : texture2D(tDiffuse, src).rgb;
+      vec3 hsv = rgb2hsv(col);                // turn up saturation + value across the whole scene
+      hsv.y = clamp(hsv.y * uSat, 0.0, 1.0);
+      hsv.z = clamp(hsv.z * uVal, 0.0, 1.0);
+      vec3 outc = hsv2rgb(hsv);
+      // natural daylight: brighter + warm from the upper-left "window", cooler low
+      float key = 0.9 + 0.22 * clamp((1.0 - vUv.x) * 0.5 + vUv.y * 0.7, 0.0, 1.0);
+      outc *= key * mix(vec3(0.95, 0.98, 1.05), vec3(1.06, 1.02, 0.9), vUv.y);
+      gl_FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
+    }
+  `,
+  depthTest: false, depthWrite: false,
+});
+fisheyeScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fisheyeMat));
+
+// Map a pointer (clientX/Y) to the NDC of the scene content actually shown
+// under it — apply the SAME lens warp the shader uses, so clicks, drags, hover
+// and the doorway hit-test line up with the warped image. Strength 0 → plain.
+const _pndc = new THREE.Vector2();
+function pointerNDC(clientX, clientY, out = _pndc) {
+  const cx = clientX / window.innerWidth  - 0.5;
+  const cy = (1 - clientY / window.innerHeight) - 0.5;     // y-up, matches the shader's vUv
+  const ax = cx * fisheyeMat.uniforms.uAspect.value;
+  const warp = 1 + fisheyeMat.uniforms.uStrength.value * (ax * ax + cy * cy);
+  out.x = (0.5 + cx * warp) * 2 - 1;
+  out.y = (0.5 + cy * warp) * 2 - 1;
+  return out;
+}
 
 // --- Procedural maple bookshelf wall: wood frame only (top/bottom planks +
 // side dividers), cubby interiors alpha=0 so the recessed-box geometry
@@ -542,7 +627,10 @@ const onResize = () => {
   camera.position.z = Math.max(distH, distW) * 1.02;
   panTargetX = paginated ? PAGE_CENTER_X[currentPage] : 0;
   camera.updateProjectionMatrix();
-  renderer.setSize(Math.floor(w / PIXELATION), Math.floor(h / PIXELATION), false);
+  const rw = Math.floor(w / PIXELATION), rh = Math.floor(h / PIXELATION);
+  renderer.setSize(rw, rh, false);
+  fisheyeRT.setSize(rw, rh);
+  fisheyeMat.uniforms.uAspect.value = rw / rh;
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
   updatePageUI();
@@ -676,6 +764,74 @@ baseSpot.target.position.set(0, -CUBBY_H / 2 + 0.2, SCULPT_Z);
 topLeftCubby.add(baseSpot);
 topLeftCubby.add(baseSpot.target);
 
+// === Emblem glow for D1 — cool icy lighting against the warm room to mark the
+// crystal as the site's emblem: a bright cool key for facet sparkle plus the
+// sparkle glints below. The additive bits are clipped to the D1 cubby so
+// nothing bleeds onto neighbors.
+const D1_CLIP = topLeftCubby.userData.clippingPlanes;
+
+// Bright cool key from the upper-front so the facets throw sharp sparkle
+// (complements baseSpot's top-down wash). Cool white, tight cone.
+const keySpot = new THREE.SpotLight(0xdaf0ff, 22.0, 2.6, Math.PI / 7, 0.5, 1.3);
+keySpot.position.set(0.5, CEILING_Y + 0.35, SCULPT_Z + 1.3);
+keySpot.target.position.set(0, 0, SCULPT_Z);
+topLeftCubby.add(keySpot);
+topLeftCubby.add(keySpot.target);
+
+// Sparkle glints — a couple of 4-point stars that flash briefly at random
+// points on the crystal, like light catching a facet. Drawn in front of the
+// crystal (depthTest off) so they read as surface glints.
+const sparkleTex = (() => {
+  const S = 64, cv = document.createElement('canvas');
+  cv.width = S; cv.height = S;
+  const ctx = cv.getContext('2d');
+  ctx.translate(S / 2, S / 2);
+  const core = ctx.createRadialGradient(0, 0, 0, 0, 0, S * 0.18);
+  core.addColorStop(0, 'rgba(255,255,255,1)');
+  core.addColorStop(1, 'rgba(255,255,255,0)');
+  ctx.fillStyle = core;
+  ctx.beginPath(); ctx.arc(0, 0, S * 0.18, 0, Math.PI * 2); ctx.fill();
+  // 8-point star: long bright cardinal spikes + shorter, fainter diagonals.
+  const spikes = [
+    { ang: 0,            len: 0.5,  w: 2.2, a: 0.95 },
+    { ang: Math.PI / 2,  len: 0.5,  w: 2.2, a: 0.95 },
+    { ang: Math.PI / 4,  len: 0.33, w: 1.3, a: 0.6  },
+    { ang: -Math.PI / 4, len: 0.33, w: 1.3, a: 0.6  },
+  ];
+  for (const sk of spikes) {
+    ctx.save(); ctx.rotate(sk.ang);
+    const L = S * sk.len;
+    const lg = ctx.createLinearGradient(-L, 0, L, 0);
+    lg.addColorStop(0,   'rgba(210,236,255,0)');
+    lg.addColorStop(0.5, `rgba(255,255,255,${sk.a})`);
+    lg.addColorStop(1,   'rgba(210,236,255,0)');
+    ctx.strokeStyle = lg; ctx.lineWidth = sk.w;
+    ctx.beginPath(); ctx.moveTo(-L, 0); ctx.lineTo(L, 0); ctx.stroke();
+    ctx.restore();
+  }
+  const tex = new THREE.CanvasTexture(cv);
+  tex.magFilter = THREE.NearestFilter; tex.minFilter = THREE.NearestFilter;
+  return tex;
+})();
+const sparkles = [];
+const sparkleGeom = new THREE.PlaneGeometry(0.5, 0.5);
+for (let i = 0; i < 11; i++) {
+  const sp = new THREE.Mesh(sparkleGeom, new THREE.MeshBasicMaterial({
+    map: sparkleTex, transparent: true, opacity: 0, depthWrite: false, depthTest: false,
+    blending: THREE.AdditiveBlending, clippingPlanes: D1_CLIP,
+  }));
+  sp.position.set(0, DIAMOND_BASE_Y, SCULPT_Z + 0.12);
+  sp.renderOrder = 7;
+  sp.userData = {
+    rate: 0.45 + Math.random() * 0.8,      // fast cycles → frequent twinkle
+    off:  Math.random(),
+    last: 1,
+    scl:  0.5 + Math.random() * 0.85,      // varied glint sizes
+  };
+  topLeftCubby.add(sp);
+  sparkles.push(sp);
+}
+
 // Minimal inline OBJ parser — read vertex (v) and face (f) lines, triangulate
 // quads via fan, build a BufferGeometry. Skips materials/textures/normals
 // from the file (we recompute normals and override the material below). Used
@@ -725,6 +881,23 @@ function updateSculpture() {
   if (!diamondDrag && Math.abs(diamondSpinVel) > 0.0005) {
     diamondGroup.rotateOnWorldAxis(_diamondYAxis, diamondSpinVel);
     diamondSpinVel *= 0.95;
+  }
+  // Sparkles: sharp bright twinkles scattered over the crystal — repositioned
+  // and resized at the start of each (fast) cycle so the whole thing glitters.
+  for (const sp of sparkles) {
+    const ud  = sp.userData;
+    const cyc = (t * ud.rate + ud.off) % 1;
+    if (cyc < ud.last) {                                  // new glint somewhere on the crystal
+      const r = 0.46 * Math.sqrt(Math.random());
+      const a = Math.random() * Math.PI * 2;
+      sp.position.set(Math.cos(a) * r, diamondGroup.position.y + Math.sin(a) * r, SCULPT_Z + 0.12);
+      sp.rotation.z = Math.random() * Math.PI;
+      ud.scl = 0.5 + Math.random() * 0.85;
+    }
+    ud.last = cyc;
+    const flash = Math.pow(Math.max(0, 1 - Math.abs(cyc - 0.12) * 7), 2.4);   // quick, snappy spike
+    sp.material.opacity = flash;
+    sp.scale.setScalar(ud.scl * (0.35 + 0.85 * flash));
   }
 }
 
@@ -980,7 +1153,7 @@ function buildRecordPlayer() {
   const armPivotX = 0.42;
   const armPivotZ = -0.20;
 
-  const matOpts = { depthTest: false, depthWrite: false, transparent: true };
+  const matOpts = { depthTest: false, depthWrite: false, transparent: true, emissive: 0x3a3833, emissiveIntensity: 0.28 };
 
   const plinthMat    = new THREE.MeshStandardMaterial({ color: 0xc7c2b3, metalness: 0.35, roughness: 0.45, ...matOpts });
   const rimMat       = new THREE.MeshStandardMaterial({ color: 0xd6d3c8, metalness: 0.90, roughness: 0.20, ...matOpts });
@@ -1474,11 +1647,7 @@ function rayHitsDoorway(ray) {
 // `touchend` taps (mobile, where a synthetic canvas click can't be relied on).
 function handleTapAt(clientX, clientY) {
   if (flightAnim) return;                                     // lock input during fly-to/from animations
-  const tapNdc = new THREE.Vector2(
-     (clientX / window.innerWidth)  * 2 - 1,
-    -((clientY / window.innerHeight) * 2 - 1),
-  );
-  raycaster.setFromCamera(tapNdc, camera);
+  raycaster.setFromCamera(pointerNDC(clientX, clientY), camera);
   // Tapping through the doorway (the green outside scene) → /castle.
   if (rayHitsDoorway(raycaster.ray)) { window.location.href = CASTLE_URL; return; }
   // Tap anywhere on the turntable while a record is loaded → eject.
@@ -1622,8 +1791,7 @@ const ndc = new THREE.Vector2(0, 0);
 const mouseWorld = new THREE.Vector3(0, 0, 0);
 let mouseSeen = false;
 window.addEventListener('mousemove', (e) => {
-  ndc.x =  (e.clientX / window.innerWidth)  * 2 - 1;
-  ndc.y = -((e.clientY / window.innerHeight) * 2 - 1);
+  pointerNDC(e.clientX, e.clientY, ndc);
   mouseSeen = true;
   if (diamondDrag) {
     const dx = e.clientX - diamondDrag.lastX;
@@ -1642,11 +1810,7 @@ const _diamondYAxis = new THREE.Vector3(0, 1, 0);
 // (so the existing 90° tilt is preserved), mouseup anywhere releases.
 window.addEventListener('mousedown', (e) => {
   if (!diamondMesh || overlay.contains(e.target)) return;     // don't start a diamond drag from the overlay menu
-  const downNdc = new THREE.Vector2(
-     (e.clientX / window.innerWidth)  * 2 - 1,
-    -((e.clientY / window.innerHeight) * 2 - 1),
-  );
-  raycaster.setFromCamera(downNdc, camera);
+  raycaster.setFromCamera(pointerNDC(e.clientX, e.clientY), camera);
   if (raycaster.intersectObject(diamondMesh, false).length) {
     diamondDrag = { lastX: e.clientX };
   }
@@ -1667,11 +1831,7 @@ window.addEventListener('touchstart', (e) => {
   touchStartY = tt.clientY;
   touchDragDiamond = false;
   if (diamondMesh) {                                          // start a drag-spin if the touch hit the diamond
-    const dn = new THREE.Vector2(
-       (tt.clientX / window.innerWidth)  * 2 - 1,
-      -((tt.clientY / window.innerHeight) * 2 - 1),
-    );
-    raycaster.setFromCamera(dn, camera);
+    raycaster.setFromCamera(pointerNDC(tt.clientX, tt.clientY), camera);
     if (raycaster.intersectObject(diamondMesh, false).length) {
       diamondDrag = { lastX: tt.clientX };
       touchDragDiamond = true;
@@ -1914,7 +2074,8 @@ pinArt.add(plate);
 const pinGeom = new THREE.CylinderGeometry(PIN_RADIUS, PIN_RADIUS * 0.85, PIN_LENGTH, 12);
 pinGeom.rotateX(Math.PI / 2);
 const pinMat = new THREE.MeshStandardMaterial({
-  color: 0x4a4e54, roughness: 0.45, metalness: 0.85,
+  color: 0xc2c8d0, roughness: 0.35, metalness: 0.85,
+  emissive: 0x2a2e36, emissiveIntensity: 1.0,
   clippingPlanes: pinClipPlanes,
 });
 const pins = new THREE.InstancedMesh(pinGeom, pinMat, PIN_COLS * PIN_ROWS);
@@ -2057,6 +2218,8 @@ function updatePan() {
 function render(now) {
   if (now - lastFrame >= FRAME_MS) {
     lastFrame = now;
+    const lt = now * 0.0006;                  // sweep the lamp so highlights travel across the metallics
+    lamp.position.set(Math.cos(lt) * 9, 3 + Math.sin(lt * 0.7) * 4, 6 + Math.sin(lt) * 3);
     updatePan();
     updateTilt();
     updateSculpture();
@@ -2067,7 +2230,10 @@ function render(now) {
     updateDust();
     updateWaterfall();
     updatePinArt();
+    renderer.setRenderTarget(fisheyeRT);     // scene → off-screen target
     renderer.render(scene, camera);
+    renderer.setRenderTarget(null);          // → screen, warped through the fisheye quad
+    renderer.render(fisheyeScene, fisheyeCam);
   }
   requestAnimationFrame(render);
 }
