@@ -53,6 +53,19 @@ const lamp = new THREE.PointLight(0xffb060, 1.8, 22, 1.5);
 lamp.position.set(10, 2, 3);
 scene.add(lamp);
 
+// Enclosing room: floor / ceiling / side walls extend toward the camera so the
+// cubby case reads as the back wall of a room.
+const roomMat = new THREE.MeshStandardMaterial({ color: 0x6b5a45, roughness: 0.92, metalness: 0.0, side: THREE.DoubleSide });
+const RD = 16, RW = GRID_W * 1.9;          // RW: widened room so the side walls stay in frame when zoomed in
+const mkRoom = (w, h, rx, ry, px, py, pz) => {
+  const m = new THREE.Mesh(new THREE.PlaneGeometry(w, h), roomMat);
+  m.rotation.set(rx, ry, 0); m.position.set(px, py, pz); scene.add(m);
+};
+mkRoom(RW, RD, -Math.PI / 2, 0, 0, -GRID_H / 2, RD / 2);   // floor
+mkRoom(RW, RD,  Math.PI / 2, 0, 0,  GRID_H / 2, RD / 2);   // ceiling
+mkRoom(RD, GRID_H, 0,  Math.PI / 2, -RW / 2, 0, RD / 2);   // left wall
+mkRoom(RD, GRID_H, 0, -Math.PI / 2,  RW / 2, 0, RD / 2);   // right wall
+
 // === Fisheye post-processing. The scene renders into a target, then a
 // barrel/lens-distortion shader on a fullscreen quad warps it so the room
 // bulges. The target is tagged sRGB and the background is fed as raw display
@@ -117,6 +130,8 @@ const fisheyeMat = new THREE.ShaderMaterial({
       // natural daylight: brighter + warm from the upper-left "window", cooler low
       float key = 0.9 + 0.22 * clamp((1.0 - vUv.x) * 0.5 + vUv.y * 0.7, 0.0, 1.0);
       outc *= key * mix(vec3(0.95, 0.98, 1.05), vec3(1.06, 1.02, 0.9), vUv.y);
+      float vig = smoothstep(0.72, 0.26, length(vUv - 0.5));   // fade the room into the dark surround — no border
+      outc = mix(uBg, outc, vig);
       gl_FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
     }
   `,
@@ -624,7 +639,7 @@ const onResize = () => {
   const distH = (GRID_H / 2) / Math.tan(fovV / 2);
   const fovH = 2 * Math.atan(Math.tan(fovV / 2) * aspect);
   const distW = (fitW / 2) / Math.tan(fovH / 2);
-  camera.position.z = Math.max(distH, distW) * 1.02;
+  camera.position.z = Math.max(distH, distW) * 1.12;   // ~88% zoom
   panTargetX = paginated ? PAGE_CENTER_X[currentPage] : 0;
   camera.updateProjectionMatrix();
   const rw = Math.floor(w / PIXELATION), rh = Math.floor(h / PIXELATION);
