@@ -348,6 +348,7 @@ const paintingMeshes = [];
 }
 
 let updateSky = null;   // window cityscape ships/explosions; assigned in the window block
+const antennaMats = [];   // antenna materials → pulsed in the render loop (fog-light blink)
 // --- Left-wall WINDOW (where the left paintings were): a tall vertical opening
 // with a sky backdrop + `windowView`, an addressable Group in front of it that's
 // clipped to the opening. Put anything here — cityscape, flying objects, etc.:
@@ -415,15 +416,15 @@ const WIN_X = -7.6, WIN_W = 2.8, WIN_H = 7.0, WIN_CY = 1.0;   // centre y; stret
     return [side, side, top, side, front, front];   // box faces: +x -x +y -y +z -z
   };
   const towers = [   // [x, width, depth, topY, far(0 near…1 far), silver]
-    [-1.05, 0.70, 0.55, -0.2, 0.18, 0],
-    [-0.45, 0.50, 0.40,  0.7, 0.06, 1],
-    [ 0.15, 0.85, 0.65,  0.1, 0.00, 0],
-    [ 0.78, 0.58, 0.45,  1.0, 0.12, 1],
-    [ 1.22, 0.48, 0.38,  0.4, 0.28, 0],
+    [-1.10, 0.70, 0.55, -0.2, 0.45, 0],   // far back left
+    [-0.70, 0.50, 0.40,  0.7, 0.05, 1],   // near, overlaps #0
+    [-0.15, 0.85, 0.65,  0.1, 0.35, 0],   // mid-far centre
+    [ 0.45, 0.58, 0.45,  1.0, 0.00, 1],   // closest, overlaps #2
+    [ 1.05, 0.48, 0.38,  0.4, 0.55, 0],   // farthest right
   ];
   const tops = [];      // tower-top points for the antennas
   towers.forEach(([x, w, d, top, far, sv], i) => {
-    const z = d / 2 + i * 0.004, h = top - BLD_BOT;     // back near the wall, slight stagger
+    const z = d / 2 + (1 - far) * 0.45 + i * 0.002, h = top - BLD_BOT;     // depth driven by `far`: near towers sit forward, far ones back
     const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), faceMats(far, sv, w, h));
     body.position.set(x, (top + BLD_BOT) / 2, z);
     const crown = new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, 0.16, d * 0.55), faceMats(far, sv, w * 0.55, 0.16));
@@ -443,7 +444,9 @@ const WIN_X = -7.6, WIN_W = 2.8, WIN_H = 7.0, WIN_CY = 1.0;   // centre y; stret
     for (const [x, y, z, th] of tops) {
       const a = src.clone(true);
       a.scale.setScalar(s);
-      const r = th >= 0.65 ? deep : red;
+      const r = (th >= 0.65 ? deep : red).clone();   // per-antenna clone so each blinks on its own phase
+      r.userData = { baseHex: th >= 0.65 ? 0x9e1f2f : 0xbe2839, phase: Math.random() * 6.28, speed: 0.9 + Math.random() * 1.1 };
+      antennaMats.push(r);
       a.traverse((o) => { if (o.isMesh) o.material = /cylinder/i.test(o.name) ? silver : r; });
       a.position.set(x, y - b.min.y * s, z);
       windowView.add(a);
@@ -497,26 +500,73 @@ const WIN_X = -7.6, WIN_W = 2.8, WIN_H = 7.0, WIN_CY = 1.0;   // centre y; stret
     }
     windowView.add(s); ships.push(s);
   }
-  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff7a1e, transparent: true, clippingPlanes: clip }));
-  const ash  = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, clippingPlanes: clip }));
+  // Explosion: big orange puff + black smoke sphere (grow + fade) PLUS a particle
+  // burst — orange embers and black smoke bits drifting with light, airy gravity.
+  const oMat = new THREE.MeshBasicMaterial({ color: 0xa8d850, transparent: true, clippingPlanes: clip });   // less-blue sage neon green (saved: 0xff7a1e orange, 0x4dff4d laser)
+  const bMat = new THREE.MeshBasicMaterial({ color: 0x141414, transparent: true, clippingPlanes: clip });
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), oMat);
+  const ash  = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), bMat);
   puff.visible = ash.visible = false; windowView.add(puff, ash);
+  const oParts = [], bParts = [];
+  for (let k = 0; k < 9; k++) {
+    const o = new THREE.Mesh(new THREE.SphereGeometry(0.05 + Math.random() * 0.03, 6, 4), oMat);
+    o.visible = false; windowView.add(o); oParts.push({ m: o, vx: 0, vy: 0 });
+    const bk = new THREE.Mesh(new THREE.SphereGeometry(0.04 + Math.random() * 0.03, 6, 4), bMat);
+    bk.visible = false; windowView.add(bk); bParts.push({ m: bk, vx: 0, vy: 0 });
+  }
   const boom = { life: 0, timer: 5 };
+  // Pool of orange laser orbs shot downward from ships — rapid-fire/overlapping.
+  const lasers = [];
+  for (let k = 0; k < 10; k++) {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff7a1e, transparent: true, clippingPlanes: clip }));
+    m.visible = false; windowView.add(m);
+    lasers.push({ m, life: 0, timer: Math.random() * 1.5 });
+  }
   updateSky = () => {
     for (const s of ships) {
       s.position.x += s.userData.vx; s.position.y += s.userData.vy;
-      if (s.userData.vx > 0) { if (s.position.x > EDGE) s.position.x = -EDGE; }                       // horizontal wrap
-      else if (s.position.x < -EDGE || s.position.y < -WIN_H / 2 - 0.3) s.position.set(EDGE, 2.4 + Math.random() * 1.1, 0.7);   // diagonal → respawn top-right
+      if (s.userData.vx > 0) { if (s.position.x > EDGE) s.position.x = -EDGE; }
+      else if (s.position.x < -EDGE || s.position.y < -WIN_H / 2 - 0.3) s.position.set(EDGE, 2.4 + Math.random() * 1.1, 0.7);
     }
     if (boom.life > 0) {
-      boom.life -= 0.03; const k = 1 - boom.life;
-      puff.scale.setScalar(0.5 + k * 1.6); puff.material.opacity = 1 - k;
-      ash.scale.setScalar(0.5 + k * 2.2);  ash.material.opacity = (1 - k) * 0.8;
-      if (boom.life <= 0) puff.visible = ash.visible = false;
+      boom.life -= 0.015;
+      const k = 1 - boom.life, G = 0.0007;                       // airier gravity (lower → outward dominates)
+      puff.scale.setScalar(0.5 + k * 1.6); ash.scale.setScalar(0.5 + k * 2.2);
+      for (const p of oParts) { p.m.position.x += p.vx; p.m.position.y += p.vy; p.vy -= G * 0.5; p.vx *= 0.99; p.vy *= 0.995; }
+      for (const p of bParts) { p.m.position.x += p.vx; p.m.position.y += p.vy; p.vy -= G;       p.vx *= 0.995; p.vy *= 0.997; }
+      oMat.opacity = Math.max(0, boom.life);
+      bMat.opacity = Math.max(0, boom.life) * 0.85;
+      if (boom.life <= 0) { puff.visible = ash.visible = false; for (const p of oParts) p.m.visible = false; for (const p of bParts) p.m.visible = false; }
     } else if ((boom.timer -= 0.03) <= 0) {
       const s = ships[Math.floor(Math.random() * ships.length)];
       puff.position.copy(s.position); ash.position.copy(s.position);
-      puff.visible = ash.visible = true; boom.life = 1;
+      puff.visible = ash.visible = true;
+      for (const p of oParts) {
+        p.m.position.copy(s.position);
+        const a = Math.random() * Math.PI * 2, v = 0.010 + Math.random() * 0.018;
+        p.vx = Math.cos(a) * v * 1.35; p.vy = Math.sin(a) * v * 0.4 + 0.003;   // outward >> downward
+        p.m.visible = true;
+      }
+      for (const p of bParts) {
+        p.m.position.copy(s.position);
+        const a = Math.random() * Math.PI * 2, v = 0.005 + Math.random() * 0.013;
+        p.vx = Math.cos(a) * v * 1.35; p.vy = Math.sin(a) * v * 0.4 + 0.006;   // outward >> downward
+        p.m.visible = true;
+      }
+      boom.life = 1;
       s.position.x = -EDGE; boom.timer = 4 + Math.random() * 6;
+    }
+    // Laser beam (orange) fired downward from a random ship every few seconds.
+    for (const L of lasers) {
+      if (L.life > 0) {
+        L.life -= 0.035; L.m.position.y -= 0.05; L.m.material.opacity = Math.max(0, L.life);
+        if (L.life <= 0) L.m.visible = false;
+      } else if ((L.timer -= 0.03) <= 0) {
+        const s = ships[Math.floor(Math.random() * ships.length)];
+        L.m.position.set(s.position.x, s.position.y, s.position.z);
+        L.m.visible = true; L.m.material.opacity = 1; L.life = 1;
+        L.timer = 0.6 + Math.random() * 1.6;
+      }
     }
   };
 }
@@ -683,6 +733,7 @@ for (let row = 0; row < ROWS; row++) {
 const outsideScene = new THREE.Group();
 outsideScene.position.set(0, 0, -CUBBY_D - FRONT_INSET);
 cubbies.A5.add(outsideScene);
+let updateMists = null;     // ominous mist trails drifting near the horizon; assigned below
 
 // --- Sky backdrop: pale blue → hazy horizon gradient on a vertical plane
 // well behind the ground. Sized generously so the hallway's perspective
@@ -695,8 +746,9 @@ const skyTex = (() => {
   ctx.imageSmoothingEnabled = false;
   const grad = ctx.createLinearGradient(0, 0, 0, H);
   grad.addColorStop(0,    '#9bc4e2');
-  grad.addColorStop(0.65, '#c8dfee');
-  grad.addColorStop(1,    '#e3ebec');
+  grad.addColorStop(0.55, '#c8dfee');
+  grad.addColorStop(0.85, '#4a525e');   // dusk band, darker
+  grad.addColorStop(1,    '#0c1118');   // near-black at the horizon — glowing black
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, W, H);
   const tex = new THREE.CanvasTexture(cv);
@@ -759,11 +811,14 @@ for (let i = 0; i < groundPos.count; i++) {
   const dist = 0.5 - groundPos.getZ(i) / GROUND_D;
   const distMix = quant(Math.pow(Math.max(0, Math.min(1, dist)), 1.4), 5);
   const ny = Math.max(0, groundNorm.getY(i));
-  const lit = quant(0.60 + 0.40 * ny, 4);
+  const sh = quant((1 - ny) * 0.85, 4);   // shadow strength → blend toward near-black navy
   const tint = quant(1 - Math.min(0.55, smallContrib[i] * 3.0), 4);
-  groundColors[i*3]     = (BASE_R + (HAZE_R - BASE_R) * distMix) * lit * tint;
-  groundColors[i*3 + 1] = (BASE_G + (HAZE_G - BASE_G) * distMix) * lit * tint;
-  groundColors[i*3 + 2] = (BASE_B + (HAZE_B - BASE_B) * distMix) * lit * tint;
+  const r = (BASE_R + (HAZE_R - BASE_R) * distMix) * tint;
+  const g = (BASE_G + (HAZE_G - BASE_G) * distMix) * tint;
+  const b = (BASE_B + (HAZE_B - BASE_B) * distMix) * tint;
+  groundColors[i*3]     = r + (0.025 - r) * sh;
+  groundColors[i*3 + 1] = g + (0.030 - g) * sh;
+  groundColors[i*3 + 2] = b + (0.070 - b) * sh;
 }
 groundGeom.setAttribute('color', new THREE.BufferAttribute(groundColors, 3));
 
@@ -773,6 +828,27 @@ const ground = new THREE.Mesh(
 );
 ground.position.set(0, -MERGED_H / 2, -GROUND_D / 2);
 outsideScene.add(ground);
+
+// Ominous mist trails drifting across the far hills toward the horizon.
+{
+  const mc = document.createElement('canvas'); mc.width = 256; mc.height = 32;
+  const mctx = mc.getContext('2d');
+  const mg = mctx.createRadialGradient(128, 16, 4, 128, 16, 128);
+  mg.addColorStop(0, 'rgba(245,248,252,0.6)'); mg.addColorStop(0.5, 'rgba(245,248,252,0.25)'); mg.addColorStop(1, 'rgba(245,248,252,0)');
+  mctx.fillStyle = mg; mctx.fillRect(0, 0, 256, 32);
+  const mTex = new THREE.CanvasTexture(mc); mTex.colorSpace = THREE.SRGBColorSpace;
+  const mMat = new THREE.MeshBasicMaterial({ map: mTex, transparent: true, depthWrite: false });
+  const mists = [];
+  for (let k = 0; k < 6; k++) {
+    const m = new THREE.Mesh(new THREE.PlaneGeometry(14 + Math.random() * 10, 1.0 + Math.random() * 0.7), mMat);
+    m.position.set(-20 + Math.random() * 40, -0.2 + Math.random() * 1.4, -12 - Math.random() * 20);   // far, near horizon
+    m.userData.vx = 0.006 + Math.random() * 0.010;
+    outsideScene.add(m); mists.push(m);
+  }
+  updateMists = () => {
+    for (const m of mists) { m.position.x += m.userData.vx; if (m.position.x > 22) m.position.x = -22; }
+  };
+}
 
 // --- Mobile pagination. On touch devices held in portrait the full 6-column
 // grid renders too small, so the view splits into two 3-column halves the
@@ -2796,6 +2872,8 @@ function render(now) {
     updatePinArt();
     for (const g of drawerGroups) g.position.z += ((g.userData.open ? g.userData.baseZ + 0.42 : g.userData.baseZ) - g.position.z) * 0.2;   // ease drawers open/closed
     if (updateSky) updateSky();
+    if (updateMists) updateMists();
+    { const tn = performance.now() / 1000; for (const m of antennaMats) m.color.setHex(m.userData.baseHex).multiplyScalar(0.55 + 0.45 * Math.max(0, Math.sin(tn * m.userData.speed + m.userData.phase))); }   // per-antenna fog-light blink on its own interval
     renderer.setRenderTarget(fisheyeRT);     // scene → off-screen target
     renderer.render(scene, camera);
     renderer.setRenderTarget(null);          // → screen, warped through the fisheye quad
