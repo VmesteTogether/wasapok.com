@@ -347,6 +347,7 @@ const paintingMeshes = [];
   hang('paintings/photo2.png', 7.6, -1.4, 2.4);
 }
 
+let updateSky = null;   // window cityscape ships/explosions; assigned in the window block
 // --- Left-wall WINDOW (where the left paintings were): a tall vertical opening
 // with a sky backdrop + `windowView`, an addressable Group in front of it that's
 // clipped to the opening. Put anything here — cityscape, flying objects, etc.:
@@ -478,6 +479,44 @@ const WIN_X = -7.6, WIN_W = 2.8, WIN_H = 7.0, WIN_CY = 1.0;   // centre y; stret
     new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hzc), transparent: true, depthWrite: false, clippingPlanes: clip }));
   haze.position.set(WIN_X, WIN_CY, 0.78);
   scene.add(reveal, haze, sheen, sill);
+
+  // Little ships fly across; one occasionally bursts into an orange cloud + black
+  // ash. Very simple first pass — windowView-local, clipped to the opening.
+  const ships = [], EDGE = WIN_W / 2 + 0.6;
+  for (let k = 0; k < 7; k++) {
+    const s = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0xeef2f6, clippingPlanes: clip }));
+    if (k >= 5) {   // faster diagonals: top-right → bottom-left
+      s.position.set(EDGE, 2.4 + Math.random() * 1.1, 0.7);
+      s.userData.vx = -(0.020 + Math.random() * 0.012); s.userData.vy = -(0.006 + Math.random() * 0.004);
+      s.rotation.z = Math.atan2(s.userData.vy, s.userData.vx);
+    } else {        // horizontal: left → right
+      s.position.set(-EDGE, 0.6 + Math.random() * 2.4, 0.7);
+      s.userData.vx = 0.008 + Math.random() * 0.006; s.userData.vy = 0;
+    }
+    windowView.add(s); ships.push(s);
+  }
+  const puff = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff7a1e, transparent: true, clippingPlanes: clip }));
+  const ash  = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 4), new THREE.MeshBasicMaterial({ color: 0x111111, transparent: true, clippingPlanes: clip }));
+  puff.visible = ash.visible = false; windowView.add(puff, ash);
+  const boom = { life: 0, timer: 5 };
+  updateSky = () => {
+    for (const s of ships) {
+      s.position.x += s.userData.vx; s.position.y += s.userData.vy;
+      if (s.userData.vx > 0) { if (s.position.x > EDGE) s.position.x = -EDGE; }                       // horizontal wrap
+      else if (s.position.x < -EDGE || s.position.y < -WIN_H / 2 - 0.3) s.position.set(EDGE, 2.4 + Math.random() * 1.1, 0.7);   // diagonal → respawn top-right
+    }
+    if (boom.life > 0) {
+      boom.life -= 0.03; const k = 1 - boom.life;
+      puff.scale.setScalar(0.5 + k * 1.6); puff.material.opacity = 1 - k;
+      ash.scale.setScalar(0.5 + k * 2.2);  ash.material.opacity = (1 - k) * 0.8;
+      if (boom.life <= 0) puff.visible = ash.visible = false;
+    } else if ((boom.timer -= 0.03) <= 0) {
+      const s = ships[Math.floor(Math.random() * ships.length)];
+      puff.position.copy(s.position); ash.position.copy(s.position);
+      puff.visible = ash.visible = true; boom.life = 1;
+      s.position.x = -EDGE; boom.timer = 4 + Math.random() * 6;
+    }
+  };
 }
 
 // --- Recessed cubby box: 5 inward-facing panels (back + top + bottom + 2
@@ -711,7 +750,7 @@ groundGeom.computeVertexNormals();
 
 const groundNorm = groundGeom.attributes.normal;
 const groundColors = new Float32Array(groundPos.count * 3);
-const BASE_R = 0.34, BASE_G = 0.54, BASE_B = 0.32;     // muted lichen/forest green
+const BASE_R = 0.26, BASE_G = 0.45, BASE_B = 0.26;     // foresty, slightly lichen
 const HAZE_R = 0.78, HAZE_G = 0.87, HAZE_B = 0.92;     // approach sky color
 const quant = (v, steps) => Math.round(v * steps) / steps;
 for (let i = 0; i < groundPos.count; i++) {
@@ -2686,6 +2725,7 @@ function render(now) {
     updateWaterfall();
     updatePinArt();
     for (const g of drawerGroups) g.position.z += ((g.userData.open ? g.userData.baseZ + 0.42 : g.userData.baseZ) - g.position.z) * 0.2;   // ease drawers open/closed
+    if (updateSky) updateSky();
     renderer.setRenderTarget(fisheyeRT);     // scene → off-screen target
     renderer.render(scene, camera);
     renderer.setRenderTarget(null);          // → screen, warped through the fisheye quad
