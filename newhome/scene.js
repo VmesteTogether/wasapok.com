@@ -1005,6 +1005,13 @@ function layoutAndDraw() {
   ovlCtx.globalAlpha = (menuOpen || hoverKey === 'icon') ? 1 : 0.7;
   ovlCtx.fillText('☰', iconX, iconY);
   ovlElements.push({ key: 'icon', x: iconX, y: top, w: iconW, h: 24, action: toggleMenu });
+  if (menuOpen) {
+    ovlCtx.font = `700 ${FS}px ${FONT}`;
+    const aboutX = iconX + iconW + 16;
+    ovlCtx.globalAlpha = (hoverKey === 'about') ? 1 : 0.7;
+    const aboutW = drawSpaced('about', aboutX, top, FS);
+    ovlElements.push({ key: 'about', x: aboutX, y: top, w: aboutW, h: FS, action: openAbout });
+  }
   // Dropdown — one identical "wasapok angleur" link per interactive element.
   if (menuOpen) {
     ovlCtx.font = `700 ${FS}px ${FONT}`;
@@ -1025,6 +1032,7 @@ function layoutAndDraw() {
 }
 const toggleMenu = () => { menuOpen = !menuOpen; layoutAndDraw(); };
 const openCredit = () => window.open('https://vmestetogether.com', '_blank', 'noopener');
+const openAbout = () => { window.location.href = '/about'; };
 
 // Forward-warp a screen point into the overlay canvas and return the hit element
 // (clickable rects only), so clicks land on the warped glyphs, not flat boxes.
@@ -1623,9 +1631,9 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   // Crappy streaming-service logos printed on the INSIDE of the sleeve, visible
   // once the vinyl has been slid out (toggled by updateAlbumState).
   const apple = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), new THREE.MeshBasicMaterial({ map: appleLogoTex, transparent: true, ...matOpts }));
-  apple.position.set(-0.28, 0.18, -0.013); apple.renderOrder = 9; apple.visible = false; albumRoot.add(apple);
+  apple.position.set(-0.38, 0, -0.013); apple.renderOrder = 9; apple.visible = false; albumRoot.add(apple);
   const spotify = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), new THREE.MeshBasicMaterial({ map: spotifyLogoTex, transparent: true, ...matOpts }));
-  spotify.position.set(-0.28, -0.18, -0.013); spotify.renderOrder = 9; spotify.visible = false; albumRoot.add(spotify);
+  spotify.position.set(-0.18, 0, -0.013); spotify.renderOrder = 9; spotify.visible = false; albumRoot.add(spotify);
 
   // Inside panel — paperboard interior of the sleeve. renderOrder=7 so it
   // sits ON TOP of the vinyl/label, hiding whatever portion of the vinyl is
@@ -1984,27 +1992,49 @@ function loadRecord(state) {
   });
 }
 
+let stoppingRecord = false;
+let turntableSpinVel = 0;
+const TURNTABLE_PLAY_VEL = -0.06;
+
 function unloadRecord() {
-  if (flightAnim || !currentRecord) return;
+  if (flightAnim || !currentRecord || stoppingRecord) return;
   const { state } = currentRecord;
-  state.isOpen = true; state.vinylOut = true;   // re-open the sleeve so a closed cover pops open to receive the record
-  if (state.audio) { state.audio.pause(); state.audio.currentTime = 0; }
-  musicActive = false;   // pins fall back to idle ripple + hover
-  const fromVec = recordPlayer.userData.spinGroup.getWorldPosition(new THREE.Vector3());
-  const toVec   = state.vinyl.getWorldPosition(new THREE.Vector3());
-  const toScl   = state.vinyl.getWorldScale(new THREE.Vector3()).x;
-  recordPlayer.userData.spinGroup.visible = false;
-  currentRecord = null;
-  startFlight(fromVec, toVec, -Math.PI / 2, 0, TURNTABLE_VINYL_SCALE, toScl, state.labelColor, () => {
-    state.vinylGroup.visible = true;
-    recordPlayer.userData.recordLabel.material.color.set(recordPlayer.userData.defaultLabelColor);
-    state.vinylOut = false;                            // retract vinyl back into the sleeve
-    setTimeout(() => { state.isOpen = false; }, 250);  // then close the cover and re-shelf (snappier)
-  });
+  stoppingRecord = true;
+  // Audio fade-out so playback doesn't cut mid-note while the platter winds down.
+  if (state.audio) {
+    const v0 = state.audio.volume, t0 = performance.now(), dur = 700;
+    const fade = () => {
+      const t = Math.min(1, (performance.now() - t0) / dur);
+      state.audio.volume = v0 * (1 - t);
+      if (t < 1 && stoppingRecord) requestAnimationFrame(fade);
+    };
+    fade();
+  }
+  setTimeout(() => {
+    stoppingRecord = false;
+    turntableSpinVel = 0;
+    if (state.audio) { state.audio.pause(); state.audio.currentTime = 0; state.audio.volume = 1; }
+    musicActive = false;   // pins fall back to idle ripple + hover
+    state.isOpen = true; state.vinylOut = true;   // re-open the sleeve to receive the returning record
+    const fromVec = recordPlayer.userData.spinGroup.getWorldPosition(new THREE.Vector3());
+    const toVec   = state.vinyl.getWorldPosition(new THREE.Vector3());
+    const toScl   = state.vinyl.getWorldScale(new THREE.Vector3()).x;
+    recordPlayer.userData.spinGroup.visible = false;
+    currentRecord = null;
+    startFlight(fromVec, toVec, -Math.PI / 2, 0, TURNTABLE_VINYL_SCALE, toScl, state.labelColor, () => {
+      state.vinylGroup.visible = true;
+      recordPlayer.userData.recordLabel.material.color.set(recordPlayer.userData.defaultLabelColor);
+      state.vinylOut = false;                            // retract vinyl back into the sleeve
+      setTimeout(() => { state.isOpen = false; }, 250);  // then close the cover and re-shelf (snappier)
+    });
+  }, 700);
 }
 
 function updateTurntable() {
-  if (currentRecord && !flightAnim) recordPlayer.userData.spinGroup.rotation.y -= 0.06;
+  if (!currentRecord || flightAnim) return;
+  if (stoppingRecord) turntableSpinVel *= 0.965;        // ease-out wind-down (~0.7s glide)
+  else turntableSpinVel = TURNTABLE_PLAY_VEL;
+  recordPlayer.userData.spinGroup.rotation.y += turntableSpinVel;
 }
 
 // === Top-right cubby D6: shrunk Temmys-Castle3 icon GLB, sitting on the
