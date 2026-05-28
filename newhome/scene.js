@@ -375,7 +375,9 @@ const WIN_X = -7.6, WIN_W = 2.8, WIN_H = 7.0, WIN_CY = 1.0;   // centre y; stret
   frame.position.set(WIN_X, WIN_CY, 0.015);
   const back = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W, WIN_H), new THREE.MeshBasicMaterial({ map: skyT }));
   back.position.set(WIN_X, WIN_CY, 0.020);
-  scene.add(frame, back);
+  const skyEdge = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W + 0.06, WIN_H + 0.06), new THREE.MeshBasicMaterial({ color: 0xb0b4ba }));   // thin grey border (ledge colour) around the sky
+  skyEdge.position.set(WIN_X, WIN_CY, 0.019);
+  scene.add(frame, skyEdge, back);
 
   const windowView = new THREE.Group();
   windowView.position.set(WIN_X, WIN_CY, 0.05);   // children are placed relative to the window centre
@@ -2508,7 +2510,7 @@ pinArt.add(pins);
 // Bright icy-blue dot riding each pin's tip — a single-pixel highlight for pop.
 const pinDots = new THREE.InstancedMesh(
   new THREE.SphereGeometry(PIN_RADIUS * 0.7, 6, 4),
-  new THREE.MeshBasicMaterial({ color: 0x8fb0c8, clippingPlanes: pinClipPlanes }),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, clippingPlanes: pinClipPlanes }),   // hue set per-dot via instanceColor
   PIN_COLS * PIN_ROWS,
 );
 pinArt.add(pinDots);
@@ -2620,8 +2622,8 @@ function updatePinArt() {
     const CELL = 0.50, cx = Math.round(p.x / CELL) * CELL, cy = Math.round(p.y / CELL) * CELL;   // ~20% more stars
     const petalR = CELL * 0.6 * (0.4 + 0.6 * Math.max(0, Math.cos(8 * Math.atan2(p.y - cy, p.x - cx))));   // 120% star density
     const blobOn = stable > 0.55 ? (Math.hypot(p.x - cx, p.y - cy) < petalR) : (amorph > 1.15);
-    let dShow = 0, dC = 0, dx = 0, dy = 0;
-    if (pinDepth[i] > 0.45) { dShow = 1; dC = 1; }
+    let dShow = 0, dC = 0, dx = 0, dy = 0, glow = false;
+    if (pinDepth[i] > 0.45) { dShow = 1; dC = 1; glow = true; }   // music/active level dots → original blue 0x8fb0c8
     else {
       let bShow = 0, bC = 0;
       if (blobOn) { const f = Math.max(0, 1 - prox * 1.5); bShow = 0.8 * f; bC = 0.22 * f; }
@@ -2630,14 +2632,14 @@ function updatePinArt() {
       const ph = fr(performance.now() / 1000 * 0.006048 + fr(Math.sin(i * 127.1) * 43758.5));   // 2x faster fade
       let gShow = 0, gC = 0;
       if (ph < 0.0174) { const g = Math.sin(ph / 0.0174 * Math.PI); gShow = g; gC = 0.55 * g; }   // 40% fewer
-      if (gC >= bC) { dShow = gShow; dC = gC; }
+      if (gC >= bC) { dShow = gShow; dC = gC; glow = true; }
       else { dShow = bShow; dC = bC; dx = (hoverX - p.x) * prox * 0.6; dy = (hoverY - p.y) * prox * 0.6; }
     }
     _pinDummy.position.set(p.x + dx, p.y + dy, baseZ + pinDepth[i] * PIN_MAX_PROTRUSION + PIN_LENGTH / 2);
     _pinDummy.scale.setScalar(dShow);
     _pinDummy.updateMatrix();
     pinDots.setMatrixAt(i, _pinDummy.matrix);
-    pinDots.setColorAt(i, _dotCol.setScalar(dC));
+    pinDots.setColorAt(i, _dotCol.set(glow ? 0x8fb0c8 : 0x8fc8b6).multiplyScalar(dC));
     _pinDummy.scale.setScalar(1);
   }
   pins.instanceMatrix.needsUpdate = true;
