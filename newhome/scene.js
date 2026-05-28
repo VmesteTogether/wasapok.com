@@ -79,7 +79,7 @@ mkRoom(RD, GRID_H, 0, -Math.PI / 2,  RW / 2, 0, RD / 2);   // right wall
 // values, so the warp is a pure passthrough — colors/lighting are unchanged,
 // only the geometry bulges. Revert: set FISHEYE_STRENGTH = 0, or delete this
 // block + the two-pass render and restore a plain pointerNDC + render.
-const FISHEYE_STRENGTH = 0.26;             // 0 = off; higher = more bulge (lowered so the warp's background frame is thin and the room reaches the screen edges)
+const FISHEYE_STRENGTH = 0.78;             // 0 = off; higher = more bulge (lowered so the warp's background frame is thin and the room reaches the screen edges)
 const COLOR_SAT = .92;                     // global saturation multiplier (1 = unchanged)
 const COLOR_VAL = 1.00;                     // global value/brightness multiplier (1 = unchanged)
 const COVER_SAT = 0.65;                     // album-cover ART ONLY: extra saturation multiplier baked into the cover material (1 = unchanged, 0 = greyscale); applied before the global grade
@@ -1972,7 +1972,9 @@ const wfCtx = wfCv.getContext('2d');
 wfCtx.fillStyle = 'rgba(150, 200, 235, 0.45)';
 wfCtx.fillRect(0, 0, 16, 128);
 wfCtx.fillStyle = 'rgba(225, 240, 255, 0.92)';
-for (const [x, w] of [[2, 1], [5, 2], [9, 1], [12, 2]]) wfCtx.fillRect(x, 0, w, 128);
+for (const [x, w] of [[2, 1], [5, 2], [9, 1], [12, 2]]) {
+  for (let y = 0; y < 128; y += 13) wfCtx.fillRect(x, y + Math.floor(Math.random() * 4), w, 5 + Math.floor(Math.random() * 5));   // chunked streak segments → discrete falling reads
+}
 wfCtx.fillStyle = 'rgba(80, 130, 180, 0.55)';
 for (let i = 0; i < 36; i++) wfCtx.fillRect(Math.floor(Math.random() * 16), Math.floor(Math.random() * 128), 1, 2);
 const wfTex = new THREE.CanvasTexture(wfCv);
@@ -1989,7 +1991,7 @@ waterfall.position.set(WF_X, (WF_TOP_Y + WF_BOT_Y) / 2, WF_Z);
 scene.add(waterfall);
 
 function updateWaterfall() {
-  wfTex.offset.y -= 0.0015;   // scroll DOWN → streaks read as falling (meditative pace)
+  wfTex.offset.y -= 0.003;    // scroll DOWN → streaks read as falling (2x speed for more dynamic flow)
   puddleTex.offset.x += 0.0008;  // gentle horizontal ripple drift
   sprayTex.offset.y  -= 0.004;   // sparse droplets reading as rising spray
 }
