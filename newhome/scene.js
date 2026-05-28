@@ -1059,6 +1059,19 @@ const drawerMeshes = [], drawerGroups = [];   // filing-cabinet drawers — clic
   }
   cabinet.userData.drawers = drawers;   // [top, bottom] — slide +z to open (later)
   window.fileCabinet = cabinet;
+
+  // Single pink potted orchid sitting on top of the cabinet (rides the tilt).
+  const orchid = new THREE.Group();
+  const pot   = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.15, 0.24, 16), new THREE.MeshStandardMaterial({ color: 0x8a4a32, roughness: 0.85 }));
+  const stem  = new THREE.Mesh(new THREE.CylinderGeometry(0.018, 0.018, 0.85, 8), new THREE.MeshStandardMaterial({ color: 0x4a6a3c, roughness: 0.7 }));
+  const petal = new THREE.MeshStandardMaterial({ color: 0xea8bc4, roughness: 0.55 });
+  const f1 = new THREE.Mesh(new THREE.SphereGeometry(0.11, 12, 10), petal);
+  const f2 = new THREE.Mesh(new THREE.SphereGeometry(0.09, 12, 10), petal);
+  pot.position.set(0, 0.12, 0); stem.position.set(0, 0.62, 0);
+  f1.position.set(-0.08, 1.08, 0); f2.position.set(0.10, 1.12, 0.03);
+  orchid.add(pot, stem, f1, f2);
+  orchid.position.set(0, baseY + H, frontZ - D / 2);   // top-centre of the cabinet body
+  cabinet.add(orchid);
 }
 
 const topLeftCubby = cubbies.D1;     // top row (D), leftmost column (1)
