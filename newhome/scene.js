@@ -2448,13 +2448,32 @@ pinArt.add(plate);
 // camera). The pin's local Z is the only thing the animation moves.
 const pinGeom = new THREE.CylinderGeometry(PIN_RADIUS, PIN_RADIUS * 0.85, PIN_LENGTH, 12);
 pinGeom.rotateX(Math.PI / 2);
+// Tint each pin along its length: gunmetal base → cool "space grey" tip so the
+// protruding tips pop. Base unchanged. Tune the two colors below.
+{
+  const p = pinGeom.attributes.position, c = new Float32Array(p.count * 3);
+  const base = new THREE.Color(0xc2c8d0), tip = new THREE.Color(0x6a6f76), t = new THREE.Color();
+  for (let i = 0; i < p.count; i++) {
+    t.copy(base).lerp(tip, Math.min(1, Math.max(0, (p.getZ(i) + PIN_LENGTH / 2) / PIN_LENGTH)));
+    c[i * 3] = t.r; c[i * 3 + 1] = t.g; c[i * 3 + 2] = t.b;
+  }
+  pinGeom.setAttribute('color', new THREE.BufferAttribute(c, 3));
+}
 const pinMat = new THREE.MeshStandardMaterial({
-  color: 0xc2c8d0, roughness: 0.35, metalness: 0.85,
+  vertexColors: true, roughness: 0.35, metalness: 0.85,
   emissive: 0x2a2e36, emissiveIntensity: 1.0,
   clippingPlanes: pinClipPlanes,
 });
 const pins = new THREE.InstancedMesh(pinGeom, pinMat, PIN_COLS * PIN_ROWS);
 pinArt.add(pins);
+// Bright icy-blue dot riding each pin's tip — a single-pixel highlight for pop.
+const pinDots = new THREE.InstancedMesh(
+  new THREE.SphereGeometry(PIN_RADIUS * 0.7, 6, 4),
+  new THREE.MeshBasicMaterial({ color: 0x8fb0c8, clippingPlanes: pinClipPlanes }),
+  PIN_COLS * PIN_ROWS,
+);
+pinArt.add(pinDots);
+const _dotCol = new THREE.Color();
 
 // Precompute each pin's base XY; only Z changes per frame.
 const pinXY = [];
@@ -2550,8 +2569,41 @@ function updatePinArt() {
     _pinDummy.position.set(p.x, p.y, baseZ + pinDepth[i] * PIN_MAX_PROTRUSION);
     _pinDummy.updateMatrix();
     pins.setMatrixAt(i, _pinDummy.matrix);
+    // Tip dot: bright on raised (cursor/music) pins; otherwise a faint sparkle
+    // riding the SAME radial idle ripple as the pins, fading + converging toward
+    // the cursor as it passes over.
+    const prox = hoverAmp * Math.exp(-(hx * hx + hy * hy) / r2);   // cursor influence here
+    // Idle drift field + shift-speed → blobs settle onto scattered star-anise
+    // stencils where slow, amorphous where shifting fast (the faint base layer).
+    const a1 = p.x * 3.8 + t * 1.3, a2 = p.y * 4.6 - t * 1.1, a3 = (p.x - p.y) * 3.1 + t * 0.6, a4 = (p.x + p.y) * 4.1 - t * 0.9;
+    const amorph = Math.sin(a1) + Math.sin(a2) + Math.sin(a3) + Math.sin(a4);
+    const stable = Math.max(0, 1 - Math.abs(1.3 * Math.cos(a1) - 1.1 * Math.cos(a2) + 0.6 * Math.cos(a3) - 0.9 * Math.cos(a4)) / 1.4);
+    const CELL = 0.50, cx = Math.round(p.x / CELL) * CELL, cy = Math.round(p.y / CELL) * CELL;   // ~20% more stars
+    const petalR = CELL * 0.6 * (0.4 + 0.6 * Math.max(0, Math.cos(8 * Math.atan2(p.y - cy, p.x - cx))));   // 120% star density
+    const blobOn = stable > 0.55 ? (Math.hypot(p.x - cx, p.y - cy) < petalR) : (amorph > 1.15);
+    let dShow = 0, dC = 0, dx = 0, dy = 0;
+    if (pinDepth[i] > 0.45) { dShow = 1; dC = 1; }
+    else {
+      let bShow = 0, bC = 0;
+      if (blobOn) { const f = Math.max(0, 1 - prox * 1.5); bShow = 0.8 * f; bC = 0.22 * f; }
+      // sparse, periodic fog-light glows on top — slightly brighter than the blobs
+      const fr = (x) => x - Math.floor(x);
+      const ph = fr(performance.now() / 1000 * 0.006048 + fr(Math.sin(i * 127.1) * 43758.5));   // 2x faster fade
+      let gShow = 0, gC = 0;
+      if (ph < 0.0174) { const g = Math.sin(ph / 0.0174 * Math.PI); gShow = g; gC = 0.55 * g; }   // 40% fewer
+      if (gC >= bC) { dShow = gShow; dC = gC; }
+      else { dShow = bShow; dC = bC; dx = (hoverX - p.x) * prox * 0.6; dy = (hoverY - p.y) * prox * 0.6; }
+    }
+    _pinDummy.position.set(p.x + dx, p.y + dy, baseZ + pinDepth[i] * PIN_MAX_PROTRUSION + PIN_LENGTH / 2);
+    _pinDummy.scale.setScalar(dShow);
+    _pinDummy.updateMatrix();
+    pinDots.setMatrixAt(i, _pinDummy.matrix);
+    pinDots.setColorAt(i, _dotCol.setScalar(dC));
+    _pinDummy.scale.setScalar(1);
   }
   pins.instanceMatrix.needsUpdate = true;
+  pinDots.instanceMatrix.needsUpdate = true;
+  if (pinDots.instanceColor) pinDots.instanceColor.needsUpdate = true;
 }
 updatePinArt();   // initial pose so it's not all stuck at z=0 before first tick
 
