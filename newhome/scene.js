@@ -342,10 +342,141 @@ const paintingMeshes = [];
     paintingMeshes.push(pic);
     scene.add(frame, mat, pic);
   };
-  hang('paintings/photo1.png', -7.6,  1.4, 2.4);   // LEFT column: photo1 above photo2
-  hang('paintings/photo2.png', -7.6, -1.4, 2.4);
-  hang('paintings/photo3.png',  7.6,  1.4, 2.4);   // RIGHT column: photo3 above photo4
-  hang('paintings/photo4.png',  7.6, -1.4, 2.4);
+  hang('paintings/photo1.png', 7.6,  1.4, 2.4);    // RIGHT column: photo1 above photo2
+  hang('paintings/photo2.png', 7.6, -1.4, 2.4);
+}
+
+// --- Left-wall WINDOW (where the left paintings were): a tall vertical opening
+// with a sky backdrop + `windowView`, an addressable Group in front of it that's
+// clipped to the opening. Put anything here — cityscape, flying objects, etc.:
+//   windowView.add(myMesh);            // mesh material: set clippingPlanes: windowView.userData.clip
+// Also exposed as window.windowView for live console tinkering.
+const WIN_X = -7.6, WIN_W = 2.8, WIN_H = 7.0, WIN_CY = 1.0;   // centre y; stretches upward
+{
+  // Daytime Mute City backdrop (vivid blue zenith → sky blue → pale horizon).
+  const sc = document.createElement('canvas'); sc.width = 4; sc.height = 256;
+  const x2 = sc.getContext('2d');
+  const sg = x2.createLinearGradient(0, 0, 0, 256);
+  sg.addColorStop(0, '#c7dfef'); sg.addColorStop(0.12, '#c7dfef'); sg.addColorStop(0.16, '#aecadf'); sg.addColorStop(0.58, '#aecadf'); sg.addColorStop(0.62, '#cfe6f4'); sg.addColorStop(1, '#cfe6f4');
+  x2.fillStyle = sg; x2.fillRect(0, 0, 4, 256);
+  const skyT = new THREE.CanvasTexture(sc); skyT.colorSpace = THREE.SRGBColorSpace;
+
+  // World-space clip planes bounding the opening, so windowView content stays inside.
+  const clip = [
+    new THREE.Plane(new THREE.Vector3( 1, 0, 0), -(WIN_X - WIN_W / 2)),
+    new THREE.Plane(new THREE.Vector3(-1, 0, 0),  (WIN_X + WIN_W / 2)),
+    new THREE.Plane(new THREE.Vector3( 0, 1, 0), -(WIN_CY - WIN_H / 2)),
+    new THREE.Plane(new THREE.Vector3( 0,-1, 0),  (WIN_CY + WIN_H / 2)),
+  ];
+
+  const frame = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W + 0.3, WIN_H + 0.3), new THREE.MeshBasicMaterial({ color: 0x171310 }));
+  frame.position.set(WIN_X, WIN_CY, 0.015);
+  const back = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W, WIN_H), new THREE.MeshBasicMaterial({ map: skyT }));
+  back.position.set(WIN_X, WIN_CY, 0.020);
+  scene.add(frame, back);
+
+  const windowView = new THREE.Group();
+  windowView.position.set(WIN_X, WIN_CY, 0.05);   // children are placed relative to the window centre
+  windowView.userData.clip = clip;
+  scene.add(windowView);
+  window.windowView = windowView;
+
+  // Brushed-steel skyscrapers (eskleo-city aesthetic): 3D boxes with faked
+  // daylight face-shading (sky-lit top, mid front, shadowed sides) so they read
+  // with real perspective off-axis, each capped by a narrower setback "crown"
+  // for the tip-top motif. Clipped to the opening; farther towers fade to sky.
+  const BLD_BOT = -4;                  // base sits below the window → clipped off (no ground)
+  const SKY = [0.62, 0.84, 0.93];      // haze tint pulled toward with distance
+  // Per-building window grid: panes with random brightness (lit/unlit hint) over
+  // a dark mullion base. cols/rows derive from each tower's size, so layouts differ.
+  const winTex = (cols, rows) => {
+    const c = document.createElement('canvas'); c.width = cols * 8; c.height = rows * 8;
+    const g = c.getContext('2d');
+    g.fillStyle = '#70747a'; g.fillRect(0, 0, c.width, c.height);     // mullion grid
+    for (let i = 0; i < cols; i++) for (let j = 0; j < rows; j++) {
+      const v = Math.round((0.6 + Math.random() * 0.4) * 255);
+      g.fillStyle = `rgb(${v},${v},${v})`; g.fillRect(i * 8 + 1, j * 8 + 1, 6, 6);
+    }
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+    t.magFilter = THREE.NearestFilter; t.minFilter = THREE.NearestFilter;
+    return t;
+  };
+  const faceMats = (far, sv, w, h) => {
+    const col = (rgb) => new THREE.Color(...rgb.map((v, i) => v + (SKY[i] - v) * far * 0.7));
+    const map = winTex(Math.max(3, Math.round(w * 8)), Math.max(7, Math.round(h * 4)));   // sv = silver base vs sky-tinted chrome
+    const top  = new THREE.MeshBasicMaterial({ color: col(sv ? [0.86, 0.87, 0.89] : [0.82, 0.91, 0.97]), clippingPlanes: clip });
+    const win  = (rgb) => new THREE.MeshBasicMaterial({ color: col(rgb), map, clippingPlanes: clip });
+    const front = win(sv ? [0.70, 0.71, 0.74] : [0.72, 0.83, 0.91]);
+    const side  = win(sv ? [0.55, 0.56, 0.60] : [0.62, 0.75, 0.85]);
+    return [side, side, top, side, front, front];   // box faces: +x -x +y -y +z -z
+  };
+  const towers = [   // [x, width, depth, topY, far(0 near…1 far), silver]
+    [-1.05, 0.70, 0.55, -0.2, 0.18, 0],
+    [-0.45, 0.50, 0.40,  0.7, 0.06, 1],
+    [ 0.15, 0.85, 0.65,  0.1, 0.00, 0],
+    [ 0.78, 0.58, 0.45,  1.0, 0.12, 1],
+    [ 1.22, 0.48, 0.38,  0.4, 0.28, 0],
+  ];
+  const tops = [];      // tower-top points for the antennas
+  towers.forEach(([x, w, d, top, far, sv], i) => {
+    const z = d / 2 + i * 0.004, h = top - BLD_BOT;     // back near the wall, slight stagger
+    const body = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), faceMats(far, sv, w, h));
+    body.position.set(x, (top + BLD_BOT) / 2, z);
+    const crown = new THREE.Mesh(new THREE.BoxGeometry(w * 0.55, 0.16, d * 0.55), faceMats(far, sv, w * 0.55, 0.16));
+    crown.position.set(x, top + 0.08, z);
+    windowView.add(body, crown);
+    tops.push([x, top + 0.16, z, top]);            // sit the antenna on the crown (+ tower height)
+  });
+
+  // Red antennas on each tower top (wasantenna-01.glb): scaled to a short mast,
+  // recoloured red, base seated on the crown, clipped to the window opening.
+  new GLTFLoader().load('wasantenna-01.glb', (gltf) => {
+    const src = gltf.scene, b = new THREE.Box3().setFromObject(src);
+    const s = 0.6 / Math.max(0.001, b.max.y - b.min.y);
+    const red = new THREE.MeshBasicMaterial({ color: 0xbe2839, clippingPlanes: clip });   // cherry red
+    const deep = new THREE.MeshBasicMaterial({ color: 0x9e1f2f, clippingPlanes: clip });     // deeper cherry (tallest two)
+    const silver = new THREE.MeshBasicMaterial({ color: 0xd6dade, clippingPlanes: clip });   // brightish silver shaft
+    for (const [x, y, z, th] of tops) {
+      const a = src.clone(true);
+      a.scale.setScalar(s);
+      const r = th >= 0.65 ? deep : red;
+      a.traverse((o) => { if (o.isMesh) o.material = /cylinder/i.test(o.name) ? silver : r; });
+      a.position.set(x, y - b.min.y * s, z);
+      windowView.add(a);
+    }
+  });
+
+  // #2 Glass sheen — a faint diagonal streak over the opening, in front of the
+  // city, so it reads as reflective glass rather than an open hole.
+  const shc = document.createElement('canvas'); shc.width = 64; shc.height = 128;
+  const sx = shc.getContext('2d');
+  const sgr = sx.createLinearGradient(0, 128, 64, 0);
+  const O = 'rgba(255,255,255,0)';
+  sgr.addColorStop(0.30, O); sgr.addColorStop(0.33, 'rgba(255,255,255,0.30)'); sgr.addColorStop(0.36, O);   // thin streak
+  sgr.addColorStop(0.46, O); sgr.addColorStop(0.51, 'rgba(255,255,255,0.34)'); sgr.addColorStop(0.57, O);   // thick streak
+  sgr.addColorStop(0.65, O); sgr.addColorStop(0.67, 'rgba(255,255,255,0.22)'); sgr.addColorStop(0.69, O);   // thinnest streak
+  sx.fillStyle = sgr; sx.fillRect(0, 0, 64, 128);
+  const sheen = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W, WIN_H),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(shc), transparent: true, depthWrite: false, clippingPlanes: clip }));
+  sheen.position.set(WIN_X, WIN_CY, 0.85);
+
+  // #3 Frame depth — a lighter inner reveal step + a protruding sill at the base.
+  const reveal = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W + 0.14, WIN_H + 0.14), new THREE.MeshBasicMaterial({ color: 0x3a3026 }));
+  reveal.position.set(WIN_X, WIN_CY, 0.017);
+  const sill = new THREE.Mesh(new THREE.BoxGeometry(WIN_W + 0.26, 0.16, 0.22), new THREE.MeshBasicMaterial({ color: 0xb0b4ba }));
+  sill.position.set(WIN_X, WIN_CY - WIN_H / 2 - 0.02, 0.10);
+  // Whitish haze the tower bases descend into (kills the "diorama on a shelf"
+  // read) — transparent up top, opaque pale near the bottom, in front of the
+  // city but behind the glass sheen.
+  const hzc = document.createElement('canvas'); hzc.width = 4; hzc.height = 128;
+  const hx = hzc.getContext('2d');
+  const hg = hx.createLinearGradient(0, 0, 0, 128);
+  hg.addColorStop(0, 'rgba(223,234,242,0)'); hg.addColorStop(0.5, 'rgba(223,234,242,0)'); hg.addColorStop(1, 'rgba(223,234,242,0.95)');
+  hx.fillStyle = hg; hx.fillRect(0, 0, 4, 128);
+  const haze = new THREE.Mesh(new THREE.PlaneGeometry(WIN_W, WIN_H),
+    new THREE.MeshBasicMaterial({ map: new THREE.CanvasTexture(hzc), transparent: true, depthWrite: false, clippingPlanes: clip }));
+  haze.position.set(WIN_X, WIN_CY, 0.78);
+  scene.add(reveal, haze, sheen, sill);
 }
 
 // --- Recessed cubby box: 5 inward-facing panels (back + top + bottom + 2
@@ -579,7 +710,7 @@ groundGeom.computeVertexNormals();
 
 const groundNorm = groundGeom.attributes.normal;
 const groundColors = new Float32Array(groundPos.count * 3);
-const BASE_R = 0.28, BASE_G = 0.70, BASE_B = 0.18;     // saturated ACME grass
+const BASE_R = 0.34, BASE_G = 0.54, BASE_B = 0.32;     // muted lichen/forest green
 const HAZE_R = 0.78, HAZE_G = 0.87, HAZE_B = 0.92;     // approach sky color
 const quant = (v, steps) => Math.round(v * steps) / steps;
 for (let i = 0; i < groundPos.count; i++) {
