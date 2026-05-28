@@ -182,6 +182,7 @@ const left = SIDE, right = TPX - SIDE;
 const MERGES = [
   { rowMin: 2, rowMax: 3, colMin: 4, colMax: 4, omitBack: true  },  // A5+B5 doorway
   { rowMin: 0, rowMax: 1, colMin: 3, colMax: 4, omitBack: false },  // C4+C5+D4+D5 square
+  { rowMin: 2, rowMax: 3, colMin: 0, colMax: 0, omitBack: false },  // A1+B1 merged
 ];
 function mergeAt(r, c) {
   for (const m of MERGES) {
@@ -980,6 +981,45 @@ camera.position.x = panCurrentX;
 // CEILING instead of the floor, with its respirator hoses plunging up into
 // the wood frame above. Diamond gradually bobs ±6cm on a 4s cycle, no
 // rotation.
+const drawerMeshes = [], drawerGroups = [];   // filing-cabinet drawers — click a face to slide one out at a time
+// --- Manila two-drawer filing cabinet in the merged A1+B1 cubby. Slightly
+// taller than one cubby, fills a single cubby's width, sits on the floor. The
+// drawers are separate groups (cabinet.userData.drawers / window.fileCabinet)
+// so they can later slide out (+z, toward the viewer) and hold interactive files.
+{
+  const cab = cubbies.A1;
+  const W = CUBBY_W * 0.9, H = CUBBY_H * 1.12, D = 0.58;   // deeper body for more volume
+  const mergedH = 2 * CUBBY_H + INNER_PLANK_H;
+  const baseY = -mergedH / 2, frontZ = -0.08;
+  const manila = new THREE.MeshStandardMaterial({ color: 0xd9c193, roughness: 0.72, metalness: 0.04 });
+  const pull   = new THREE.MeshStandardMaterial({ color: 0x8d9094, roughness: 0.45, metalness: 0.55 });   // grey metal
+  const cabinet = new THREE.Group(); cab.add(cabinet);
+  cabinet.rotation.x = 0.14;   // tip the top toward the viewer so its top face shows
+  const body = new THREE.Mesh(new THREE.BoxGeometry(W, H, D), manila);
+  body.position.set(0, baseY + H / 2, frontZ - D / 2);
+  cabinet.add(body);
+  const dh = H * 0.46, off = dh / 2 + H * 0.02, drawers = [];
+  for (let k = 0; k < 2; k++) {
+    const g = new THREE.Group();
+    g.position.set(0, baseY + H / 2 + (k === 0 ? off : -off), frontZ);   // k0 = top drawer
+    const face = new THREE.Mesh(new THREE.BoxGeometry(W * 0.97, dh, 0.10), manila);   // proud drawer faces (relief)
+    const grip = new THREE.Mesh(new THREE.BoxGeometry(W * 0.40, 0.06, 0.05), pull);
+    grip.position.set(0, 0, 0.045);
+    // hollow metal label frame (rectangular border) above the handle
+    const lw = W * 0.36, lh = dh * 0.16, t = 0.018, ly = dh * 0.26;
+    const bar = (bw, bh, bx, by) => { const m = new THREE.Mesh(new THREE.BoxGeometry(bw, bh, 0.015), pull); m.position.set(bx, ly + by, 0.055); g.add(m); };
+    bar(lw, t, 0, lh / 2); bar(lw, t, 0, -lh / 2); bar(t, lh, -lw / 2, 0); bar(t, lh, lw / 2, 0);
+    const lock = new THREE.Mesh(new THREE.BoxGeometry(0.05, 0.05, 0.04), pull);   // handle lock, right of the handle
+    lock.position.set(W * 0.28, 0, 0.055);
+    g.add(face, grip, lock); cabinet.add(g); drawers.push(g);
+    g.userData.baseZ = frontZ; g.userData.open = false;
+    face.userData.drawer = g; grip.userData.drawer = g;
+    drawerGroups.push(g); drawerMeshes.push(face, grip);
+  }
+  cabinet.userData.drawers = drawers;   // [top, bottom] — slide +z to open (later)
+  window.fileCabinet = cabinet;
+}
+
 const topLeftCubby = cubbies.D1;     // top row (D), leftmost column (1)
 const SCULPT_Z   = -CUBBY_D * 0.5;
 const CEILING_Y  =  CUBBY_H / 2;
@@ -1995,6 +2035,14 @@ function handleTapAt(clientX, clientY) {
   const ovl = overlayHitAt(clientX, clientY);                 // warped wordmark/☰/menu click → run its action, don't poke the scene
   if (ovl) { ovl.action(); return; }
   raycaster.setFromCamera(pointerNDC(clientX, clientY), camera);
+  // Click a filing-cabinet drawer → slide it out; only one open at a time.
+  const dHit = raycaster.intersectObjects(drawerMeshes, false);
+  if (dHit.length) {
+    const g = dHit[0].object.userData.drawer, was = g.userData.open;
+    drawerGroups.forEach((d) => (d.userData.open = false));
+    g.userData.open = !was;
+    return;
+  }
   // Click a wall painting → zoom the camera in to view it head-on.
   const artHits = raycaster.intersectObjects(paintingMeshes, false);
   if (artHits.length) { focusPainting = artHits[0].object; return; }
@@ -2585,6 +2633,7 @@ function render(now) {
     updateDust();
     updateWaterfall();
     updatePinArt();
+    for (const g of drawerGroups) g.position.z += ((g.userData.open ? g.userData.baseZ + 0.42 : g.userData.baseZ) - g.position.z) * 0.2;   // ease drawers open/closed
     renderer.setRenderTarget(fisheyeRT);     // scene → off-screen target
     renderer.render(scene, camera);
     renderer.setRenderTarget(null);          // → screen, warped through the fisheye quad
