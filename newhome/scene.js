@@ -824,7 +824,7 @@ function goToPage(p) {
 // fisheyeMat but no grade/vignette) composites it over the warped scene. Clicks
 // are forward-warped via pointerNDC into this canvas's space for hit-testing.
 const BRAND   = 'wasapok angleur';
-const FONT    = 'ui-monospace,SFMono-Regular,Menlo,Consolas,monospace';
+const FONT    = "'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const LSP     = 0.18;        // letter-spacing as a fraction of font size (matches the old 0.18em)
 
 const ovlCanvas = document.createElement('canvas');
@@ -2345,6 +2345,7 @@ const menuActions = [
 overlayReady = true;
 layoutAndDraw();
 ovlFadeStart = performance.now() + 250;
+if (document.fonts && document.fonts.ready) document.fonts.ready.then(layoutAndDraw);   // redraw once 'Earth 2073' finishes loading
 
 // Hover: forward-warp the cursor onto the overlay element under it, bump its
 // opacity (redraw only on change), and flag a pointer cursor for the per-frame
@@ -2483,6 +2484,10 @@ const plate = new THREE.Mesh(
 );
 plate.position.set(0, 0, -PLATE_THICKNESS / 2);
 pinArt.add(plate);
+// Little frame LED at the bottom — red when music plays, dim when idle.
+const led = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.05, 0.05), new THREE.MeshBasicMaterial({ color: 0x331010 }));
+led.position.set(-0.2, -(PIN_AREA_H / 2 + 0.08), 0.03);   // bottom of pin-art frame, stretched leftward as a thin bar
+pinArt.add(led);
 
 // --- Pin grid. One InstancedMesh, ~1024 instances, gunmetal. Cylinder
 // geometry is rotated so its axis aligns with +Z (pins point toward the
@@ -2515,6 +2520,13 @@ const pinDots = new THREE.InstancedMesh(
 );
 pinArt.add(pinDots);
 const _dotCol = new THREE.Color();
+// Duplicate sparkle layer in orange-brown (#703901), independent phase.
+const pinDots2 = new THREE.InstancedMesh(
+  new THREE.SphereGeometry(PIN_RADIUS * 0.7, 6, 4),
+  new THREE.MeshBasicMaterial({ color: 0xffffff, clippingPlanes: pinClipPlanes }),
+  PIN_COLS * PIN_ROWS,
+);
+pinArt.add(pinDots2);
 
 // Precompute each pin's base XY; only Z changes per frame.
 const pinXY = [];
@@ -2568,6 +2580,16 @@ function updatePinArt() {
 
   // Pull the current spectrum once per frame; musicDepth() then indexes it per pin.
   if (musicActive && analyser) analyser.getByteFrequencyData(freqData);
+  led.material.color.setHex(musicActive ? 0xff2020 : 0x331010);   // frame LED reacts to playback
+  // Bass / mid / treble averages → three vertical EQ bar columns on the pin art.
+  let bassAv = 0, midAv = 0, trebAv = 0;
+  if (musicActive) {
+    for (let k = 1;  k <= 8;  k++) bassAv += freqData[k];
+    for (let k = 9;  k <= 24; k++) midAv  += freqData[k];
+    for (let k = 25; k <= 60; k++) trebAv += freqData[k];
+    bassAv /= 8 * 255; midAv /= 16 * 255; trebAv /= 36 * 255;
+  }
+  const BARS = [-PIN_AREA_W * 0.30, 0, PIN_AREA_W * 0.30], BVALS = [bassAv, midAv, trebAv], BAR_W = 0.04;   // half a pin-col → single column line
 
   // Cursor → board. Raycast only the flat backing plate (never the pins) so
   // we get a stable (x, y) on the board plane no matter how far the pins are
@@ -2622,7 +2644,7 @@ function updatePinArt() {
     const CELL = 0.50, cx = Math.round(p.x / CELL) * CELL, cy = Math.round(p.y / CELL) * CELL;   // ~20% more stars
     const petalR = CELL * 0.6 * (0.4 + 0.6 * Math.max(0, Math.cos(8 * Math.atan2(p.y - cy, p.x - cx))));   // 120% star density
     const blobOn = stable > 0.55 ? (Math.hypot(p.x - cx, p.y - cy) < petalR) : (amorph > 1.15);
-    let dShow = 0, dC = 0, dx = 0, dy = 0, glow = false;
+    let dShow = 0, dC = 0, dx = 0, dy = 0, glow = false, bar = false;
     if (pinDepth[i] > 0.45) { dShow = 1; dC = 1; glow = true; }   // music/active level dots → original blue 0x8fb0c8
     else {
       let bShow = 0, bC = 0;
@@ -2635,16 +2657,34 @@ function updatePinArt() {
       if (gC >= bC) { dShow = gShow; dC = gC; glow = true; }
       else { dShow = bShow; dC = bC; dx = (hoverX - p.x) * prox * 0.6; dy = (hoverY - p.y) * prox * 0.6; }
     }
+    // EQ bar override — light the dots up to the band's average height
+    if (musicActive) {
+      for (let k = 0; k < 3; k++) if (Math.abs(p.x - BARS[k]) < BAR_W) {
+        if ((p.y + PIN_AREA_H / 2) / PIN_AREA_H <= BVALS[k]) { dShow = 1; dC = 1; bar = true; dx = 0; dy = 0; }
+        break;
+      }
+    }
     _pinDummy.position.set(p.x + dx, p.y + dy, baseZ + pinDepth[i] * PIN_MAX_PROTRUSION + PIN_LENGTH / 2);
     _pinDummy.scale.setScalar(dShow);
     _pinDummy.updateMatrix();
     pinDots.setMatrixAt(i, _pinDummy.matrix);
-    pinDots.setColorAt(i, _dotCol.set(glow ? 0x8fb0c8 : 0x8fc8b6).multiplyScalar(dC));
+    pinDots.setColorAt(i, _dotCol.set(bar ? 0xdfe3f7 : (glow ? 0x8fb0c8 : 0x8fc8b6)).multiplyScalar(dC));
+    // orange-brown duplicate sparkle (same animation, independent phase)
+    const f2 = (x) => x - Math.floor(x);
+    const ph2 = f2(performance.now() / 1000 * 0.006048 + f2(Math.sin(i * 89.3) * 43758.5));
+    let g2Show = 0, g2C = 0;
+    if (ph2 < 0.0174) { const g = Math.sin(ph2 / 0.0174 * Math.PI); g2Show = g; g2C = 0.55 * g; }
+    _pinDummy.scale.setScalar(g2Show);
+    _pinDummy.updateMatrix();
+    pinDots2.setMatrixAt(i, _pinDummy.matrix);
+    pinDots2.setColorAt(i, _dotCol.set(0xb06a02).multiplyScalar(g2C));
     _pinDummy.scale.setScalar(1);
   }
   pins.instanceMatrix.needsUpdate = true;
   pinDots.instanceMatrix.needsUpdate = true;
   if (pinDots.instanceColor) pinDots.instanceColor.needsUpdate = true;
+  pinDots2.instanceMatrix.needsUpdate = true;
+  if (pinDots2.instanceColor) pinDots2.instanceColor.needsUpdate = true;
 }
 updatePinArt();   // initial pose so it's not all stuck at z=0 before first tick
 
