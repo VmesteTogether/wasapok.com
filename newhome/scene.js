@@ -915,8 +915,8 @@ function layoutAndDraw() {
   ovlCtx.textBaseline = 'top';
   ovlCtx.shadowColor = 'rgba(0,0,0,0.55)'; ovlCtx.shadowBlur = 4; ovlCtx.shadowOffsetY = 1;
   ovlElements = [];
-  const left = 130, top = 115;
-  const FS = 38.5, IFS = 31.5;     // 1.75× the originals (22 / 18)
+  const left = 128, top = 151;
+  const FS = 50.0, IFS = 41.0;     // +1.5% over previous
   // Wordmark (display only — clicks pass through to the diamond behind it).
   ovlCtx.fillStyle = '#f3dcb0';
   ovlCtx.globalAlpha = 1;
@@ -2071,6 +2071,15 @@ function updateRecordPlayerCover() {
 // mouth) landed on the hills/sky — not on a cubby, album, or frame. Anything
 // physically in front would be a nearer hit and is handled before we get here.
 const DOORWAY = cubbies.A5;
+// Thick shag welcome mat right in front of the hallway/doorway opening.
+{
+  const mat = new THREE.Mesh(
+    new THREE.BoxGeometry(1.6, 0.06, 2.6),
+    new THREE.MeshStandardMaterial({ color: 0x485266, roughness: 0.98, metalness: 0 }),
+  );
+  mat.position.set(DOORWAY.position.x, -GRID_H / 2 + 0.03, 1.35);
+  scene.add(mat);
+}
 const CASTLE_URL = '/castle';
 function rayHitsDoorway(ray) {
   if (Math.abs(ray.direction.z) < 1e-6) return false;
@@ -2124,7 +2133,10 @@ function handleTapAt(clientX, clientY) {
   if (hit.userData.kind === 'albumCover') {
     state.isOpen = !state.isOpen;
     if (!state.isOpen) state.vinylOut = false;     // closing cover pulls vinyl back in
-    if (state.isOpen) state.z = ++albumZSeq;        // bring to the front of the open stack
+    if (state.isOpen) {
+      state.z = ++albumZSeq;                        // bring to the front of the open stack
+      for (const o of albumStates) if (o !== state) { o.isOpen = false; o.vinylOut = false; }   // only one open at a time
+    }
   } else if (hit.userData.kind === 'albumVinyl' || hit.userData.kind === 'albumLabel') {
     if (!state.isOpen) return;
     state.z = ++albumZSeq;                          // touching it raises it over other open albums
@@ -2339,6 +2351,7 @@ function activateAlbum(state) {
   if (currentRecord) { unloadRecord(); return; }            // a different record is playing → clear the deck first
   if (!state.isOpen || !state.vinylOut) {                   // closed → open the sleeve and slide the vinyl out
     state.isOpen = true; state.vinylOut = true; state.z = ++albumZSeq;
+    for (const o of albumStates) if (o !== state) { o.isOpen = false; o.vinylOut = false; }   // only one open at a time
     return;
   }
   state.z = ++albumZSeq;                                    // already revealed → drop it on the turntable and play
@@ -2373,9 +2386,9 @@ window.addEventListener('mousemove', (e) => {
   if (key !== hoverKey) { hoverKey = key; layoutAndDraw(); }
 });
 
-const TILT_SCALE = 0.12;                     // how strongly each cubby tilts per meter of cursor offset
+const TILT_SCALE = 0.033;                    // how strongly each cubby tilts per meter of cursor offset (+10%)
 const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
-const TILT_MAX_Y = CUBBY_H * 0.42;
+const TILT_MAX_Y = CUBBY_H * 0.786;          // +5% more vertical tilt range
 const _target = new THREE.Vector2();
 
 function updateTilt() {
