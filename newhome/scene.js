@@ -1504,6 +1504,23 @@ const albumStates      = [];
 const _hoverLocal      = new THREE.Vector3();
 
 let albumZSeq = 0;   // bumped each time an album is opened/touched; orders the open stack
+// Crappy Apple Music + Spotify logos used as overlay icons on slid-out vinyls.
+const appleLogoTex = (() => {
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = '#e8447a'; g.beginPath(); g.arc(16, 16, 15, 0, Math.PI * 2); g.fill();
+  g.fillStyle = '#fff'; g.font = 'bold 22px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText('♪', 16, 16);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
+const spotifyLogoTex = (() => {
+  const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+  const g = c.getContext('2d');
+  g.fillStyle = '#1db954'; g.beginPath(); g.arc(16, 16, 15, 0, Math.PI * 2); g.fill();
+  g.strokeStyle = '#fff'; g.lineWidth = 2; g.lineCap = 'round';
+  for (const r of [6, 9, 12]) { g.beginPath(); g.arc(16, 22, r, Math.PI * 1.15, Math.PI * 1.85); g.stroke(); }
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+})();
 function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) {
   const cubby = cubbies[cubbyKey];
   const tex = new THREE.TextureLoader().load(texPath);
@@ -1603,6 +1620,13 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   hole.userData.kind = 'albumLabel';
   vinylGroup.add(hole);
 
+  // Crappy streaming-service logos printed on the INSIDE of the sleeve, visible
+  // once the vinyl has been slid out (toggled by updateAlbumState).
+  const apple = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), new THREE.MeshBasicMaterial({ map: appleLogoTex, transparent: true, ...matOpts }));
+  apple.position.set(-0.28, 0.18, -0.013); apple.renderOrder = 9; apple.visible = false; albumRoot.add(apple);
+  const spotify = new THREE.Mesh(new THREE.PlaneGeometry(0.18, 0.18), new THREE.MeshBasicMaterial({ map: spotifyLogoTex, transparent: true, ...matOpts }));
+  spotify.position.set(-0.28, -0.18, -0.013); spotify.renderOrder = 9; spotify.visible = false; albumRoot.add(spotify);
+
   // Inside panel — paperboard interior of the sleeve. renderOrder=7 so it
   // sits ON TOP of the vinyl/label, hiding whatever portion of the vinyl is
   // still inside the sleeve. Only the part of the vinyl that's slid past the
@@ -1622,7 +1646,7 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
   albumVinylMeshes.push(vinyl, label, hole);
   albumAllMeshes.push(front, inside, vinyl, label, hole);
   const state = {
-    albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label, hole,
+    albumRoot, coverPivot, front, inside, vinylGroup, vinyl, label, hole, apple, spotify,
     isOpen: false, openness: 0,
     vinylOut: false, vinylness: 0,
     z: 0,                                // activation order — higher draws atop other open albums
@@ -1963,6 +1987,7 @@ function loadRecord(state) {
 function unloadRecord() {
   if (flightAnim || !currentRecord) return;
   const { state } = currentRecord;
+  state.isOpen = true; state.vinylOut = true;   // re-open the sleeve so a closed cover pops open to receive the record
   if (state.audio) { state.audio.pause(); state.audio.currentTime = 0; }
   musicActive = false;   // pins fall back to idle ripple + hover
   const fromVec = recordPlayer.userData.spinGroup.getWorldPosition(new THREE.Vector3());
@@ -1973,6 +1998,8 @@ function unloadRecord() {
   startFlight(fromVec, toVec, -Math.PI / 2, 0, TURNTABLE_VINYL_SCALE, toScl, state.labelColor, () => {
     state.vinylGroup.visible = true;
     recordPlayer.userData.recordLabel.material.color.set(recordPlayer.userData.defaultLabelColor);
+    state.vinylOut = false;                            // retract vinyl back into the sleeve
+    setTimeout(() => { state.isOpen = false; }, 250);  // then close the cover and re-shelf (snappier)
   });
 }
 
@@ -2219,7 +2246,7 @@ function handleTapAt(clientX, clientY) {
     // First tap on the peeking vinyl slides it fully out; a second tap
     // on the slid-out vinyl loads it onto the turntable and starts playback.
     if (state.vinylOut) loadRecord(state);
-    else                state.vinylOut = true;
+    else { state.vinylOut = true; state.outAt = performance.now(); }   // mark pop-out time for the brief 'open' prompt
   }
   // Tapping the inside panel of an open album is a no-op for now.
 }
@@ -2239,6 +2266,12 @@ function updateAlbumState() {
   // (source vinylGroup invisible) is naturally excluded.
   const vinylHits = raycaster.intersectObjects(albumVinylMeshes, false);
   const vinylHoveredState = vinylHits.length ? vinylHits[0].object.userData.albumState : null;
+  // Prompt label only — predicts what the NEXT click on the hovered vinyl will do.
+  // peeking vinyl → 'open' (next click pops the record out)
+  // slid-out vinyl → 'play' (next click loads it onto the turntable)
+  if (vinylHoveredState && vinylHoveredState.isOpen) { cursorLabel.textContent = vinylHoveredState.vinylOut ? 'play' : 'open'; cursorLabel.style.display = 'block'; }
+  else if (currentRecord && raycaster.intersectObject(recordPlayer, true).length) { cursorLabel.textContent = 'stop'; cursorLabel.style.display = 'block'; }
+  else cursorLabel.style.display = 'none';
 
   // Layering: open albums pop forward, so they must render above closed
   // neighbors (depthTest is off everywhere here, so renderOrder is the only
@@ -2247,6 +2280,7 @@ function updateAlbumState() {
   // offsets, so even 3 stacked albums stay under the atmosphere layer (20).
   const openStack = albumStates.filter(s => s.openness > 0.002).sort((a, b) => a.z - b.z);
   openStack.forEach((s, i) => { s._band = 10 + i; });
+  for (const s of albumStates) s.apple.visible = s.spotify.visible = s.vinylOut;   // streaming-service logos appear once the record pops out
 
   for (const s of albumStates) {
     // --- Hover (closed only) — scale + nearest-corner tip on the cover mesh.
@@ -2313,10 +2347,13 @@ function updateAlbumState() {
       s.label.renderOrder  = b + 0.25;
       s.hole.renderOrder   = b + 0.5;
       s.inside.renderOrder = b + 0.5;
+      s.apple.renderOrder  = b + 0.6;
+      s.spotify.renderOrder = b + 0.6;
       s.front.renderOrder  = b + 0.75;
     } else {
       s.vinyl.renderOrder = 5; s.label.renderOrder = 6; s.hole.renderOrder = 7;
       s.inside.renderOrder = 7; s.front.renderOrder = 8;
+      s.apple.renderOrder = 7.6; s.spotify.renderOrder = 7.6;
     }
   }
 }
@@ -2331,9 +2368,16 @@ const raycaster = new THREE.Raycaster();
 const ndc = new THREE.Vector2(0, 0);
 const mouseWorld = new THREE.Vector3(0, 0, 0);
 let mouseSeen = false;
+// Cursor-replacement label that prompts the next vinyl action ('open' / 'play').
+const cursorLabel = document.createElement('div');
+cursorLabel.style.cssText = 'position:fixed;top:0;left:0;pointer-events:none;z-index:20;color:#f3dcb0;font:11px ui-monospace,Menlo,Consolas,monospace;letter-spacing:0.14em;text-transform:uppercase;text-shadow:0 1px 3px rgba(0,0,0,0.6);transform:translate(10px,10px);display:none;';
+document.body.appendChild(cursorLabel);
+let vinylCursor = false;
 window.addEventListener('mousemove', (e) => {
   pointerNDC(e.clientX, e.clientY, ndc);
   mouseSeen = true;
+  cursorLabel.style.left = e.clientX + 'px';
+  cursorLabel.style.top  = e.clientY + 'px';
   if (diamondDrag) {
     const dx = e.clientX - diamondDrag.lastX;
     diamondDrag.lastX = e.clientX;
@@ -2419,14 +2463,13 @@ window.addEventListener('touchend', (e) => {
 // scene behind it.
 function activateAlbum(state) {
   if (flightAnim) return;                                   // ignore while a record flies to/from the deck
-  if (currentRecord && currentRecord.state === state) {     // this one is playing → stop it and tuck it away
+  if (currentRecord && currentRecord.state === state) {     // this one is playing → stop it; unloadRecord handles the reverse close
     unloadRecord();
-    state.isOpen = false; state.vinylOut = false;
     return;
   }
   if (currentRecord) { unloadRecord(); return; }            // a different record is playing → clear the deck first
   if (!state.isOpen || !state.vinylOut) {                   // closed → open the sleeve and slide the vinyl out
-    state.isOpen = true; state.vinylOut = true; state.z = ++albumZSeq;
+    state.isOpen = true; state.vinylOut = true; state.outAt = performance.now(); state.z = ++albumZSeq;
     for (const o of albumStates) if (o !== state) { o.isOpen = false; o.vinylOut = false; }   // only one open at a time
     return;
   }
