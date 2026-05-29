@@ -58,6 +58,14 @@
     .time       { font-size: 0.85rem; opacity: 0.75; min-width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
 
     /* Tile grid — 3 cols, independent vertical columns */
+    .grid-wrap  { position: relative; }
+    .grid-toggle{ position: absolute; top: 0; right: calc(100% + 10px);
+                  writing-mode: vertical-rl; text-orientation: upright;
+                  font-size: 0.7rem; letter-spacing: 0.15em;
+                  color: rgba(243,220,176,0.40); cursor: pointer; user-select: none;
+                  transition: color 0.18s ease; line-height: 1.4; }
+    .grid-toggle:hover { color: #f3dcb0; }
+    .grid-toggle .t-arrow { display: inline-block; padding: 6px 0; opacity: 0.6; font-size: 0.85rem; }
     .grid       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
     .col        { display: flex; flex-direction: column; gap: 14px; transition: gap 0.18s ease; }
     .col:has(.tile:hover) { gap: 24px; }    /* dynamic "hitbox" gap so scaled tiles don't touch each other */
@@ -89,7 +97,10 @@
     <p class="role">art / music</p>
 
     <div id="expanded" class="expanded"></div>
-    <div id="grid" class="grid"></div>
+    <div class="grid-wrap">
+      <div id="grid-toggle" class="grid-toggle"></div>
+      <div id="grid" class="grid"></div>
+    </div>
   </main>
 
   <script>
@@ -116,25 +127,51 @@
         links: { spotify: 'https://google.com', apple: 'https://google.com', soundcloud: '', youtube: '' } },
 
       // MIDDLE column — producer credits / demos / unreleased
+      { id: 'scraped', col: 1, cover: 'scraped.jpg',
+        title: 'title', year: '202x', tracks: 0, role: 'producer',
+        tracklist: [], featured: '',
+        links: { spotify: 'https://open.spotify.com/track/6o4uAFEoe5olYrg6Zji49n', apple: '', soundcloud: '', youtube: '' } },
       { id: 'eskleon', col: 1, cover: 'eskleon.jpg',
         title: 'title', year: '202x', tracks: 0, role: 'producer',
         tracklist: [], featured: '',
         links: { spotify: 'https://google.com', apple: '', soundcloud: '', youtube: '' } },
 
-      // RIGHT column — band releases (placeholder for now)
-      { id: 'band-placeholder', col: 2, placeholder: true, cover: '',
-        title: '', year: '', tracks: 0, role: '',
-        tracklist: [], featured: '', links: {} },
+      // RIGHT column — band releases
+      { id: 'hello-boredom', col: 2, cover: 'hello-boredom.jpg',
+        title: 'title', year: '202x', tracks: 0, role: 'band',
+        tracklist: [], featured: '',
+        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/hello-boredom-jam-sesh', youtube: '' } },
+      { id: 'hello-bo2edom', col: 2, cover: 'hello-bo2edom.jpg',
+        title: 'title', year: '202x', tracks: 0, role: 'band',
+        tracklist: [], featured: '',
+        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/hello-bo2edom', youtube: '' } },
+      { id: 'delayworks', col: 2, cover: 'delayworks.jpg',
+        title: 'title', year: '202x', tracks: 0, role: 'band',
+        tracklist: [], featured: '',
+        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/delayworks', youtube: '' } },
+      { id: 'helllo-b3redom', col: 2, cover: 'helllo-b3redom.jpg',
+        title: 'title', year: '202x', tracks: 0, role: 'band',
+        tracklist: [], featured: '',
+        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/helllo-b3redom', youtube: '' } },
     ];
 
     // ────────────────────────────────────────────────────────────────────────
     //  STATE
     // ────────────────────────────────────────────────────────────────────────
     let expandedId = null;
+    let oldOnTop   = false;    // false = new at top by default (newest first); only affects col 0 + col 2; middle col 1 is catchall
     const $role     = document.querySelector('.role');
     const $grid     = document.getElementById('grid');
     const $expanded = document.getElementById('expanded');
+    const $toggle   = document.getElementById('grid-toggle');
     const setRole = txt => { $role.textContent = txt || 'art / music'; };
+
+    function buildToggle() {
+      const top = oldOnTop ? 'old' : 'new';
+      const bot = oldOnTop ? 'new' : 'old';
+      $toggle.innerHTML = `${top}<span class="t-arrow">↕</span>${bot}`;
+    }
+    $toggle.addEventListener('click', () => { oldOnTop = !oldOnTop; render(); });
 
     // ────────────────────────────────────────────────────────────────────────
     //  GRID
@@ -144,7 +181,9 @@
       for (let c = 0; c < 3; c++) {
         const col = document.createElement('div');
         col.className = 'col';
-        albums.filter(a => a.col === c).forEach(a => {
+        let colAlbums = albums.filter(a => a.col === c);
+        if (c !== 1 && !oldOnTop) colAlbums = colAlbums.slice().reverse();   // toggle reverses outer cols only; middle stays in data order
+        colAlbums.forEach(a => {
           const wrap = document.createElement('div');
           wrap.className = 'tile-wrap';
 
@@ -273,7 +312,7 @@
       scrub.addEventListener('input', () => { audio.currentTime = +scrub.value; });
     }
 
-    function render() { buildExpanded(); buildGrid(); }
+    function render() { buildToggle(); buildExpanded(); buildGrid(); }
     render();
   </script>
 </body>
