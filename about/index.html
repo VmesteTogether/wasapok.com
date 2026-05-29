@@ -9,7 +9,7 @@
     body { overflow-x: hidden; }    /* art balloons left of the main column on expand — don't trigger horizontal scroll */
     main { max-width: 720px; margin: 0 auto; padding: 80px 24px; }
     h1 { font-weight: 700; letter-spacing: 0.06em; font-size: 2.5rem; margin: 0 0 1.5rem; }
-    .role { line-height: 1.6; font-size: 1.05rem; margin: 0 0 24px; min-height: 1.6em; }
+    .role { line-height: 1.6; font-size: 1.05rem; margin: 0 0 24px; min-height: 1.6em; letter-spacing: 0.14em; }
     a { color: #f3dcb0; text-decoration: none; }
 
     /* Expanded view (above grid, full-width span) */
@@ -22,9 +22,9 @@
     .exart      { width: 443px; height: 443px; margin-left: -223px; object-fit: cover; border-radius: 4px;
                   background: rgba(243,220,176,0.08); display: block; }
     .exinfo     { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
-    .extitle    { font-size: 1.2rem; font-weight: 700; letter-spacing: 0.04em; }
-    .exmeta     { font-size: 0.85rem; opacity: 0.75; }
-    .extrack    { font-size: 0.9rem; opacity: 0.9; white-space: pre-line; }
+    .extitle    { font-size: 1.2rem; font-weight: 50; letter-spacing: 0.17em; }
+    .exmeta     { font-size: 0.85rem; opacity: 0.75; letter-spacing: 0.14em; }
+    .extrack    { font-size: 0.9rem; opacity: 0.9; white-space: pre-line; letter-spacing: 0.14em; }
     /* Manila-style file tabs on the right edge of the expanded backlay (streaming links).
        Distribute vertically centered; protrude past the right edge into the page margin.
        Hover: hovered tab darkens slightly + slides right; siblings darken more (recede). */
@@ -67,8 +67,19 @@
     .grid-toggle:hover { color: #f3dcb0; }
     .grid-toggle .t-arrow { display: inline-block; padding: 6px 0; opacity: 0.6; font-size: 0.85rem; }
     .grid       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
-    .col        { display: flex; flex-direction: column; gap: 14px; transition: gap 0.18s ease; }
-    .col:has(.tile:hover) { gap: 24px; }    /* dynamic "hitbox" gap so scaled tiles don't touch each other */
+    .col        { display: flex; flex-direction: column; gap: 14px; transition: gap 0.18s ease;
+                  position: relative; isolation: isolate; align-self: start; }   /* align-self: start so a short column (e.g. middle) doesn't stretch to the tallest col's height — the shadow then matches the actual tile content */
+    .col:has(.tile:not(.empty-slot):not(.placeholder):hover) { gap: 24px; }    /* dynamic "hitbox" gap so scaled tiles don't touch each other */
+    /* Soft vertical-oblong shadow that fades in behind a column when any active album tile in it is hovered */
+    .col::before { content: ''; position: absolute; left: 50%; top: 50%;
+                   width: 98%; height: 96%;
+                   transform: translate(-50%, -50%);
+                   background: rgba(0,0,0,0.09);
+                   border-radius: 50%;
+                   filter: blur(24px);
+                   opacity: 0; transition: opacity 0.22s ease;
+                   z-index: -1; pointer-events: none; }
+    .col:has(.tile:not(.empty-slot):not(.placeholder):hover)::before { opacity: 1; }
     .tile-wrap  { display: flex; flex-direction: column; }
     .tile       { aspect-ratio: 1; background: rgba(243,220,176,0.06); border-radius: 4px; cursor: pointer;
                   position: relative; overflow: hidden; transform-style: preserve-3d;
@@ -114,44 +125,110 @@
     const albums = [
       // LEFT column — solo artist
       { id: 'reilly', col: 0, cover: 'reilly-album-cvr.jpeg',
-        title: 'title', year: '202x', tracks: 0, role: 'sole artist',
-        tracklist: [], featured: '',
-        links: { spotify: 'https://google.com', apple: 'https://google.com', soundcloud: '', youtube: '' } },
+        title: 'Biome .•.•.•:::Plain.', year: '2025', tracks: 5, role: 'sole artist',
+        tracklist: [
+          `Delphinium°171:`,
+          `Aesthetics 2k, 052-054.`,
+          `'Indamnesiac'`,
+          `#1`,
+          `Arscinine, thank you i'm sorry but thank you, again`,
+        ], featured: '',
+        links: { spotify: 'https://google.com', apple: 'https://music.apple.com/us/album/biome-plain-ep/1858512958', soundcloud: '', youtube: '' } },
       { id: 'palm_tree', col: 0, cover: 'palm_tree.png',
-        title: 'title', year: '202x', tracks: 0, role: 'sole artist',
-        tracklist: [], featured: '',
-        links: { spotify: 'https://google.com', apple: 'https://google.com', soundcloud: '', youtube: '' } },
+        title: `'°Palm Tree's Syrup'°"`, year: '2026', tracks: 4, role: 'sole artist',
+        tracklist: [
+          `Blue]:::]Crusaders`,
+          `•°. Aevos::.•.•.•-`,
+          `................:::::::indigenal`,
+          `The Palm's Tree Syrup`,
+        ], featured: '',
+        links: { spotify: 'https://google.com', apple: 'https://music.apple.com/us/album/palm-trees-syrup-ep/1869613519', soundcloud: '', youtube: '' } },
       { id: 'scoputicular', col: 0, cover: 'Scoputicular-cvr.png',
-        title: 'title', year: '202x', tracks: 0, role: 'sole artist',
-        tracklist: [], featured: '',
-        links: { spotify: 'https://google.com', apple: 'https://google.com', soundcloud: '', youtube: '' } },
+        title: 'Scoputicular', year: '2026', tracks: 1, role: 'sole artist',
+        tracklist: [`Scoputicular`], featured: '',
+        links: { spotify: 'https://google.com', apple: 'https://music.apple.com/us/album/scoputicular-single/1873380037', soundcloud: '', youtube: '' } },
 
       // MIDDLE column — producer credits / demos / unreleased
       { id: 'scraped', col: 1, cover: 'scraped.jpg',
-        title: 'title', year: '202x', tracks: 0, role: 'producer',
-        tracklist: [], featured: '',
-        links: { spotify: 'https://open.spotify.com/track/6o4uAFEoe5olYrg6Zji49n', apple: '', soundcloud: '', youtube: '' } },
+        title: 'scraped', year: '2025', tracks: 1, role: 'producer',
+        tracklist: ['scraped'], featured: '',
+        links: { spotify: 'https://open.spotify.com/track/6o4uAFEoe5olYrg6Zji49n', apple: 'https://music.apple.com/us/album/scraped-single/1859111335', soundcloud: '', youtube: '' } },
       { id: 'eskleon', col: 1, cover: 'eskleon.jpg',
-        title: 'title', year: '202x', tracks: 0, role: 'producer',
-        tracklist: [], featured: '',
-        links: { spotify: 'https://google.com', apple: '', soundcloud: '', youtube: '' } },
+        title: 'Eskleon', year: '2023', tracks: 4, role: 'producer',
+        tracklist: [
+          'Saturns_Aurora3',
+          'Iceland_on_fire.1 (Title Screen)',
+          'Sunrise_over_concrete',
+          'Lichen_meadow.3',
+          // SoundCloud only ships the first 4 in HTML — fill in the remaining 12 from the set manually
+        ], featured: '',
+        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/wasapokangleur-482659426/sets/eskleon', youtube: '' } },
 
-      // RIGHT column — band releases
+      // RIGHT column — band releases (V.Meste Together on SoundCloud, all 2023)
       { id: 'hello-boredom', col: 2, cover: 'hello-boredom.jpg',
-        title: 'title', year: '202x', tracks: 0, role: 'band',
-        tracklist: [], featured: '',
+        title: 'Hello Boredom', year: '2023', tracks: 7, role: 'band',
+        tracklist: [
+          'Intro to NAR (no. 0)',
+          'Numbingly Pleasant (no. 2)',
+          'Absorbiting (no. 3)',
+          'Nuclear Drome Strike (no. 4)',
+          'A Snippet of Sadness (no. 5)',
+          'Galaxy Detuned (no. 6)',
+          'Council on Jupiter (no. 7)',
+        ], featured: '',
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/hello-boredom-jam-sesh', youtube: '' } },
       { id: 'hello-bo2edom', col: 2, cover: 'hello-bo2edom.jpg',
-        title: 'title', year: '202x', tracks: 0, role: 'band',
-        tracklist: [], featured: '',
+        title: 'Hello Bo2edom', year: '2023', tracks: 10, role: 'band',
+        tracklist: [
+          'Steep (no. 0)',
+          'Snowflakes (no. 2)',
+          'Free (3) Gnomes Descending Into A Reactor (no. 3)',
+          'Legūã (no. 4)',
+          'EMo Story (no. 5)',
+          'Low Flight (no. 6)',
+          'Nevesomost (no. 7)',
+          'Morse (no. 8)',
+          'Ludovico (no. 9)',
+          'Ballad (no. 10)',
+        ], featured: '',
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/hello-bo2edom', youtube: '' } },
       { id: 'delayworks', col: 2, cover: 'delayworks.jpg',
-        title: 'title', year: '202x', tracks: 0, role: 'band',
-        tracklist: [], featured: '',
+        title: 'Primadorial', year: '2023', tracks: 9, role: 'band',
+        tracklist: [
+          'Perfection',
+          `I can’t get my eyes to burn`,
+          'La beomba',
+          'Althium',
+          'Frother in bloom',
+          'Spectral Projections (interlude)',
+          `Interlocutor’s lude`,
+          'Snowflaeks',
+          'My eyes are finally burning',
+        ], featured: '',
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/delayworks', youtube: '' } },
       { id: 'helllo-b3redom', col: 2, cover: 'helllo-b3redom.jpg',
-        title: 'title', year: '202x', tracks: 0, role: 'band',
-        tracklist: [], featured: '',
+        title: 'Helllo B3redom', year: '2023', tracks: 19, role: 'band',
+        tracklist: [
+          'Between Levels Of Hell',
+          'Squares & Mangoes',
+          'Chasing Birds (piano)',
+          'Overdrone',
+          `realizing that it doesn't matter (guitar)`,
+          'Pickup Truck Orgy',
+          'Intro To NAR (drome edit)',
+          'mentally unwell (guitar)',
+          'Gnomes Melting (again?)',
+          'Whenever Is Tonight (guitar)',
+          'Ants In Pompeii (piano)',
+          'excited machines',
+          `Whenever I Don’t Know What To Do`,
+          `you can't really outrun yourself (guitar)`,
+          'Possiblimente Structural Songularity (guitar)',
+          'snippet of songularity (guitar)',
+          'Getting To Know Each Other',
+          'Blisstering (guitar)',
+          'Snow (cover)',
+        ], featured: '',
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/helllo-b3redom', youtube: '' } },
     ];
 
