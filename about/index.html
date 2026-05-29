@@ -24,7 +24,16 @@
     .exinfo     { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
     .extitle    { font-size: 1.2rem; font-weight: 50; letter-spacing: 0.17em; }
     .exmeta     { font-size: 0.85rem; opacity: 0.75; letter-spacing: 0.14em; }
-    .extrack    { font-size: 0.9rem; opacity: 0.9; white-space: pre-line; letter-spacing: 0.14em; }
+    .extrack    { font-size: 0.9rem; letter-spacing: 0.14em; list-style: none; padding: 0; margin: 0;
+                  display: flex; flex-direction: column; gap: 2px; }
+    .extrack li { display: flex; justify-content: space-between; align-items: baseline; gap: 12px;
+                  opacity: 0.62; padding: 4px 8px; border-radius: 3px;
+                  transition: opacity 0.18s ease, background 0.18s ease; }
+    .extrack li.featured { opacity: 1; background: rgba(243,220,176,0.07); }   /* light up + subtle background bar */
+    .extrack .tname { flex: 1 1 auto; transition: color 0.18s ease; }
+    .extrack li.featured.playing .tname { color: #ffd989; }   /* slight saturation bump while featured song is playing */
+    .extrack .ftag  { font-size: 0.72rem; color: #ffffff; opacity: 0.78; letter-spacing: 0.20em;
+                      flex: 0 0 auto; white-space: nowrap; }
     /* Manila-style file tabs on the right edge of the expanded backlay (streaming links).
        Distribute vertically centered; protrude past the right edge into the page margin.
        Hover: hovered tab darkens slightly + slides right; siblings darken more (recede). */
@@ -132,11 +141,11 @@
           `'Indamnesiac'`,
           `#1`,
           `Arscinine, thank you i'm sorry but thank you, again`,
-        ], featured: '',
+        ], featured: 'featured/biome-plain.mp3', featuredIndex: 4,
         links: { spotify: 'https://google.com', apple: 'https://music.apple.com/us/album/biome-plain-ep/1858512958', soundcloud: '', youtube: '' } },
       { id: 'scraped', col: 0, cover: 'scraped.jpg',
         title: 'scraped', year: '2025', tracks: 1, role: 'producer/co-writer',
-        tracklist: ['scraped'], featured: '',
+        tracklist: ['scraped'], featured: 'featured/scraped.mp3', featuredIndex: 0,
         links: { spotify: 'https://open.spotify.com/track/6o4uAFEoe5olYrg6Zji49n', apple: 'https://music.apple.com/us/album/scraped-single/1859111335', soundcloud: '', youtube: '' } },
       { id: 'palm_tree', col: 0, cover: 'palm_tree.png',
         title: `'°Palm Tree's Syrup'°"`, year: '2026', tracks: 4, role: 'sole artist',
@@ -145,11 +154,11 @@
           `•°. Aevos::.•.•.•-`,
           `................:::::::indigenal`,
           `The Palm's Tree Syrup`,
-        ], featured: '',
+        ], featured: 'featured/palm-tree.mp3', featuredIndex: 3,
         links: { spotify: 'https://google.com', apple: 'https://music.apple.com/us/album/palm-trees-syrup-ep/1869613519', soundcloud: '', youtube: '' } },
       { id: 'scoputicular', col: 0, cover: 'Scoputicular-cvr.png',
         title: 'Scoputicular', year: '2026', tracks: 1, role: 'sole artist',
-        tracklist: [`Scoputicular`], featured: '',
+        tracklist: [`Scoputicular`], featured: 'featured/scoputicular.mp3', featuredIndex: 0,
         links: { spotify: 'https://google.com', apple: 'https://music.apple.com/us/album/scoputicular-single/1873380037', soundcloud: '', youtube: '' } },
 
       // MIDDLE column — producer credits / demos / unreleased
@@ -165,7 +174,7 @@
           `Interlocutor’s lude`,
           'Snowflaeks',
           'My eyes are finally burning',
-        ], featured: '',
+        ], featured: 'featured/primadorial.mp3', featuredIndex: 3,
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/delayworks', youtube: '' } },
       { id: 'eskleon', col: 1, cover: 'eskleon.jpg',
         title: 'Eskleon', year: '2023', tracks: 4, role: 'sole artist/demos',
@@ -175,7 +184,7 @@
           'Sunrise_over_concrete',
           'Lichen_meadow.3',
           // SoundCloud only ships the first 4 in HTML — fill in the remaining 12 from the set manually
-        ], featured: '',
+        ], featured: 'featured/eskleon.mp3', featuredIndex: 3,
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/wasapokangleur-482659426/sets/eskleon', youtube: '' } },
 
       // RIGHT column — band releases (V.Meste Together on SoundCloud, all 2023)
@@ -189,7 +198,7 @@
           'A Snippet of Sadness (no. 5)',
           'Galaxy Detuned (no. 6)',
           'Council on Jupiter (no. 7)',
-        ], featured: '',
+        ], featured: 'featured/hello-boredom.mp3', featuredIndex: 4,
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/hello-boredom-jam-sesh', youtube: '' } },
       { id: 'hello-bo2edom', col: 2, cover: 'hello-bo2edom.jpg',
         title: 'Hello Bo2edom', year: '2023', tracks: 10, role: 'v.meste together',
@@ -204,7 +213,7 @@
           'Morse (no. 8)',
           'Ludovico (no. 9)',
           'Ballad (no. 10)',
-        ], featured: '',
+        ], featured: 'featured/hello-bo2edom.mp3', featuredIndex: 2,
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/hello-bo2edom', youtube: '' } },
       { id: 'helllo-b3redom', col: 2, cover: 'helllo-b3redom.jpg',
         title: 'Helllo B3redom', year: '2023', tracks: 19, role: 'v.meste together',
@@ -228,7 +237,7 @@
           'Getting To Know Each Other',
           'Blisstering (guitar)',
           'Snow (cover)',
-        ], featured: '',
+        ], featured: 'featured/helllo-b3redom.mp3', featuredIndex: 1,
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/helllo-b3redom', youtube: '' } },
     ];
 
@@ -344,8 +353,12 @@
       const tabsHtml = Object.entries(a.links).filter(([, v]) => v)
         .map(([k, v]) => `<a href="${v}" target="_blank" rel="noopener" data-service="${k}">${k}</a>`).join('');
       const trackHtml = a.tracklist.length
-        ? a.tracklist.map((t, i) => `${i + 1}. ${t}`).join('\n')
-        : '(tracklist tbd)';
+        ? `<ul class="extrack">${a.tracklist.map((t, i) => {
+            const isFeatured = i === a.featuredIndex;
+            const tag = isFeatured ? `<span class="ftag">★ featured</span>` : '';
+            return `<li${isFeatured ? ' class="featured"' : ''}><span class="tname">${i + 1}. ${t}</span>${tag}</li>`;
+          }).join('')}</ul>`
+        : '<div class="extrack-empty">(tracklist tbd)</div>';
       const playerHtml = a.featured
         ? `<div class="player"><button class="btn">▶</button><input class="scrub" type="range" min="0" max="0" step="0.01" value="0"><span class="time">0:00 / 0:00</span><audio preload="metadata" src="${a.featured}"></audio></div>`
         : `<div class="player"><button class="btn" disabled>▶</button><input class="scrub" type="range" min="0" max="0" disabled><span class="time">— / —</span></div>`;
@@ -354,7 +367,7 @@
         <div class="exinfo">
           <div class="extitle">${a.title || '(untitled)'}</div>
           <div class="exmeta">${[a.year, `${a.tracks} tracks`, a.role].filter(Boolean).join(' · ')}</div>
-          <div class="extrack">${trackHtml}</div>
+          ${trackHtml}
           ${playerHtml}
         </div>
         ${tabsHtml ? `<div class="exTabs">${tabsHtml}</div>` : ''}`;
@@ -377,15 +390,17 @@
         scrub.max = audio.duration || 0;
         time.textContent = `0:00 / ${fmt(audio.duration)}`;
       });
+      const featuredLi = $expanded.querySelector('li.featured');
+      const setPlaying = on => featuredLi && featuredLi.classList.toggle('playing', on);
       btn.addEventListener('click', () => {
-        if (audio.paused) { audio.play(); btn.textContent = '■'; }
-        else              { audio.pause(); audio.currentTime = 0; btn.textContent = '▶'; }
+        if (audio.paused) { audio.play(); btn.textContent = '■'; setPlaying(true);  }
+        else              { audio.pause(); audio.currentTime = 0; btn.textContent = '▶'; setPlaying(false); }
       });
       audio.addEventListener('timeupdate', () => {
         scrub.value = audio.currentTime;
         time.textContent = `${fmt(audio.currentTime)} / ${fmt(audio.duration)}`;
       });
-      audio.addEventListener('ended', () => { btn.textContent = '▶'; scrub.value = 0; });
+      audio.addEventListener('ended', () => { btn.textContent = '▶'; scrub.value = 0; setPlaying(false); });
       scrub.addEventListener('input', () => { audio.currentTime = +scrub.value; });
     }
 
