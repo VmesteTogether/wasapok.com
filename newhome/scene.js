@@ -1009,7 +1009,7 @@ function layoutAndDraw() {
     ovlCtx.font = `700 ${FS}px ${FONT}`;
     const aboutX = iconX + iconW + 16;
     ovlCtx.globalAlpha = (hoverKey === 'about') ? 1 : 0.7;
-    const aboutW = drawSpaced('about', aboutX, top, FS);
+    const aboutW = drawSpaced('what?', aboutX, top, FS);
     ovlElements.push({ key: 'about', x: aboutX, y: top, w: aboutW, h: FS, action: openAbout });
   }
   // Dropdown — one identical "wasapok angleur" link per interactive element.
@@ -2535,9 +2535,9 @@ window.addEventListener('mousemove', (e) => {
   if (key !== hoverKey) { hoverKey = key; layoutAndDraw(); }
 });
 
-const TILT_SCALE = 0.033;                    // how strongly each cubby tilts per meter of cursor offset (+10%)
-const TILT_MAX_X = CUBBY_W * 0.42;           // clamp so back stays inside the side panels
-const TILT_MAX_Y = CUBBY_H * 0.786;          // +5% more vertical tilt range
+const TILT_SCALE = 0.050;                    // how strongly each cubby tilts per meter of cursor offset (deeper, punchier parallax)
+const TILT_MAX_X = CUBBY_W * 0.47;           // clamp so back stays inside the side panels (0.5 = hard punch-through limit)
+const TILT_MAX_Y = CUBBY_H * 0.85;           // wider vertical tilt range to match the stronger scale
 const _target = new THREE.Vector2();
 
 function updateTilt() {
@@ -2566,7 +2566,7 @@ function updateTilt() {
       } else {
         _target.set(0, 0);                  // no pointer (touch): rest head-on
       }
-      cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.55);
+      cg.userData.cubbyMesh.material.uniforms.uBackOffset.value.lerp(_target, 0.70);
     }
   }
   // Affordance: pointer cursor while the mouse hovers the doorway link.
