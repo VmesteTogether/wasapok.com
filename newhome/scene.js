@@ -34,7 +34,7 @@ camera.lookAt(0, 0, 0);
 
 // Painting focus state: clicking a wall painting zooms the camera in to view
 // it head-on; clicking anywhere returns. updatePan() lerps the camera toward
-// the focus target (and eases the fisheye to 0) when focusPainting is set.
+// the focus target when focusPainting is set.
 let focusPainting = null;        // the painting pic mesh currently zoomed, or null
 let camRestZ = 20;               // resting camera z (set by onResize); focus overrides it
 let camLookX = 0, camLookY = 0;  // lerped lookAt point so the turn-to-art is smooth
@@ -73,92 +73,18 @@ mkRoom(RW, RD,  Math.PI / 2, 0, 0,  GRID_H / 2, RD / 2);   // ceiling
 mkRoom(RD, GRID_H, 0,  Math.PI / 2, -RW / 2, 0, RD / 2);   // left wall
 mkRoom(RD, GRID_H, 0, -Math.PI / 2,  RW / 2, 0, RD / 2);   // right wall
 
-// === Fisheye post-processing. The scene renders into a target, then a
-// barrel/lens-distortion shader on a fullscreen quad warps it so the room
-// bulges. The target is tagged sRGB and the background is fed as raw display
-// values, so the warp is a pure passthrough — colors/lighting are unchanged,
-// only the geometry bulges. Revert: set FISHEYE_STRENGTH = 0, or delete this
-// block + the two-pass render and restore a plain pointerNDC + render.
-const FISHEYE_STRENGTH = 0.78;             // 0 = off; higher = more bulge (lowered so the warp's background frame is thin and the room reaches the screen edges)
-const COLOR_SAT = .92;                     // global saturation multiplier (1 = unchanged)
-const COLOR_VAL = 1.00;                     // global value/brightness multiplier (1 = unchanged)
-const COVER_SAT = 0.65;                     // album-cover ART ONLY: extra saturation multiplier baked into the cover material (1 = unchanged, 0 = greyscale); applied before the global grade
+// Album-cover + wall-painting color knobs. (The global fisheye post-process —
+// lens bulge, HSV grade, daylight tint, vignette — used to live here and was
+// removed; the scene now renders straight to the screen, rectilinear + neutral.)
+const COVER_SAT = 0.65;                     // album-cover ART ONLY: extra saturation multiplier baked into the cover material (1 = unchanged, 0 = greyscale)
 const PAINTING_HAZE = 0.32;                 // wall-painting ART ONLY: atmospheric veil toward the room's dark air (0 = none); pushes the paintings "further back" than the cubbies
-const fisheyeRT = new THREE.WebGLRenderTarget(2, 2, {
-  magFilter: THREE.NearestFilter, minFilter: THREE.NearestFilter,
-});
-fisheyeRT.texture.colorSpace = THREE.SRGBColorSpace;   // store display-ready pixels → no color shift on passthrough
-const fisheyeScene = new THREE.Scene();
-const fisheyeCam = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-const fisheyeMat = new THREE.ShaderMaterial({
-  uniforms: {
-    tDiffuse:  { value: fisheyeRT.texture },
-    uStrength: { value: FISHEYE_STRENGTH },
-    uAspect:   { value: 1 },
-    uBg:       { value: new THREE.Vector3(0x1a / 255, 0x14 / 255, 0x10 / 255) },  // raw sRGB of the clear color
-    uSat:      { value: COLOR_SAT },
-    uVal:      { value: COLOR_VAL },
-  },
-  vertexShader: `
-    varying vec2 vUv;
-    void main() { vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }
-  `,
-  fragmentShader: `
-    varying vec2 vUv;
-    uniform sampler2D tDiffuse;
-    uniform float uStrength;
-    uniform float uAspect;
-    uniform float uSat;
-    uniform float uVal;
-    uniform vec3  uBg;
-    vec3 rgb2hsv(vec3 c) {
-      vec4 K = vec4(0.0, -1.0 / 3.0, 2.0 / 3.0, -1.0);
-      vec4 p = mix(vec4(c.bg, K.wz), vec4(c.gb, K.xy), step(c.b, c.g));
-      vec4 q = mix(vec4(p.xyw, c.r), vec4(c.r, p.yzx), step(p.x, c.r));
-      float d = q.x - min(q.w, q.y);
-      float e = 1.0e-10;
-      return vec3(abs(q.z + (q.w - q.y) / (6.0 * d + e)), d / (q.x + e), q.x);
-    }
-    vec3 hsv2rgb(vec3 c) {
-      vec4 K = vec4(1.0, 2.0 / 3.0, 1.0 / 3.0, 3.0);
-      vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
-      return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
-    }
-    void main() {
-      vec2 c  = vUv - 0.5;
-      vec2 ca = vec2(c.x * uAspect, c.y);     // aspect-correct so the bulge stays round
-      float warp = 1.0 + uStrength * dot(ca, ca);
-      vec2 src = 0.5 + c * warp;
-      vec3 col = (src.x < 0.0 || src.x > 1.0 || src.y < 0.0 || src.y > 1.0)
-        ? uBg                                 // outside the source → background
-        : texture2D(tDiffuse, src).rgb;
-      vec3 hsv = rgb2hsv(col);                // turn up saturation + value across the whole scene
-      hsv.y = clamp(hsv.y * uSat, 0.0, 1.0);
-      hsv.z = clamp(hsv.z * uVal, 0.0, 1.0);
-      vec3 outc = hsv2rgb(hsv);
-      // natural daylight: brighter + warm from the upper-left "window", cooler low
-      float key = 0.9 + 0.22 * clamp((1.0 - vUv.x) * 0.5 + vUv.y * 0.7, 0.0, 1.0);
-      outc *= key * mix(vec3(0.95, 0.98, 1.05), vec3(1.06, 1.02, 0.9), vUv.y);
-      float vig = smoothstep(0.98, 0.62, length(vUv - 0.5));   // room fills to the screen edges; only the far corners fall off
-      outc = mix(uBg, outc, vig);
-      gl_FragColor = vec4(clamp(outc, 0.0, 1.0), 1.0);
-    }
-  `,
-  depthTest: false, depthWrite: false,
-});
-fisheyeScene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), fisheyeMat));
-
-// Map a pointer (clientX/Y) to the NDC of the scene content actually shown
-// under it — apply the SAME lens warp the shader uses, so clicks, drags, hover
-// and the doorway hit-test line up with the warped image. Strength 0 → plain.
+// Map a pointer (clientX/Y) to scene NDC for raycasting — plain rectilinear
+// mapping now that the fisheye lens warp (which used to offset clicks to match
+// the bulged image) is gone.
 const _pndc = new THREE.Vector2();
 function pointerNDC(clientX, clientY, out = _pndc) {
-  const cx = clientX / window.innerWidth  - 0.5;
-  const cy = (1 - clientY / window.innerHeight) - 0.5;     // y-up, matches the shader's vUv
-  const ax = cx * fisheyeMat.uniforms.uAspect.value;
-  const warp = 1 + fisheyeMat.uniforms.uStrength.value * (ax * ax + cy * cy);
-  out.x = (0.5 + cx * warp) * 2 - 1;
-  out.y = (0.5 + cy * warp) * 2 - 1;
+  out.x = (clientX / window.innerWidth) * 2 - 1;
+  out.y = -((clientY / window.innerHeight) * 2 - 1);
   return out;
 }
 
@@ -183,6 +109,7 @@ const MERGES = [
   { rowMin: 2, rowMax: 3, colMin: 4, colMax: 4, omitBack: true  },  // A5+B5 doorway
   { rowMin: 0, rowMax: 1, colMin: 3, colMax: 4, omitBack: false },  // C4+C5+D4+D5 square
   { rowMin: 2, rowMax: 3, colMin: 0, colMax: 0, omitBack: false },  // A1+B1 merged
+  { rowMin: 0, rowMax: 1, colMin: 0, colMax: 0, omitBack: false },  // C1+D1 merged (tall vertical cubby)
 ];
 function mergeAt(r, c) {
   for (const m of MERGES) {
@@ -893,15 +820,16 @@ function goToPage(p) {
   updatePageUI();
 }
 
-// === Homepage overlay — wordmark + ☰ menu, drawn to a 2D canvas and rendered
-// through the SAME barrel-distortion as the scene so the type bulges with the
-// room instead of sitting flat on top. The overlay canvas is full-screen and
-// 1:1 with CSS pixels; a dedicated warp pass (overlayWarpMat, same lens math as
-// fisheyeMat but no grade/vignette) composites it over the warped scene. Clicks
-// are forward-warped via pointerNDC into this canvas's space for hit-testing.
+// === Homepage overlay — wordmark + ☰ menu, drawn to a 2D canvas and composited
+// flat over the scene on its own full-resolution layer (so the type stays crisp
+// above the pixelated scene render). The overlay canvas is full-screen and 1:1
+// with CSS pixels; overlayWarpMat just does an alpha passthrough + post-load
+// fade. Clicks map straight into this canvas's space for hit-testing.
 const BRAND   = 'wasapok angleur';
 const FONT    = "'Share Tech Mono', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace";
 const LSP     = 0.18;        // letter-spacing as a fraction of font size (matches the old 0.18em)
+const CHUNK_DEPTH = 0.16;    // extruded "chunk" depth as a fraction of font size (medium 3D)
+const CHUNK_SIDE  = '#b0945a';   // darker cream for the extruded sides receding toward the lens center
 
 const ovlCanvas = document.createElement('canvas');
 const ovlCtx    = ovlCanvas.getContext('2d');
@@ -910,43 +838,24 @@ ovlTex.colorSpace = THREE.SRGBColorSpace;
 ovlTex.minFilter = THREE.LinearFilter;          // NPOT canvas → no mipmaps
 ovlTex.generateMipmaps = false;
 
-// Overlay lens: a barrel warp anchored at the wordmark's OWN corner (top-left)
-// instead of the screen center — so the type keeps a lens-like curl but stays
-// pinned to the screen edge rather than being dragged into the scene's central
-// bulge. Independent of the scene fisheye (FISHEYE_STRENGTH); OVERLAY_WARP is
-// the knob for how much it curls. OVL_PIVOT is UV space, y-up: (0,1)=top-left.
-const OVERLAY_WARP = 0.26;                    // curvature amount; 0.26 matches the scene fisheye's "angle"
-const OVL_PIVOT = new THREE.Vector2(0.0, 1.0);   // the point kept fixed under the curve (top-left corner)
-
+// The overlay (wordmark + ☰ menu) is composited flat over the scene. It used to
+// be barrel-warped to curl with the fisheye; that warp was removed, so this is
+// now a plain alpha passthrough with the post-load fade.
 const overlayWarpScene = new THREE.Scene();
 const overlayWarpCam   = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
 const overlayWarpMat   = new THREE.ShaderMaterial({
   transparent: true, depthTest: false, depthWrite: false,
   uniforms: {
     tOverlay:  { value: ovlTex },
-    uStrength: { value: OVERLAY_WARP },
-    uAspect:   { value: 1 },
     uOpacity:  { value: 0 },                  // fades in just after load
-    uPivot:    { value: OVL_PIVOT },          // corner anchor — keeps the curl pinned to the edge
   },
   vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
   fragmentShader: `
     varying vec2 vUv;
     uniform sampler2D tOverlay;
-    uniform float uStrength, uAspect, uOpacity;
-    uniform vec2 uPivot;
+    uniform float uOpacity;
     void main() {
-      // Center-anchored barrel curvature (same angle as the scene fisheye) plus a
-      // constant offset that re-pins uPivot — so the type curves like the lens but
-      // sits at the corner instead of being dragged toward the middle.
-      vec2 cc  = uPivot - 0.5;
-      vec2 cca = vec2(cc.x * uAspect, cc.y);
-      vec2 offset = uPivot - (0.5 + cc * (1.0 + uStrength * dot(cca, cca)));
-      vec2 c  = vUv - 0.5;
-      vec2 ca = vec2(c.x * uAspect, c.y);
-      vec2 src = 0.5 + c * (1.0 + uStrength * dot(ca, ca)) + offset;
-      if (src.x < 0.0 || src.x > 1.0 || src.y < 0.0 || src.y > 1.0) discard;
-      vec4 t = texture2D(tOverlay, src);
+      vec4 t = texture2D(tOverlay, vUv);
       gl_FragColor = vec4(t.rgb, t.a * uOpacity);
     }
   `,
@@ -970,11 +879,29 @@ let menuOpen = false, hoverKey = null, overlayReady = false, ovlFadeStart = 0;
 let ovlElements = [];            // {key, x, y, w, h, action} hit-rects in canvas-pixel space
 const _ovlN = new THREE.Vector2();
 
+// Extrude one glyph into a 3D "chunk" that recedes toward the screen center (a
+// shared vanishing point) by stacking offset copies in the darker-cream side
+// color behind the face, so the depth runs along radial lines. Drawn deepest-
+// first so each nearer copy covers the last, leaving a solid block whose visible
+// side faces the center.
+function chunkChar(ch, gx, gy, size) {
+  const steps = Math.round(size * CHUNK_DEPTH);
+  if (steps < 1) return;
+  const cw = ovlCtx.measureText(ch).width;
+  let dx = ovlCanvas.width / 2 - (gx + cw / 2), dy = ovlCanvas.height / 2 - (gy + size / 2);   // toward the vanishing point
+  const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+  const prevFill = ovlCtx.fillStyle, prevShadow = ovlCtx.shadowColor;
+  ovlCtx.shadowColor = 'rgba(0,0,0,0)';            // no shadow on the buried copies
+  ovlCtx.fillStyle = CHUNK_SIDE;
+  for (let s = steps; s >= 1; s--) ovlCtx.fillText(ch, gx + dx * s, gy + dy * s);
+  ovlCtx.fillStyle = prevFill; ovlCtx.shadowColor = prevShadow;
+}
+
 // Draw text with manual letter-spacing; returns total width (for hit-rects).
 function drawSpaced(text, x, y, size) {
   const sp = size * LSP;
   let cx = x;
-  for (const ch of text) { ovlCtx.fillText(ch, cx, y); cx += ovlCtx.measureText(ch).width + sp; }
+  for (const ch of text) { chunkChar(ch, cx, y, size); ovlCtx.fillText(ch, cx, y); ovlCtx.strokeText(ch, cx, y); cx += ovlCtx.measureText(ch).width + sp; }
   return cx - sp - x;
 }
 function measureSpaced(text, size) {
@@ -990,9 +917,10 @@ function layoutAndDraw() {
   ovlCtx.clearRect(0, 0, W, H);
   ovlCtx.textBaseline = 'top';
   ovlCtx.shadowColor = 'rgba(0,0,0,0.55)'; ovlCtx.shadowBlur = 4; ovlCtx.shadowOffsetY = 1;
+  ovlCtx.strokeStyle = 'rgba(255,255,255,0.44)'; ovlCtx.lineWidth = 1.2; ovlCtx.lineJoin = 'round';   // thin, faint white outline around every glyph + the icon
   ovlElements = [];
-  const left = 128, top = 151;
-  const FS = 50.0, IFS = 41.0;     // +1.5% over previous
+  const left = 144, top = 158;
+  const FS = 72.0, IFS = 59.0;     // wordmark + ☰ icon font sizes
   // Wordmark (display only — clicks pass through to the diamond behind it).
   ovlCtx.fillStyle = '#f3dcb0';
   ovlCtx.globalAlpha = 1;
@@ -1003,13 +931,15 @@ function layoutAndDraw() {
   const iconX = left + wmW + 12, iconY = top + 1;
   const iconW = ovlCtx.measureText('☰').width;
   ovlCtx.globalAlpha = (menuOpen || hoverKey === 'icon') ? 1 : 0.7;
+  chunkChar('☰', iconX, iconY, IFS);
   ovlCtx.fillText('☰', iconX, iconY);
+  ovlCtx.strokeText('☰', iconX, iconY);
   ovlElements.push({ key: 'icon', x: iconX, y: top, w: iconW, h: 24, action: toggleMenu });
   if (menuOpen) {
     ovlCtx.font = `700 ${FS}px ${FONT}`;
     const aboutX = iconX + iconW + 16;
     ovlCtx.globalAlpha = (hoverKey === 'about') ? 1 : 0.7;
-    const aboutW = drawSpaced('what?', aboutX, top, FS);
+    const aboutW = drawSpaced('about', aboutX, top, FS);
     ovlElements.push({ key: 'about', x: aboutX, y: top, w: aboutW, h: FS, action: openAbout });
   }
   // Dropdown — one identical "wasapok angleur" link per interactive element.
@@ -1038,17 +968,10 @@ const openAbout = () => { window.location.href = '/about'; };
 // (clickable rects only), so clicks land on the warped glyphs, not flat boxes.
 function overlayHitAt(clientX, clientY) {
   if (!overlayReady) return null;
-  // Forward-warp the click with the SAME corner-anchored lens as the shader, so
-  // hits land on the curled glyphs where they actually appear on screen.
-  const A = overlayWarpMat.uniforms.uAspect.value;
-  const ccx = OVL_PIVOT.x - 0.5, ccy = OVL_PIVOT.y - 0.5;
-  const wC = 1 + OVERLAY_WARP * ((ccx * A) * (ccx * A) + ccy * ccy);
-  const offX = OVL_PIVOT.x - (0.5 + ccx * wC), offY = OVL_PIVOT.y - (0.5 + ccy * wC);
-  const cx = clientX / window.innerWidth - 0.5;
-  const cy = (1 - clientY / window.innerHeight) - 0.5;             // y-up
-  const w = 1 + OVERLAY_WARP * ((cx * A) * (cx * A) + cy * cy);
-  const px = (0.5 + cx * w + offX) * ovlCanvas.width;
-  const py = (1 - (0.5 + cy * w + offY)) * ovlCanvas.height;
+  // Overlay is drawn flat (1:1 with CSS pixels), so a screen point maps straight
+  // to canvas-pixel space — no lens forward-warp needed anymore.
+  const px = (clientX / window.innerWidth)  * ovlCanvas.width;
+  const py = (clientY / window.innerHeight) * ovlCanvas.height;
   for (const el of ovlElements) {
     if (px >= el.x - 3 && px <= el.x + el.w + 3 && py >= el.y - 3 && py <= el.y + el.h + 4) return el;
   }
@@ -1084,14 +1007,11 @@ const onResize = () => {
   camera.updateProjectionMatrix();
   const rw = Math.floor(w / PIXELATION), rh = Math.floor(h / PIXELATION);
   renderer.setSize(rw, rh, false);
-  fisheyeRT.setSize(rw, rh);
-  fisheyeMat.uniforms.uAspect.value = rw / rh;
   canvas.style.width  = w + 'px';
   canvas.style.height = h + 'px';
   ovlCanvas.width = w; ovlCanvas.height = h;     // overlay drawn 1:1 with CSS pixels
   ovlGL.setSize(w, h);                           // full-res overlay layer (crisp), 1:1 with the source canvas
-  overlayWarpMat.uniforms.uAspect.value = rw / rh;
-  if (overlayReady) layoutAndDraw();             // re-lay out the warped overlay at the new size
+  if (overlayReady) layoutAndDraw();             // re-lay out the overlay at the new size
   updatePageUI();
 };
 window.addEventListener('resize', onResize);
@@ -1160,7 +1080,7 @@ const drawerMeshes = [], drawerGroups = [];   // filing-cabinet drawers — clic
 
 const topLeftCubby = cubbies.D1;     // top row (D), leftmost column (1)
 const SCULPT_Z   = -CUBBY_D * 0.5;
-const CEILING_Y  =  CUBBY_H / 2;
+const CEILING_Y  =  topLeftCubby.userData.openingH / 2;   // true ceiling of the (merged, tall) cubby — keeps the base mounted at the top
 const BASE_SCALE =  0.22;
 
 // --- Biopunk manifold: stacked collar + hub + cap + port + 4 reinforced
@@ -1252,6 +1172,7 @@ const crystalMat = new THREE.MeshStandardMaterial({
   envMap: diamondEnvMap,
   envMapIntensity: 5.4,             // brighter reflections so the metallic facets read clearly against the wall
   side: THREE.DoubleSide,
+  depthTest: false, depthWrite: false,   // read over the cubby panels (like the manifold) so the oversized gem shows fully
 });
 
 let diamondMesh = null;       // assigned when WasaDiminds-02.obj finishes loading
@@ -1259,7 +1180,7 @@ let diamondDrag = null;       // { lastX } while user is dragging to spin
 let diamondSpinVel = 0;       // angular velocity (rad/frame) — gives the spin inertia after release
 
 const diamondGroup = new THREE.Group();
-const DIAMOND_BASE_Y = 0.015;       // anchor — bob oscillates around this
+const DIAMOND_BASE_Y = CEILING_Y - 1.8;   // anchor — bob oscillates around this; hangs just below the ceiling base so it reads as connected to the manifold
 diamondGroup.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 diamondGroup.rotation.x = Math.PI / 2;   // 90° tilt
 topLeftCubby.add(diamondGroup);
@@ -1271,9 +1192,37 @@ diamondGroup.add(new THREE.PointLight(0x6aa8ff, 1.8, 1.6, 1.7));
 // bobbing diamond) so the light source stays anchored at the base.
 const baseSpot = new THREE.SpotLight(0x8ec4ff, 16.0, 1.4, Math.PI / 5, 0.7, 1.2);
 baseSpot.position.set(0, CEILING_Y - 0.18, SCULPT_Z);
-baseSpot.target.position.set(0, -CUBBY_H / 2 + 0.2, SCULPT_Z);
+baseSpot.target.position.set(0, DIAMOND_BASE_Y - 0.6, SCULPT_Z);
 topLeftCubby.add(baseSpot);
 topLeftCubby.add(baseSpot.target);
+
+// Faint downward light cone projecting from the diamond's base — a translucent
+// additive cone (apex at the base, widening + fading as it falls) so it reads as
+// a soft projection beaming down from the manifold. Purely the visible volume,
+// not a real light. depthTest off + renderOrder 4 → under the diamond, over panels.
+{
+  const coneH = 1.0, coneR = 0.36;
+  const coneMat = new THREE.ShaderMaterial({
+    transparent: true, depthTest: false, depthWrite: false, blending: THREE.AdditiveBlending,
+    uniforms: { uColor: { value: new THREE.Color(0xaad4ff) }, uOpacity: { value: 0.2 } },
+    vertexShader: `
+      varying float vY;
+      void main() {
+        vY = (position.y + ${(coneH / 2).toFixed(3)}) / ${coneH.toFixed(3)};   // 0 at the wide bottom → 1 at the apex
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      uniform vec3 uColor; uniform float uOpacity;
+      varying float vY;
+      void main() { gl_FragColor = vec4(uColor, uOpacity * smoothstep(0.0, 0.8, vY)); }   // bright at the base, fading down
+    `,
+  });
+  const lightCone = new THREE.Mesh(new THREE.ConeGeometry(coneR, coneH, 28, 1, true), coneMat);
+  lightCone.position.set(0, CEILING_Y - coneH / 2, SCULPT_Z);   // apex at the base, projecting downward
+  lightCone.renderOrder = 4;
+  topLeftCubby.add(lightCone);
+}
 
 // === Emblem glow for D1 — cool icy lighting against the warm room to mark the
 // crystal as the site's emblem: a bright cool key for facet sparkle plus the
@@ -1285,7 +1234,7 @@ const D1_CLIP = topLeftCubby.userData.clippingPlanes;
 // (complements baseSpot's top-down wash). Cool white, tight cone.
 const keySpot = new THREE.SpotLight(0xdaf0ff, 22.0, 2.6, Math.PI / 7, 0.5, 1.3);
 keySpot.position.set(0.5, CEILING_Y + 0.35, SCULPT_Z + 1.3);
-keySpot.target.position.set(0, 0, SCULPT_Z);
+keySpot.target.position.set(0, DIAMOND_BASE_Y, SCULPT_Z);
 topLeftCubby.add(keySpot);
 topLeftCubby.add(keySpot.target);
 
@@ -1376,7 +1325,7 @@ fetch('WasaDiminds-02.obj').then(r => {
   const ctr  = geom.boundingBox.getCenter(new THREE.Vector3());
   const maxD = Math.max(size.x, size.y, size.z) || 1;
   geom.translate(-ctr.x, -ctr.y, -ctr.z);
-  const s = 1.20 / maxD;
+  const s = 2.00 / maxD;
   geom.scale(s, s, s);
   diamondMesh = new THREE.Mesh(geom, crystalMat);
   diamondGroup.add(diamondMesh);
@@ -2898,19 +2847,19 @@ function updatePan() {
   panCurrentX += (panTargetX - panCurrentX) * 0.18;
   if (Math.abs(panTargetX - panCurrentX) < 0.0015) panCurrentX = panTargetX;
 
-  // Pick the camera + lookAt + fisheye targets: a focused painting (zoom in,
-  // head-on, flat) vs the resting wall view. Lerp toward whichever each frame.
-  let tx, ty, tz, lx, ly, tFish;
+  // Pick the camera + lookAt targets: a focused painting (zoom in, head-on) vs
+  // the resting wall view. Lerp toward whichever each frame.
+  let tx, ty, tz, lx, ly;
   if (focusPainting) {
     const p = focusPainting, w = p.scale.x, h = p.scale.y;
     const fovV = camera.fov * Math.PI / 180;
     const fovH = 2 * Math.atan(Math.tan(fovV / 2) * camera.aspect);
     const dz = Math.max((h / 2) / Math.tan(fovV / 2), (w / 2) / Math.tan(fovH / 2)) * 1.12;  // distance that fills the FOV with a small margin
     tx = p.position.x; ty = p.position.y; tz = p.position.z + dz;
-    lx = p.position.x; ly = p.position.y; tFish = 0;          // ease the warp out so the art reads true
+    lx = p.position.x; ly = p.position.y;
   } else {
     tx = panCurrentX; ty = 0; tz = camRestZ;
-    lx = panCurrentX; ly = 0; tFish = FISHEYE_STRENGTH;
+    lx = panCurrentX; ly = 0;
   }
   const k = 0.12;
   camera.position.x += (tx - camera.position.x) * k;
@@ -2919,7 +2868,6 @@ function updatePan() {
   camLookX += (lx - camLookX) * k;
   camLookY += (ly - camLookY) * k;
   camera.lookAt(camLookX, camLookY, 0);
-  fisheyeMat.uniforms.uStrength.value += (tFish - fisheyeMat.uniforms.uStrength.value) * k;
 
   // Haze clears on the painting you've stepped up to; others stay veiled.
   for (const p of paintingMeshes) {
@@ -2947,16 +2895,12 @@ function render(now) {
     if (updateSky) updateSky();
     if (updateMists) updateMists();
     { const tn = performance.now() / 1000; for (const m of antennaMats) m.color.setHex(m.userData.baseHex).multiplyScalar(0.55 + 0.45 * Math.max(0, Math.sin(tn * m.userData.speed + m.userData.phase))); }   // per-antenna fog-light blink on its own interval
-    renderer.setRenderTarget(fisheyeRT);     // scene → off-screen target
-    renderer.render(scene, camera);
-    renderer.setRenderTarget(null);          // → screen, warped through the fisheye quad
-    renderer.render(fisheyeScene, fisheyeCam);
-    // Warped homepage overlay, composited on top with the SAME lens math and a
+    renderer.render(scene, camera);          // straight to the screen — no post-process pass
+    // Homepage overlay, composited flat on its own crisp full-res layer with a
     // post-load fade. autoClear off so it doesn't wipe the scene just drawn.
     if (overlayReady) {
-      overlayWarpMat.uniforms.uAspect.value   = fisheyeMat.uniforms.uAspect.value;   // same w/h ratio as the scene
       overlayWarpMat.uniforms.uOpacity.value  = Math.max(0, Math.min(1, (now - ovlFadeStart) / 1200));
-      ovlGL.render(overlayWarpScene, overlayWarpCam);   // crisp, full-res, corner-anchored warp on its own layer
+      ovlGL.render(overlayWarpScene, overlayWarpCam);
     }
   }
   requestAnimationFrame(render);
