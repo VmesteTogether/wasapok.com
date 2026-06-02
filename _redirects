@@ -1,0 +1,4 @@
+# Home page: serve the /about page at the site root while keeping the bare URL.
+# (200 = rewrite, not a 301/redirect, so the address stays wasapok.com.)
+# The about page carries <base href="/about/"> so its relative assets still load.
+/    /about/index.html    200
