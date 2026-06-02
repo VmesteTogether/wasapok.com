@@ -123,6 +123,7 @@
        texture (CSS var --grass); the opening is a darker recessed alcove. → /newhome. */
     #grassDoor { position: absolute; right: 20px; bottom: 20px; z-index: 60;
                  width: 128px; height: 148px; cursor: pointer; display: block;
+                 transform: scale(0.667); transform-origin: bottom right;   /* 2/3 size, anchored at the corner */
                  transition: transform 0.18s ease; }
     #grassDoor .gd-wall { position: absolute; inset: 0; overflow: hidden; image-rendering: pixelated;
                  background-image: var(--grass); background-size: 56px 56px;
@@ -154,9 +155,9 @@
                  text-shadow: 0 1px 3px rgba(0,0,0,0.55);
                  font: 700 36px 'Share Tech Mono', ui-monospace, monospace;
                  transition: transform 0.2s ease, opacity 0.2s ease, text-shadow 0.2s ease; }
-    #grassDoor:hover { transform: translateY(-2px); }
+    #grassDoor:hover { transform: scale(1) translateY(-2px); }   /* grows from 2/3 up to full size on hover */
     #grassDoor:hover .gd-door { filter: brightness(0.74) saturate(0.9); }   /* hallway lifts a touch on hover */
-    #grassDoor:hover .gd-arrow { opacity: 1; transform: translate(7px, -50%);   /* lights up + nudges toward the door */
+    #grassDoor:hover .gd-arrow { opacity: 1; transform: translate(7px, -50%);
                  text-shadow: 0 0 9px rgba(255,236,180,0.95); }
     @media (max-width: 560px) { #grassDoor { right: 12px; bottom: 12px; transform: scale(0.82); transform-origin: bottom right; } }
 
@@ -169,7 +170,7 @@
     .tile-enter { animation: tileIn 0.5s cubic-bezier(0.2,0.7,0.2,1) backwards; }
     @keyframes tileIn { from { opacity: 0; transform: translateY(16px) scale(0.95); } to { opacity: 1; transform: none; } }
     #grassDoor { animation: doorGrow 0.7s cubic-bezier(0.2,0.7,0.2,1) 0.55s backwards; }
-    @keyframes doorGrow { from { opacity: 0; transform: translateY(16px) scale(0.82); } to { opacity: 1; transform: none; } }
+    @keyframes doorGrow { from { opacity: 0; transform: scale(0.55) translateY(16px); } to { opacity: 1; transform: scale(0.667); } }
     .expanded.on { animation: expandBloom 0.34s cubic-bezier(0.2,0.7,0.2,1); }
     @keyframes expandBloom { from { opacity: 0; transform: translateY(-8px) scale(0.985); } to { opacity: 1; transform: none; } }
 
