@@ -134,16 +134,7 @@
     display: flex; align-items: center; justify-content: center; flex-direction: column;
     gap: 20px;
   }
-  #loading .crest {
-    width: 84px; height: 84px;
-    border: 4px solid #d4a64c;
-    border-radius: 50%;
-    display: flex; align-items: center; justify-content: center;
-    color: #d4a64c;
-    font-family: 'MedievalSharp', cursive; font-weight: 700; font-size: 44px;
-    animation: pulse 1.6s ease-in-out infinite;
-    box-shadow: inset 0 0 12px rgba(0,0,0,0.6);
-  }
+  #loading .crest { width: 84px; height: 84px; }
   @keyframes pulse {
     0%,100% { box-shadow: inset 0 0 12px rgba(0,0,0,0.6), 0 0 0 0 rgba(212,166,76,0.4); }
     50%     { box-shadow: inset 0 0 12px rgba(0,0,0,0.6), 0 0 0 16px rgba(212,166,76,0); }
@@ -207,7 +198,6 @@
 
   <div id="title">
     Eskleodrome
-    <small>Entrance</small>
   </div>
 
   <div id="help-desk">
@@ -288,8 +278,8 @@
   </div>
 
   <div id="loading">
-    <div class="crest">W</div>
-    <div class="label">Approaching…</div>
+    <div class="crest"></div>
+    <div class="label"></div>
   </div>
 
 <script type="importmap">
@@ -302,5 +292,49 @@
 </script>
 
 <script type="module" src="outside/main.js?v=78"></script>
+  <script type="module" src="loading-diamond.js"></script>
+  <script>
+    // Arriving at the grounds from /newhome → a white "you've made it across"
+    // message that fades in, holds, then disappears. (Internal castle nav won't match.)
+    if (document.referrer.includes('/newhome')) {
+      const show = () => {
+        if (!document.getElementById('crossfont')) {
+          const lk = document.createElement('link'); lk.id = 'crossfont'; lk.rel = 'stylesheet';
+          lk.href = 'https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@500;700&display=swap';
+          document.head.appendChild(lk);
+        }
+        const el = document.createElement('div');
+        el.style.cssText = 'position:fixed;inset:0;z-index:100;display:flex;align-items:center;justify-content:center;' +
+          "color:#fff;font:700 clamp(18px,4vw,36px) 'Pixelify Sans',sans-serif;letter-spacing:0.1em;text-align:center;padding:0 7vw;" +
+          'pointer-events:none;text-shadow:0 2px 11px rgba(0,0,0,0.8);transform:scale(1.12,1.6);opacity:0;transition:opacity 1s ease;';
+        const wrap = document.createElement('div');
+        wrap.style.cssText = 'display:flex;flex-direction:column;align-items:center;gap:0.3em;';
+        // each line = a faded base + a full-opacity copy masked to a razor-thin band at the letters' middle
+        const band = 'calc(50% - 0.75px)', band2 = 'calc(50% + 0.75px)';
+        const mask = 'linear-gradient(transparent ' + band + ',#000 ' + band + ',#000 ' + band2 + ',transparent ' + band2 + ')';
+        for (const t of ["you've made it", "across"]) {
+          const ln = document.createElement('div'); ln.style.cssText = 'position:relative;white-space:nowrap;';
+          const base = document.createElement('span'); base.textContent = t; base.style.opacity = '0.5';
+          const sharp = document.createElement('span'); sharp.textContent = t;
+          sharp.style.cssText = 'position:absolute;left:0;top:0;-webkit-mask:' + mask + ';mask:' + mask + ';';
+          ln.append(base, sharp); wrap.append(ln);
+        }
+        el.appendChild(wrap);
+        document.body.appendChild(el);
+        requestAnimationFrame(() => { el.style.opacity = '1'; });
+        setTimeout(() => { el.style.opacity = '0'; }, 3200);
+        setTimeout(() => { el.remove(); }, 4400);
+        // Independently fade the Eskleodrome title out a few seconds after the message's
+        // full run (~4.4s) — its own timer, not tied to the message element.
+        const title = document.getElementById('title');
+        if (title) { title.style.transition = 'opacity 1.2s ease'; setTimeout(() => { title.style.opacity = '0'; }, 7400); }
+      };
+      const ld = document.getElementById('loading');
+      // Fires the instant the loading screen STARTS fading out (inline opacity set to '0'),
+      // so the message appears right as the grounds resolve from black — not after.
+      const done = () => !ld || !document.body.contains(ld) || ld.style.opacity === '0' || getComputedStyle(ld).display === 'none';
+      (function wait() { done() ? show() : setTimeout(wait, 60); })();
+    }
+  </script>
 </body>
 </html>
