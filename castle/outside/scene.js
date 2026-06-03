@@ -232,6 +232,20 @@ export async function buildScene() {
   }
   if (!spawn) spawn = { x: Math.floor(W / 2), y: Math.floor(H / 2), dir: 0 };
 
+  // Trim one tile off the LEFT edge of the walkable path (relative to spawn facing)
+  // so the boundary ends one tile earlier on the player's left. left = forward rotated
+  // 90° CCW → leftDx/leftDy below; remove the outermost walkable layer along it.
+  {
+    const leftDx = [-1, 0, 1, 0][spawn.dir], leftDy = [0, -1, 0, 1][spawn.dir];
+    let maxProj = -Infinity;
+    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++)
+      if (grid[ty][tx] === 0) { const p = tx * leftDx + ty * leftDy; if (p > maxProj) maxProj = p; }
+    for (let ty = 0; ty < H; ty++) for (let tx = 0; tx < W; tx++)
+      if (grid[ty][tx] === 0 && tx * leftDx + ty * leftDy === maxProj && !(tx === spawn.x && ty === spawn.y)) {
+        grid[ty][tx] = -1; roomId[ty][tx] = null;
+      }
+  }
+
   // Trigger pad: 10 tiles forward of spawn (5 past the previous position,
   // i.e. closer to the castle). Falls back to the farthest valid tile if
   // that exact tile is blocked or off-grid.

@@ -150,7 +150,7 @@
     position: fixed; left: 50%; top: 32%;
     transform: translate(-50%, -50%);
     z-index: 30; pointer-events: none;
-    text-align: center; opacity: 0;
+    text-align: center; opacity: 0; display: none;   /* hidden — no "Area Discovered" banner */
   }
   #discover.show { animation: discover-fade 3600ms ease-out forwards; }
   @keyframes discover-fade {
