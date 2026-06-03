@@ -1,18 +1,19 @@
-// Shared castle ambiance player. The peg's interact button starts this playlist.
-// Playback PERSISTS across page navigations: each new page load SKIPS to the next
-// song in the array (with one track, it restarts that track).
+// Shared castle ambiance player. Two playlists: one for OUTSIDE the castle (the
+// grounds) and one for INSIDE (the rooms). The page picks its playlist by location.
+// Add more songs to either array; functionality stays the same.
 //
-// ROOM-ENTRY OFFSET: when a room loads and music is playing, the song starts from
-// a RANDOM one of ENTRY_OFFSETS (seconds) so it feels like it was already playing.
-// The initial peg press and natural back-to-back advances start at 0:00.
+// Persists across page loads: each entry SKIPS to the next song in THAT context's
+// playlist and plays it from a RANDOM ENTRY_OFFSET (so it feels already playing).
+// The peg-press start and natural back-to-back advances start at 0:00. Each
+// playlist keeps its own rotation index, so they advance independently.
 //
-// SILENT_PAGES: filenames of rooms where music should NOT play. On those pages we
-// stay quiet but keep the saved state, so the next non-silent room picks up.
-//
-// Pressing #nav-interact while it's .armed (standing at the peg) toggles play/stop.
+// SILENT_PAGES: rooms where music should NOT play (state kept for the next room).
+// Pressing #nav-interact while .armed (at the peg) toggles play/stop.
 (function () {
-  const PLAYLIST = [
+  const OUTSIDE_PLAYLIST = [
     '/castle/outside/audio/Something-Like-Glass-06.mp3',
+  ];
+  const INSIDE_PLAYLIST = [
     '/castle/outside/audio/Lichen_meadow.3.mp3',
   ];
   const ENTRY_OFFSETS = [0, 12, 37, 43, 63]; // 0:00, 0:12, 0:37, 0:43, 1:03
@@ -20,10 +21,19 @@
     'hallway-2-room.html',
   ];
   const KEY = 'castleAmbiance';
+
+  const path = location.pathname;
+  const isOutside = /\/castle\/(index\.html)?$/.test(path);   // grounds = outside; rooms = inside
+  const PLAYLIST = isOutside ? OUTSIDE_PLAYLIST : INSIDE_PLAYLIST;
+  const IDX_KEY = isOutside ? 'oi' : 'ii';                    // separate rotation index per playlist
+  const isSilent = SILENT_PAGES.some(p => path.endsWith(p));
   if (!PLAYLIST.length) return;
 
-  const isSilent = SILENT_PAGES.some(p => location.pathname.endsWith(p));
   let audio = null, idx = 0, playing = false;
+  let state = { playing: false, oi: 0, ii: 0 };
+  try { const raw = sessionStorage.getItem(KEY); if (raw) state = Object.assign(state, JSON.parse(raw)); } catch (e) {}
+
+  function save() { state.playing = playing; state[IDX_KEY] = idx; sessionStorage.setItem(KEY, JSON.stringify(state)); }
 
   function ensureAudio() {
     if (audio) return;
@@ -36,30 +46,23 @@
       playFrom(0);
     });
   }
-  const save = () => sessionStorage.setItem(KEY, JSON.stringify({ idx, playing }));
 
   function tryPlay() {
     const p = audio.play();
     if (p) p.catch(() => {
-      // Autoplay blocked on this fresh page — resume on first interaction
-      // (e.g. the first d-pad press as the player starts moving).
+      // Autoplay blocked on this fresh page — resume on first interaction.
       const resume = () => { audio.play().catch(() => {}); document.removeEventListener('pointerdown', resume); };
       document.addEventListener('pointerdown', resume);
     });
   }
 
-  // The local dev server ignores HTTP Range, so a streamed <audio> can't seek
-  // (currentTime snaps back to 0). Fetching the file into a blob URL makes it
-  // fully buffered + seekable. Cache per track.
+  // Dev server ignores HTTP Range, so stream a blob URL to make seeking work.
   const blobUrls = new Map();
   function blobFor(src) {
     if (!blobUrls.has(src)) blobUrls.set(src, fetch(src).then(r => r.blob()).then(b => URL.createObjectURL(b)));
     return blobUrls.get(src);
   }
 
-  // Start the current track at `offset` seconds. offset 0 plays immediately from
-  // the streamed URL (preserves the user gesture). A seek uses the seekable blob,
-  // sets the time once metadata is ready, then plays — no 0:00 blip first.
   function playFrom(offset) {
     ensureAudio();
     const src = PLAYLIST[idx];
@@ -82,23 +85,17 @@
   function start() { idx = 0; playing = true; save(); playFrom(0); }
   function stop() { if (audio) { audio.pause(); audio.currentTime = 0; } playing = false; sessionStorage.removeItem(KEY); }
 
-  // On load: if music was playing, skip to the next track and play it from a random
-  // entry offset — unless this room is silent (stay quiet, keep state intact).
-  try {
-    const raw = sessionStorage.getItem(KEY);
-    if (raw) {
-      const st = JSON.parse(raw);
-      if (st && st.playing) {
-        playing = true;
-        idx = st.idx || 0;
-        if (!isSilent) {
-          idx = (idx + 1) % PLAYLIST.length;
-          save();
-          playFrom(ENTRY_OFFSETS[Math.floor(Math.random() * ENTRY_OFFSETS.length)]);
-        }
-      }
+  // On load: if music was playing, advance THIS context's playlist and play from a
+  // random entry offset — unless this room is silent (stay quiet, keep state).
+  if (state.playing) {
+    playing = true;
+    idx = state[IDX_KEY] || 0;
+    if (!isSilent) {
+      idx = (idx + 1) % PLAYLIST.length;
+      save();
+      playFrom(ENTRY_OFFSETS[Math.floor(Math.random() * ENTRY_OFFSETS.length)]);
     }
-  } catch (e) {}
+  }
 
   window.addEventListener('pagehide', () => { if (playing && audio) audio.pause(); });
 
