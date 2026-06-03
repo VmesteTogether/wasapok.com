@@ -59,7 +59,39 @@
       box-shadow: 0 0 16px rgba(80,190,255,0.75), inset 0 0 10px rgba(80,190,255,0.3) !important;
     }
     .look-arrow:hover::before, .look-arrow:active::before, .look-arrow.active::before { color: #bfeaff; }
+
+    /* center interact button — grey at rest, glows orange on hover/press */
+    #nav-center { display: flex !important; align-items: center; justify-content: center; }
+    #nav-interact {
+      width: 50px; height: 50px; padding: 0; border-radius: 50%; position: relative;
+      border: 1.5px solid rgba(185,193,203,0.6);
+      background: rgba(185,193,203,0.06);
+      box-shadow: 0 0 6px rgba(170,180,195,0.20), inset 0 0 7px rgba(170,180,195,0.08);
+      cursor: pointer; pointer-events: auto; -webkit-tap-highlight-color: transparent; touch-action: none;
+      transition: box-shadow 80ms, border-color 80ms, background 80ms;
+    }
+    #nav-interact::before { content:''; position:absolute; inset:0; margin:auto; width:12px; height:12px;
+      border-radius:50%; background: rgba(200,208,218,0.85); transition: background 80ms; }
+    /* armed: something nearby is interactable — faint orange glow */
+    #nav-interact.armed {
+      border-color: rgba(255,170,60,0.55);
+      background: rgba(255,150,40,0.08);
+      box-shadow: 0 0 9px rgba(255,150,40,0.32), inset 0 0 7px rgba(255,150,40,0.13);
+    }
+    #nav-interact.armed::before { background: rgba(255,200,120,0.85); }
+    #nav-interact:hover, #nav-interact:active, #nav-interact.active {
+      background: rgba(255,150,40,0.16); border-color: #ffb43a;
+      box-shadow: 0 0 15px rgba(255,150,40,0.75), inset 0 0 10px rgba(255,150,40,0.3);
+    }
+    #nav-interact:hover::before, #nav-interact:active::before, #nav-interact.active::before { background: #ffd27a; }
   `;
   const st = document.createElement('style'); st.textContent = css; document.head.appendChild(st);
   const plate = document.createElement('div'); plate.id = 'cp-plate'; document.body.appendChild(plate);
+
+  const center = document.getElementById('nav-center');
+  if (center && !document.getElementById('nav-interact')) {
+    const b = document.createElement('button');
+    b.id = 'nav-interact'; b.type = 'button'; b.setAttribute('aria-label', 'Interact');
+    center.appendChild(b);
+  }
 })();

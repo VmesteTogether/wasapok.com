@@ -4,7 +4,7 @@
 // fades and navigates to main-hall.html.
 import * as THREE from 'three';
 import { createPlayer } from '../museum/player.js?v=10';
-import { buildScene } from './scene.js?v=78';
+import { buildScene } from './scene.js?v=92';
 import { setupSceneNav } from '../nav.js?v=5';
 
 const opts = {
@@ -12,6 +12,9 @@ const opts = {
   headbob: true,
   sprintFov: true,
 };
+// Ambiance playback + the #nav-interact press handler live in the shared
+// castle/ambiance.js (persists across page loads). This file only arms the
+// button via the peg-proximity check in the render loop.
 
 // ---- Renderer ----
 const gameEl = document.getElementById('game');
@@ -34,6 +37,11 @@ let vaseBaseY = 1.8;
 let monuments = [];
 let monumentBaseY = 8;
 let nav = null;
+let peg = null;
+let perpX = 1, perpZ = 0; // world perpendicular to the spawn-facing axis (player's left/right)
+let interactBtn = null;
+const _UP = new THREE.Vector3(0, 1, 0);
+const _aim = new THREE.Vector3();
 
 const camPreview = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
 
@@ -202,6 +210,10 @@ wireTiltButton('dpad-upright',  1);
     vaseBaseY    = built.vaseBaseY ?? 1.8;
     monuments    = built.monuments || [];
     monumentBaseY = built.monumentBaseY ?? 8;
+    peg          = built.peg || null;
+    { const d = built.layout.spawn.dir;
+      const fdx = [0, 1, 0, -1][d], fdy = [-1, 0, 1, 0][d];
+      perpX = fdy; perpZ = -fdx; }
 
     camera = new THREE.PerspectiveCamera(72, 1, 0.05, 500);
     player = createPlayer(built.layout, CELL);
@@ -251,6 +263,7 @@ wireTiltButton('dpad-upright',  1);
       walkableBox: built.walkableBox,
       boundaryBoxes: built.boundaryBoxes,
       building1Box: built.building1Box,
+      peg: built.peg,
     };
   } catch (err) {
     console.error('Outside scene failed to load:', err);
@@ -275,6 +288,45 @@ function animate() {
   yawOffset += (yawOffsetTarget - yawOffset) * 0.18;
   if (Math.abs(yawOffset) > 0.0005) camera.rotation.y += yawOffset;
   if (nav) nav.check();
+
+  // Peg "play ambiance?" label — fade in on approach, slide to the player's side.
+  if (peg) {
+    const dx = camera.position.x - peg.position.x;
+    const dz = camera.position.z - peg.position.z;
+    const dist = Math.hypot(dx, dz);
+    const mat = peg.userData.labelMat;
+    const label = peg.userData.label;
+    const inRange = dist < 3.6; // a bit under 2 tiles (CELL=2)
+    if (!interactBtn) interactBtn = document.getElementById('nav-interact');
+    if (interactBtn) interactBtn.classList.toggle('armed', inRange);
+    const target = inRange ? 1 : 0;
+    mat.opacity += (target - mat.opacity) * 0.15;
+    label.visible = mat.opacity > 0.01;
+    label.scale.y = peg.userData.labelBaseSY * mat.opacity; // scan-up reveal
+    if (label.visible) {
+      const side = (dx * perpX + dz * perpZ) >= 0 ? 1 : -1;
+      const tex = side > 0 ? peg.userData.labelTex.pos : peg.userData.labelTex.neg;
+      if (label.material.map !== tex) { label.material.map = tex; label.material.needsUpdate = true; }
+      const tx = perpX * side * CELL * 0.85, tz = perpZ * side * CELL * 0.85;
+      label.position.x += (tx - label.position.x) * 0.2;
+      label.position.z += (tz - label.position.z) * 0.2;
+    }
+    // Cone beam: narrow apex at the button, base at the words.
+    const beam = peg.userData.beam;
+    if (beam) {
+      beam.visible = label.visible;
+      if (beam.visible) {
+        const bp = peg.userData.button.position, lp = label.position;
+        const hx = bp.x - lp.x, hy = bp.y - lp.y, hz = bp.z - lp.z;
+        const h = Math.hypot(hx, hy, hz) || 0.001;
+        beam.position.set((bp.x + lp.x) / 2, (bp.y + lp.y) / 2, (bp.z + lp.z) / 2);
+        beam.scale.set(1, h, 1);
+        _aim.set(hx / h, hy / h, hz / h); // apex (+Y) toward the button
+        beam.quaternion.setFromUnitVectors(_UP, _aim);
+        beam.material.opacity = mat.opacity * 0.4;
+      }
+    }
+  }
 
   if (vaseGroup) {
     const t = now * 0.001;

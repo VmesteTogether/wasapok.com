@@ -897,6 +897,107 @@ export async function buildScene() {
     }));
   }
 
+  // ----- Interaction peg: metal post with a domed red push-button, standing on
+  // the walkable path ~2 tiles in front of spawn, facing the castle. VISUAL ONLY
+  // (grid is untouched, so it never blocks the path to the gate). The button mesh
+  // + glow light are exposed on the returned group's userData for the future
+  // approach-prompt + interact wiring.
+  const peg = new THREE.Group();
+  {
+    const PEG_FWD = 4.0; // tiles forward of spawn, toward the castle
+    peg.position.set(
+      (spawn.x + 0.5) * CELL + fwdDx * PEG_FWD * CELL,
+      0,
+      (spawn.y + 0.5) * CELL + fwdDy * PEG_FWD * CELL,
+    );
+
+    const metalMat = new THREE.MeshStandardMaterial({ color: 0x848a92, roughness: 0.45, metalness: 0.9 });
+    const btnMat   = new THREE.MeshStandardMaterial({
+      color: 0xe01414, roughness: 0.3, metalness: 0.05,
+      emissive: 0xff1505, emissiveIntensity: 0.55,
+    });
+
+    // Simple peg: a slim post jutting up with a domed red button on top.
+    const POST_H = 1.15;
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, POST_H, 16), metalMat);
+    post.position.y = POST_H / 2;
+    peg.add(post);
+
+    const btnDome = new THREE.Mesh(
+      new THREE.SphereGeometry(0.05, 20, 12, 0, Math.PI * 2, 0, Math.PI / 2), btnMat);
+    btnDome.position.y = POST_H;
+    peg.add(btnDome);
+
+    const glow = new THREE.PointLight(0xff2410, 1.0, 4.0, 2.2);
+    glow.position.y = POST_H + 0.15;
+    peg.add(glow);
+
+    // Floating "play ambiance?" label — billboarded words that appear midair on
+    // the tile beside the button, on whichever side the player is standing. Starts
+    // hidden; main.js fades it in on approach and slides it to the player's side.
+    {
+      // Holographic words: red emissive glow (additive), soft-bloomed edges, and a
+      // directional brightness gradient (brighter toward the button). Two textures
+      // baked — bright-right / bright-left — main.js swaps to keep the bright edge
+      // facing the button as the label slides side to side.
+      const makeHolo = (bright) => {
+        const cv = document.createElement('canvas'); cv.width = 512; cv.height = 128;
+        const c = cv.getContext('2d');
+        c.font = '400 58px "Courier New", monospace'; c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.shadowColor = 'rgba(255,30,20,0.95)'; c.shadowBlur = 20;                 // outer bloom
+        c.fillStyle = 'rgba(255,25,15,0.95)'; c.fillText('play ambiance?', 256, 68);
+        c.shadowBlur = 9; c.fillStyle = 'rgba(255,75,55,1)'; c.fillText('play ambiance?', 256, 68); // hot core
+        const g = c.createLinearGradient(0, 0, 512, 0);                            // brightness toward button
+        g.addColorStop(0, bright > 0 ? 'rgba(0,0,0,0.45)' : 'rgba(0,0,0,1)');
+        g.addColorStop(1, bright > 0 ? 'rgba(0,0,0,1)' : 'rgba(0,0,0,0.45)');
+        c.globalCompositeOperation = 'destination-in'; c.fillStyle = g; c.fillRect(0, 0, 512, 128);
+        const t = new THREE.CanvasTexture(cv); t.minFilter = THREE.LinearFilter; t.anisotropy = 4; return t;
+      };
+      const texPos = makeHolo(1), texNeg = makeHolo(-1);
+      const labelMat = new THREE.SpriteMaterial({
+        map: texPos, transparent: true, depthWrite: false, opacity: 0, blending: THREE.AdditiveBlending,
+      });
+      const label = new THREE.Sprite(labelMat);
+      label.scale.set(2.0, 0.5, 1);
+      label.position.set(CELL * 0.85, POST_H, 0);
+      label.visible = false;
+      peg.add(label);
+      peg.userData.label = label;
+      peg.userData.labelMat = labelMat;
+      peg.userData.labelTex = { pos: texPos, neg: texNeg };
+      peg.userData.labelBaseSY = 0.5;
+
+      // Cone "projector beam" from the red button out to the words (narrow apex at
+      // the button, widening toward the text). Unit-height cone; main.js stretches
+      // + aims it each frame and fades it with the label.
+      const beamMat = new THREE.MeshBasicMaterial({
+        color: 0xff2a14, transparent: true, opacity: 0,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      });
+      // Alpha gradient along the cone axis: transparent at the wide base (words end),
+      // fading up toward the apex (button) so the circular mouth dissolves into glow.
+      beamMat.onBeforeCompile = (sh) => {
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying float vBeamY;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBeamY = position.y;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vBeamY;')
+          .replace('#include <dithering_fragment>',
+            'gl_FragColor.a *= smoothstep(-0.5, 0.45, vBeamY);\n#include <dithering_fragment>');
+      };
+      const beam = new THREE.Mesh(new THREE.ConeGeometry(0.4, 1, 22, 1, true), beamMat);
+      beam.visible = false;
+      peg.add(beam);
+      peg.userData.beam = beam;
+      peg.userData.beamMat = beamMat;
+    }
+
+    peg.userData.button = btnDome;
+    peg.userData.buttonMat = btnMat;
+    peg.userData.glow = glow;
+    scene.add(peg);
+  }
+
   // Layout in the same shape as museum/layout.js so player.js consumes it directly
   const layout = {
     grid, ceilH, roomId,
@@ -919,6 +1020,7 @@ export async function buildScene() {
     sun, hemi,
     vaseGroup, vaseBaseY,
     monuments, monumentBaseY,
+    peg,
     ready: Promise.all(pendingLoads),
   };
 }
