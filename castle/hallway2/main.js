@@ -406,10 +406,14 @@ function triggerShatter() {
   // Hide the d-pad grid entirely — its empty grid cells default to
   // pointer-events: auto and would block clicks even with the container
   // itself set to pointer-events: none.
-  const navGlowEl = document.getElementById('nav-glow');
-  if (navGlowEl) navGlowEl.classList.add('active');
+  // The grey nav plate (#cp-plate) becomes the orange 3-press wall-drop button.
+  // Hide the d-pad + look buttons so the plate stands alone.
   const navCrossEl = document.getElementById('nav-cross');
   if (navCrossEl) navCrossEl.style.display = 'none';
+  const lookPadEl = document.getElementById('look-pad');
+  if (lookPadEl) lookPadEl.style.display = 'none';
+  const plateEl = document.getElementById('cp-plate');
+  if (plateEl) { plateEl.classList.add('shatter-armed'); plateEl.style.pointerEvents = 'auto'; plateEl.style.cursor = 'pointer'; }
   // Push fog out so the set walls (at room perimeter, ~18m from camera) are
   // clearly visible — otherwise the post-shatter tilt happens behind the fog
   // and the player sees no change.
@@ -491,73 +495,73 @@ function updateShards(dt) {
 // Glow-button: clickable only after shatter. Each press snaps the N/E/S walls
 // to the next static tilt state (30°, 60°, 90° outward); the third press also
 // pushes background + fog to black to reveal the void.
-{
-  const navGlowEl = document.getElementById('nav-glow');
-  if (navGlowEl) {
-    navGlowEl.addEventListener('pointerdown', (e) => {
-      console.log('[wasapok] nav-glow tap', { shattered, dropStep, hasSetWalls: !!(built && built.setWalls) });
-      if (!shattered || dropStep >= DROP_MAX) return;
-      e.stopPropagation();
-      const sw = built.setWalls;
-      if (!sw) return;
-      dropStep += 1;
-      const angle = (dropStep / DROP_MAX) * (Math.PI / 2);
-      for (const key of ['east', 'north', 'south']) {
-        const w = sw[key];
-        w.hinge.rotation[w.axis] = w.sign * angle;
-      }
-      console.log('[wasapok] tilt set to', angle.toFixed(3), 'rad', { dropStep });
-      navGlowEl.classList.remove('darken-1', 'darken-2', 'darken-3');
-      navGlowEl.classList.add(`darken-${dropStep}`);
-      if (dropStep >= DROP_MAX) {
-        scene.background = new THREE.Color(0x000000);
-        if (scene.fog) {
-          scene.fog.color.set(0x000000);
-          // Atmospheric haze hangs in the room — bookshelves stay shrouded
-          // until the player walks within range. Clear bubble ~5m radius,
-          // fully fogged beyond 26m.
-          scene.fog.near = 5;
-          scene.fog.far = 26;
-        }
-        // Reveal the "true" walls behind the fallen set walls, plus the
-        // high ceiling that meets their tops. Hide the original low ceiling.
-        if (built.shelfWalls) {
-          built.shelfWalls.east.visible = true;
-          built.shelfWalls.north.visible = true;
-          built.shelfWalls.south.visible = true;
-          if (built.shelfWalls.highCeiling) built.shelfWalls.highCeiling.visible = true;
-        }
-        if (built.ceilMesh) built.ceilMesh.visible = false;
-        // Stand the player back up and restore the d-pad so they can roam.
-        // Furniture (desk + chair) stays visible until they actually move.
-        // Disable tile collision so the player can walk past the original
-        // room perimeter and right up to the bookshelf walls.
-        wallsFell = true;
-        sitting = false;
-        player.state.noClip = true;
-        // Snap the player onto the desk tile so when the sitting camera-lock
-        // releases, the camera lands on the desk instead of the pre-sit tile
-        // one step west. The first direction press then moves 1 tile from here.
-        if (DESK_TILE) {
-          player.state.tx = DESK_TILE.x;
-          player.state.ty = DESK_TILE.y;
-          player.state.x  = DESK_TILE.x;
-          player.state.y  = DESK_TILE.y;
-        }
-        // Clear any lingering "Ow." prompt; the desk hitbox is inert from here.
-        hideConfirmMsg();
-        confirmShownAt = 0;
-        navGlowEl.classList.remove('active');
-        const navCrossEl2 = document.getElementById('nav-cross');
-        if (navCrossEl2) navCrossEl2.style.display = '';
-        for (const id of ['dpad-up', 'dpad-down', 'dpad-left', 'dpad-right', 'dpad-upleft', 'dpad-upright']) {
-          const el = document.getElementById(id);
-          if (el) el.style.display = '';
-        }
-      }
-    });
+// Wall-drop button: the grey center interact button (#nav-interact), armed on
+// shatter. Each press snaps the N/E/S set-walls to the next tilt (30/60/90°);
+// the third press reveals the void and restores the d-pad. Delegated so it works
+// regardless of when controls-plate.js injects the button.
+document.addEventListener('pointerdown', (e) => {
+  const plateEl = e.target.closest && e.target.closest('#cp-plate');
+  if (!plateEl) return;
+  if (!shattered || dropStep >= DROP_MAX) return;
+  e.stopPropagation();
+  const sw = built.setWalls;
+  if (!sw) return;
+  dropStep += 1;
+  const angle = (dropStep / DROP_MAX) * (Math.PI / 2);
+  for (const key of ['east', 'north', 'south']) {
+    const w = sw[key];
+    w.hinge.rotation[w.axis] = w.sign * angle;
   }
-}
+  plateEl.classList.remove('sd-1', 'sd-2', 'sd-3');
+  plateEl.classList.add(`sd-${dropStep}`);
+  if (dropStep >= DROP_MAX) {
+    scene.background = new THREE.Color(0x000000);
+    if (scene.fog) {
+      scene.fog.color.set(0x000000);
+      // Atmospheric haze hangs in the room — bookshelves stay shrouded
+      // until the player walks within range. Clear bubble ~5m radius,
+      // fully fogged beyond 26m.
+      scene.fog.near = 5;
+      scene.fog.far = 26;
+    }
+    // Reveal the "true" walls behind the fallen set walls, plus the
+    // high ceiling that meets their tops. Hide the original low ceiling.
+    if (built.shelfWalls) {
+      built.shelfWalls.east.visible = true;
+      built.shelfWalls.north.visible = true;
+      built.shelfWalls.south.visible = true;
+      if (built.shelfWalls.highCeiling) built.shelfWalls.highCeiling.visible = true;
+    }
+    if (built.ceilMesh) built.ceilMesh.visible = false;
+    // Stand the player back up and restore the d-pad so they can roam.
+    wallsFell = true;
+    sitting = false;
+    player.state.noClip = true;
+    // Snap the player onto the desk tile so when the sitting camera-lock
+    // releases, the camera lands on the desk instead of the pre-sit tile.
+    if (DESK_TILE) {
+      player.state.tx = DESK_TILE.x;
+      player.state.ty = DESK_TILE.y;
+      player.state.x  = DESK_TILE.x;
+      player.state.y  = DESK_TILE.y;
+    }
+    // Clear any lingering "Ow." prompt; the desk hitbox is inert from here.
+    hideConfirmMsg();
+    confirmShownAt = 0;
+    plateEl.classList.remove('shatter-armed', 'sd-1', 'sd-2', 'sd-3');
+    plateEl.style.pointerEvents = ''; plateEl.style.cursor = '';
+    const navCrossEl2 = document.getElementById('nav-cross');
+    if (navCrossEl2) navCrossEl2.style.display = '';
+    const lookPadEl2 = document.getElementById('look-pad');
+    if (lookPadEl2) lookPadEl2.style.display = '';
+    // The zoom sequence hid the individual arrow buttons inline — clear those too
+    // so the full nav UI returns and the player can move freely.
+    for (const id of ['dpad-up', 'dpad-down', 'dpad-left', 'dpad-right', 'dpad-upleft', 'dpad-upright']) {
+      const el = document.getElementById(id);
+      if (el) el.style.display = '';
+    }
+  }
+});
 
 window.addEventListener('pointerdown', (e) => {
   if (shattered) return;

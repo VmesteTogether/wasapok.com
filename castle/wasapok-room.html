@@ -125,6 +125,25 @@
   #nav-glow.darken-3 {
     background: radial-gradient(ellipse at center, rgba(80,30,8,0.18) 0%, rgba(60,20,5,0.05) 48%, transparent 72%);
   }
+  /* Post-shatter: the grey nav plate becomes the orange 3-press wall-drop button */
+  #cp-plate.shatter-armed {
+    border-color: #ffb43a !important;
+    background: radial-gradient(ellipse at center, rgba(255,120,8,0.50) 0%, rgba(255,80,5,0.18) 55%, transparent 85%), rgba(20,10,4,0.20) !important;
+    box-shadow: 0 0 26px rgba(255,140,30,0.80), inset 0 0 22px rgba(255,140,30,0.35) !important;
+  }
+  #cp-plate.shatter-armed::before { border-color: rgba(255,180,90,0.50) !important; }
+  #cp-plate.shatter-armed.sd-1 {
+    background: radial-gradient(ellipse at center, rgba(200,90,12,0.42) 0%, rgba(170,60,8,0.14) 55%, transparent 85%), rgba(18,9,4,0.20) !important;
+    box-shadow: 0 0 18px rgba(210,100,18,0.62), inset 0 0 18px rgba(210,100,18,0.30) !important;
+  }
+  #cp-plate.shatter-armed.sd-2 {
+    background: radial-gradient(ellipse at center, rgba(140,55,10,0.36) 0%, rgba(120,40,6,0.10) 55%, transparent 85%), rgba(16,8,4,0.20) !important;
+    box-shadow: 0 0 12px rgba(150,65,14,0.48), inset 0 0 14px rgba(150,65,14,0.24) !important;
+  }
+  #cp-plate.shatter-armed.sd-3 {
+    background: radial-gradient(ellipse at center, rgba(80,30,8,0.28) 0%, rgba(60,20,5,0.07) 55%, transparent 85%), rgba(14,7,4,0.20) !important;
+    box-shadow: 0 0 8px rgba(90,40,12,0.38), inset 0 0 10px rgba(90,40,12,0.18) !important;
+  }
   #nav-cross {
     display: grid;
     grid-template-columns: 68px 68px 68px;
@@ -267,10 +286,6 @@
   <div id="chamber-msg">you aren&rsquo;t ready to strap in yet</div>
   <div id="confirm-msg">Ow.</div>
 
-  <div id="title">
-    Wasapok Room
-    <small>Beyond the Throne</small>
-  </div>
 
   <div id="help-desk">
     WASDpok
@@ -358,7 +373,7 @@
 }
 </script>
 
-<script type="module" src="hallway2/main.js?v=115"></script>
+<script type="module" src="hallway2/main.js?v=118"></script>
   <script type="module" src="loading-diamond.js"></script>
   <script src="controls-plate.js" defer></script>
   <script src="ambiance.js" defer></script>
