@@ -122,7 +122,7 @@
        reads as one "go in here" icon. Grass surfaces use the procedural pixel-grass
        texture (CSS var --grass); the opening is a darker recessed alcove. → /newhome. */
     #grassDoor { position: absolute; right: 20px; bottom: 20px; z-index: 60;
-                 width: 128px; height: 148px; cursor: pointer; display: block;
+                 width: 128px; height: 296px; cursor: pointer; display: block;   /* 2× tall; door stays at the bottom, added top half is pure grass */
                  transform: scale(0.667); transform-origin: bottom right;   /* 2/3 size, anchored at the corner */
                  transition: transform 0.18s ease; }
     #grassDoor .gd-wall { position: absolute; inset: 0; overflow: hidden; image-rendering: pixelated;
@@ -150,12 +150,12 @@
                  transition: filter 0.18s ease; }
     /* Chevron arrow just left of the wall, aligned with the door opening. Dim by
        default; on hover the chevrons light up in sequence flowing toward the door. */
-    #grassDoor .gd-arrow { position: absolute; right: 100%; top: 96px; transform: translateY(-50%);
+    #grassDoor .gd-arrow { position: absolute; right: 100%; top: 244px; transform: translateY(-50%);
                  margin-right: 12px; line-height: 1; color: #f3dcb0; opacity: 0.32;
                  text-shadow: 0 1px 3px rgba(0,0,0,0.55);
                  font: 700 36px 'Share Tech Mono', ui-monospace, monospace;
                  transition: transform 0.2s ease, opacity 0.2s ease, text-shadow 0.2s ease; }
-    #grassDoor:hover { transform: scale(1) translateY(-2px); }   /* grows from 2/3 up to full size on hover */
+    #grassDoor:hover { transform: scale(0.69) translateY(-2px); }   /* only a slight grow (~7% of the old 2/3→full jump) */
     #grassDoor:hover .gd-door { filter: brightness(0.74) saturate(0.9); }   /* hallway lifts a touch on hover */
     #grassDoor:hover .gd-arrow { opacity: 1; transform: translate(7px, -50%);
                  text-shadow: 0 0 9px rgba(255,236,180,0.95); }
@@ -236,6 +236,16 @@
         links: { spotify: 'https://open.spotify.com/album/2y4ijj7lo4kbOYAh6nLd0Y', apple: 'https://music.apple.com/us/album/scoputicular-single/1873380037', soundcloud: '', youtube: '' } },
 
       // MIDDLE column — producer credits / demos / unreleased
+      { id: 'eskleon', col: 1, cover: 'eskleon.jpg',
+        title: 'Eskleon', year: '2023', tracks: 4, role: 'sole artist/demos',
+        tracklist: [
+          'Saturns_Aurora3',
+          'Iceland_on_fire.1 (Title Screen)',
+          'Sunrise_over_concrete',
+          'Lichen_meadow.3',
+          // SoundCloud only ships the first 4 in HTML — fill in the remaining 12 from the set manually
+        ], featured: 'featured/eskleon.mp3', featuredIndex: 3,
+        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/wasapokangleur-482659426/sets/eskleon', youtube: '' } },
       { id: 'delayworks', col: 1, cover: 'delayworks.jpg',
         title: 'Primadorial', year: '2023', tracks: 9, role: 'sole artist/demos',
         tracklist: [
@@ -250,18 +260,8 @@
           'My eyes are finally burning',
         ], featured: 'featured/primadorial.mp3', featuredIndex: 3,
         links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/v-mestetogether/sets/delayworks', youtube: '' } },
-      { id: 'eskleon', col: 1, cover: 'eskleon.jpg',
-        title: 'Eskleon', year: '2023', tracks: 4, role: 'sole artist/demos',
-        tracklist: [
-          'Saturns_Aurora3',
-          'Iceland_on_fire.1 (Title Screen)',
-          'Sunrise_over_concrete',
-          'Lichen_meadow.3',
-          // SoundCloud only ships the first 4 in HTML — fill in the remaining 12 from the set manually
-        ], featured: 'featured/eskleon.mp3', featuredIndex: 3,
-        links: { spotify: '', apple: '', soundcloud: 'https://soundcloud.com/wasapokangleur-482659426/sets/eskleon', youtube: '' } },
-      { id: 'self-titled', col: 1, cover: 'wasapok-self-titled.png',
-        title: 'Wasapok', year: '2025', tracks: 1, role: 'sole artist',
+      { id: 'self-titled', col: 1, cover: 'AChromeDearly-Cover.png',
+        title: 'A* Chrome Dearly', year: '2025', tracks: 1, role: 'sole artist',
         tracklist: ['A Chrome Dearly'], featured: 'featured/a-chrome-dearly.mp3', featuredIndex: 0,
         links: { spotify: '', apple: '', soundcloud: '', youtube: '' } },
 
