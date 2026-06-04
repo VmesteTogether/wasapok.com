@@ -954,30 +954,38 @@ function layoutAndDraw() {
   ovlCtx.fillText('☰', iconX, iconY);
   ovlCtx.strokeText('☰', iconX, iconY);
   pushEl('icon', iconX, top, iconW, IFS, toggleMenu);
+  // Dropdown — every row shares one pitch (and the first row sits a full pitch
+  // below the header) so all the gaps are equal. "about" stays inline beside the
+  // icon when there's room (desktop); on a phone it drops to its own row so it
+  // never runs off the right edge.
   if (menuOpen) {
     ovlCtx.font = `700 ${FS}px ${FONT}`;
+    const pitch = FS * 1.3;                          // uniform line spacing = the row hit height (rows tile, no overlap)
+    const pushRow = (key, x, y, w, action) => ovlElements.push({ key, x, y, w, h: pitch, action });
+    let yy = top + pitch;
+    // about: inline beside the icon if it fits, otherwise its own dropdown row.
     const aboutX = iconX + iconW + GAP + 4 * k;
+    const aboutW = measureSpaced('about', FS);
     ovlCtx.globalAlpha = (hoverKey === 'about') ? 1 : 0.7;
-    const aboutW = drawSpaced('about', aboutX, top, FS);
-    pushEl('about', aboutX, top, aboutW, FS, openAbout);
-  }
-  // Dropdown — one identical "wasapok angleur" link per interactive element. Row
-  // pitch is forced to at least minTap on touch so the padded hit-rects tile
-  // without overlapping each other.
-  if (menuOpen) {
-    ovlCtx.font = `700 ${FS}px ${FONT}`;
-    const rowPitch = Math.max(FS + 7 * k, minTap);
-    let yy = top + FS + GAP;
+    if (aboutX + aboutW + left <= W) {
+      drawSpaced('about', aboutX, top, FS);
+      pushEl('about', aboutX, top, aboutW, FS, openAbout);
+    } else {
+      drawSpaced('about', left, yy, FS);
+      pushRow('about', left, yy, aboutW, openAbout);
+      yy += pitch;
+    }
+    // One identical "wasapok angleur" link per interactive element.
     menuActions.forEach((act, i) => {
       ovlCtx.globalAlpha = (hoverKey === 'item' + i) ? 1 : 0.62;
       const w = drawSpaced(BRAND, left, yy, FS);
-      pushEl('item' + i, left, yy, w, rowPitch, act);
-      yy += rowPitch;
+      pushRow('item' + i, left, yy, w, act);
+      yy += pitch;
     });
-    yy += 5 * k;
+    yy += pitch * 0.4;                               // a little extra air before the credit footer
     ovlCtx.globalAlpha = (hoverKey === 'credit') ? 0.85 : 0.5;
     const cw = drawSpaced('v.meste together', left, yy, FS);
-    pushEl('credit', left, yy, cw, rowPitch, openCredit);
+    pushRow('credit', left, yy, cw, openCredit);
   }
   ovlCtx.globalAlpha = 1; ovlCtx.shadowBlur = 0; ovlCtx.shadowOffsetY = 0;
   ovlTex.needsUpdate = true;
