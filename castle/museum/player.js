@@ -26,6 +26,9 @@ export function createPlayer(layout, CELL) {
     lastForwardTap: 0, // for double-tap dash detection
     // When true, canMoveTo ignores walls and grid bounds (no-clip / free roam).
     noClip: false,
+    // Optional hard-block predicate (tx,ty)=>bool — blocks a tile even under
+    // noClip (e.g. the bottomless pit, which has no floor to walk on).
+    blocked: null,
     // Tween state
     anim: null, // { type, startTime, duration, from, to }
   };
@@ -49,6 +52,7 @@ export function createPlayer(layout, CELL) {
   }
 
   function canMoveTo(tx, ty) {
+    if (state.blocked && state.blocked(tx, ty)) return false;   // hard blocks apply even under noClip
     if (state.noClip) return true;
     if (tx < 0 || ty < 0 || tx >= layout.width || ty >= layout.height) return false;
     return layout.grid[ty][tx] === 0; // floor only (walls=1, void=-1 both block)

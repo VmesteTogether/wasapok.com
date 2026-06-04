@@ -5,8 +5,8 @@
 // no other exits.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { createPlayer } from '../museum/player.js?v=11';
-import { buildScene } from './scene.js?v=93';
+import { createPlayer } from '../museum/player.js?v=12';
+import { buildScene } from './scene.js?v=108';
 import { setupSceneNav } from '../nav.js?v=6';
 
 const opts = {
@@ -37,6 +37,20 @@ const layout = built.layout;
 const camera = new THREE.PerspectiveCamera(72, 1, 0.05, 200);
 const player = createPlayer(layout, built.CELL);
 player.applyToCamera(camera);
+
+// Block the bottomless pit: the player can't walk over (or onto) the hole from
+// any side — they stop at the rim. Works even in roam mode (noClip). A tile is
+// blocked when its centre falls inside the pit's world-space footprint.
+if (built.blackRoomPit) {
+  const pit = built.blackRoomPit, C = built.CELL, tbl = built.blackRoomTable;
+  const tblR2 = tbl ? (tbl.r + 0.7) * (tbl.r + 0.7) : 0;   // stop just in front of the table
+  player.state.blocked = (tx, ty) => {
+    const wx = tx * C, wz = ty * C;
+    if (wx > pit.xMin && wx < pit.xMax && wz > pit.zMin && wz < pit.zMax) return true;  // the pit
+    if (tbl) { const dx = wx - tbl.x, dz = wz - tbl.z; if (dx * dx + dz * dz < tblR2) return true; }  // the table
+    return false;
+  };
+}
 
 const nav = setupSceneNav({
   sceneUrl: 'hallway-2-room.html',
@@ -532,6 +546,8 @@ document.addEventListener('pointerdown', (e) => {
       built.shelfWalls.south.visible = true;
       if (built.shelfWalls.highCeiling) built.shelfWalls.highCeiling.visible = true;
     }
+    // Reveal the pitch-black room behind the hallway wall at the same beat.
+    if (built.blackRoom) built.blackRoom.visible = true;
     if (built.ceilMesh) built.ceilMesh.visible = false;
     // Stand the player back up and restore the d-pad so they can roam.
     wallsFell = true;
@@ -687,6 +703,7 @@ const confirmMsgEl = document.getElementById('confirm-msg');
 const CONFIRM_WINDOW_MS = 2500;
 let confirmShownAt = 0;
 let sitting = false;
+let _sitBtn = null;
 function showConfirmMsg() {
   if (!confirmMsgEl) return;
   confirmMsgEl.classList.remove('show');

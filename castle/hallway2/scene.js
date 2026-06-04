@@ -808,6 +808,370 @@ export function buildScene(opts) {
     shelfWalls.highCeiling = highCeiling;
   }
 
+  // ===== BLACK ROOM — pitch-black extension WEST of (behind) the hallway wall.
+  // Same scale as the bookshelf enclosure (as wide + as tall), running back the
+  // room's own depth (~52m) to a bottomless, green-lit pit at the far end.
+  // Reached through the two open strips that flank the hallway wall (N + S of it,
+  // beyond its Z 0..36 span); the wall itself stays as the divider. Revealed
+  // together with the shelf walls on the 3rd plate press (see main.js).
+  // Half-Life / Portal read: near-black surfaces, the only colour is the green
+  // glow rising out of the chasm. The card-table scene at the pit edge is future work.
+  let blackRoom = null;
+  let blackRoomPit = null;   // world-space pit bounds {xMin,xMax,zMin,zMax} for movement blocking
+  let blackRoomTable = null; // world-space table footprint {x,z,r} for movement blocking
+  if (opts && opts.bigRoom) {
+    const BR_H   = 80;                  // match bookshelf height / high ceiling (Y = 0..80)
+    const OFFSET = 13.8;
+    const zMin = -1, zMax = 37;         // set-wall box edges the bookshelves offset from
+    const zN = zMin - OFFSET;           // -14.8  north bookshelf line
+    const zS = zMax + OFFSET;           //  50.8  south bookshelf line
+    const eastX = 1;                    // back (west face) of the hallway wall — the entry/spawn side
+    // ---- Pit footprint (computed first; the far wall is then placed to enclose it) ----
+    // As wide as the bookshelf span minus 8m ledges N/S, and SQUARE. The pit sits
+    // against the far wall and grows AWAY from spawn, so the entry-side approach
+    // stays the same length no matter how big the pit gets.
+    const pzMin = zN + 8, pzMax = zS - 8;   // -6.8 .. 42.8   (pit width)
+    const pitW  = pzMax - pzMin;            // 49.6 — square: depth == width
+    const APPROACH = 41;                    // black floor between the entry and the pit's near edge
+    const pxMax = eastX - APPROACH;         // -40    pit near (spawn-facing) edge
+    const pxMin = pxMax - pitW;             // -89.6  pit far edge — extends away from spawn
+    const westX = pxMin;                    // far wall hard against the pit's far (west) edge
+    const pitCx = (pxMin + pxMax) / 2, pitCz = (pzMin + pzMax) / 2;
+    blackRoomPit = { xMin: pxMin, xMax: pxMax, zMin: pzMin, zMax: pzMax };
+
+    const br = new THREE.Group();
+    br.visible = false;
+
+    // Walls + ceiling: pure black + unlit — identical to the scene background, so
+    // the shell dissolves into the atmospheric fog and never reads as a lit surface.
+    const blackMat = new THREE.MeshBasicMaterial({
+      color: 0x000000, side: THREE.DoubleSide,
+    });
+    // Floor: faintly LIT near-black, so the green player-follow light reveals the
+    // ground underfoot as you walk. Without this the room is an unreadable void
+    // (pure-black walls + no light + fogged-out pit = a screen that looks crashed).
+    const floorMat = new THREE.MeshStandardMaterial({
+      color: 0x070707, roughness: 1, metalness: 0, side: THREE.DoubleSide,
+    });
+
+    // (Pit footprint + far wall computed above.)
+
+    // ---- FLOOR (Y=0), with the pit cut out — three border slabs around the chasm ----
+    const addFloor = (x0, x1, z0, z1) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(x1 - x0, z1 - z0), floorMat);
+      m.rotation.x = -Math.PI / 2;
+      m.position.set((x0 + x1) / 2, 0, (z0 + z1) / 2);
+      br.add(m);
+    };
+    addFloor(pxMax, eastX, zN, zS);      // main slab, east of the chasm
+    addFloor(westX, pxMax, zN, pzMin);   // north ledge beside the chasm
+    addFloor(westX, pxMax, pzMax, zS);   // south ledge beside the chasm
+
+    // ---- CEILING (Y=BR_H) ----
+    const ceil = new THREE.Mesh(new THREE.PlaneGeometry(eastX - westX, zS - zN), blackMat);
+    ceil.rotation.x = Math.PI / 2;
+    ceil.position.set((eastX + westX) / 2, BR_H, (zN + zS) / 2);
+    br.add(ceil);
+
+    // ---- PERIMETER WALLS (N, S, far-W). East stays OPEN: the hallway wall is the
+    // divider and the two strips flanking it (Z < 0 and Z > 36) are the walk-throughs. ----
+    const addWall = (len, cx, cz, ry) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len, BR_H), blackMat);
+      m.position.set(cx, BR_H / 2, cz);
+      m.rotation.y = ry;
+      br.add(m);
+    };
+    addWall(eastX - westX, (eastX + westX) / 2, zN, 0);     // north wall
+    addWall(eastX - westX, (eastX + westX) / 2, zS, 0);     // south wall
+    addWall(zS - zN, westX, (zN + zS) / 2, Math.PI / 2);    // far west wall
+
+    // ---- BOTTOMLESS PIT: 4 inner-facing shaft walls dropping into darkness.
+    // The metal is a procedural "ship inner-workings" greeble texture (grey, dim,
+    // like the structure of a hull); a solid heroic/noble blue wells up from the
+    // bottom and tapers off as it rises, so it reads as energy glowing from far
+    // below. Portal / Star Wars vibe. ----
+    const SHAFT = 60;                                       // visual depth of the shaft
+
+    // Procedural greeble panel texture: base metal, large panels with seams, then
+    // scattered boxes / vents / conduit lines + a few indicator dots.
+    const techTex = (() => {
+      const TPX = 512;                                                    // higher-res so big tiles stay crisp
+      const c = document.createElement('canvas'); c.width = TPX; c.height = TPX;
+      const x = c.getContext('2d'); x.imageSmoothingEnabled = false;
+      x.fillStyle = '#5a606a'; x.fillRect(0, 0, TPX, TPX);                 // base metal
+      // faint brushed-vertical variation
+      for (let i = 0; i < TPX; i += 2) {
+        const s = 86 + (Math.random() * 22 | 0);
+        x.fillStyle = `rgba(${s},${s + 4},${s + 10},0.10)`; x.fillRect(i, 0, 1, TPX);
+      }
+      // large panels in a grid, each a slightly different shade, bevelled seams
+      const cells = 6, step = TPX / cells;
+      for (let gy = 0; gy < cells; gy++) for (let gx = 0; gx < cells; gx++) {
+        const px = gx * step, py = gy * step, sh = 78 + (Math.random() * 36 | 0);
+        x.fillStyle = `rgb(${sh},${sh + 5},${sh + 12})`;
+        x.fillRect(px + 3, py + 3, step - 6, step - 6);
+        x.strokeStyle = 'rgba(255,255,255,0.10)'; x.lineWidth = 1.5; x.strokeRect(px + 3.5, py + 3.5, step - 7, step - 7);
+        x.strokeStyle = 'rgba(0,0,0,0.35)'; x.strokeRect(px + 5, py + 5, step - 10, step - 10);
+      }
+      // greebles: scattered boxes (recessed dark + raised light)
+      for (let i = 0; i < 170; i++) {
+        const gw = 6 + (Math.random() * 28 | 0), gh = 4 + (Math.random() * 16 | 0);
+        const gx = Math.random() * (TPX - gw) | 0, gy = Math.random() * (TPX - gh) | 0;
+        const v = (Math.random() < 0.5 ? 40 + (Math.random() * 20 | 0) : 120 + (Math.random() * 60 | 0));
+        x.fillStyle = `rgb(${v},${v + 4},${v + 10})`; x.fillRect(gx, gy, gw, gh);
+        x.strokeStyle = 'rgba(0,0,0,0.40)'; x.lineWidth = 1; x.strokeRect(gx + 0.5, gy + 0.5, gw - 1, gh - 1);
+      }
+      // horizontal conduit / pipe lines
+      for (let i = 0; i < 10; i++) {
+        const py = Math.random() * TPX | 0, h = 3 + (Math.random() * 5 | 0);
+        x.fillStyle = 'rgba(20,24,30,0.70)'; x.fillRect(0, py, TPX, h);
+        x.fillStyle = 'rgba(170,180,195,0.25)'; x.fillRect(0, py - 1, TPX, 1);
+      }
+      // small indicator dots
+      for (let i = 0; i < 28; i++) {
+        const gx = Math.random() * TPX | 0, gy = Math.random() * TPX | 0;
+        x.fillStyle = 'rgba(200,210,225,0.50)'; x.fillRect(gx, gy, 3, 3);
+      }
+      const tex = new THREE.CanvasTexture(c);
+      tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+      tex.magFilter = THREE.NearestFilter;
+      tex.needsUpdate = true;
+      return tex;
+    })();
+
+    const pitGlowMat = new THREE.ShaderMaterial({
+      uniforms: { uTex: { value: techTex }, uShaft: { value: SHAFT } },
+      side: THREE.DoubleSide,
+      fog: false,   // ignore the room fog so the shaft reads from across the dark room
+      vertexShader: `
+        varying vec2 vUv; varying float vH;
+        uniform float uShaft;
+        void main() {
+          vUv = uv;                              // already tiled per-wall via geometry uv
+          vH = position.y / uShaft + 0.5;        // 0 = deep bottom, 1 = rim
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }
+      `,
+      fragmentShader: `
+        uniform sampler2D uTex; varying vec2 vUv; varying float vH;
+        void main() {
+          vec3 metal = texture2D(uTex, vUv).rgb;            // grey ship inner-workings
+          vec3 baseCol = metal * 0.55;                      // dim it — structure sits in shadow
+          // Solid heroic/noble blue welling up from the bottom, tapering as it rises.
+          vec3 blue = vec3(0.22, 0.55, 1.00);
+          float rise = pow(clamp(1.0 - vH, 0.0, 1.0), 1.3); // 1 at bottom -> 0 at the rim
+          vec3 col = baseCol + blue * rise * 1.7;           // glow lifts the metal
+          col = mix(col, blue * 1.25, rise * 0.6);          // deep bottom reads as near-solid blue
+          gl_FragColor = vec4(col, 1.0);
+        }
+      `,
+    });
+    const addShaft = (len, cx, cz, ry) => {
+      const geo = new THREE.PlaneGeometry(len, SHAFT);
+      // Tile the greeble texture at a uniform ~18m per repeat — big tiles so the
+      // pattern doesn't obviously repeat. Bake the repeat into the uvs.
+      const TILE = 18;
+      const ru = Math.max(1, Math.round(len / TILE)), rv = Math.max(1, Math.round(SHAFT / TILE));
+      const uv = geo.attributes.uv;
+      for (let i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * ru, uv.getY(i) * rv);
+      uv.needsUpdate = true;
+      const m = new THREE.Mesh(geo, pitGlowMat);
+      m.position.set(cx, -SHAFT / 2, cz);
+      m.rotation.y = ry;
+      br.add(m);
+    };
+    addShaft(pxMax - pxMin, pitCx, pzMin, 0);            // north shaft wall
+    addShaft(pxMax - pxMin, pitCx, pzMax, 0);            // south shaft wall
+    addShaft(pzMax - pzMin, pxMax, pitCz, Math.PI / 2);  // east shaft wall
+    addShaft(pzMax - pzMin, pxMin, pitCz, Math.PI / 2);  // west shaft wall (in the far-wall plane)
+
+    // Opaque black SHELL wrapping the well just OUTSIDE the green planes (+ a
+    // bottom cap). The green is DoubleSide / fog:false, so its outer faces would
+    // otherwise glow out through floor seams and sightlines into the main room.
+    // The shell blocks all of that: green is only visible looking down into the
+    // open top of the pit. Slightly oversized + offset so it always occludes.
+    const SH = 0.1;                                       // outward offset of the shell from the green
+    const addShell = (len, cx, cz, ry) => {
+      const m = new THREE.Mesh(new THREE.PlaneGeometry(len + 2 * SH, SHAFT + 2 * SH), blackMat);
+      m.position.set(cx, -SHAFT / 2, cz);
+      m.rotation.y = ry;
+      br.add(m);
+    };
+    addShell(pxMax - pxMin, pitCx, pzMin - SH, 0);           // north
+    addShell(pxMax - pxMin, pitCx, pzMax + SH, 0);           // south
+    addShell(pzMax - pzMin, pxMax + SH, pitCz, Math.PI / 2); // east
+    addShell(pzMax - pzMin, pxMin - SH, pitCz, Math.PI / 2); // west
+    const pitCap = new THREE.Mesh(
+      new THREE.PlaneGeometry(pxMax - pxMin + 2 * SH, pzMax - pzMin + 2 * SH), blackMat);
+    pitCap.rotation.x = -Math.PI / 2;
+    pitCap.position.set(pitCx, -SHAFT - SH, pitCz);          // bottom cap, below the green
+    br.add(pitCap);
+
+    // ---- HOLO STOP-SIGNS — a little emitter "base ring" (gunmetal + steel band,
+    // like the main-hall emitter bases) on either side of the pit projects a
+    // glowing red octagon: "PLEASE / don't go any further". Amusement-park
+    // "NO PUBLIC ACCESS" vibe, same red-hologram look as the outside red-button
+    // peg. Visual only — the pit collision already stops the player at the rim. ----
+    {
+      const gunmetal = new THREE.MeshStandardMaterial({ color: 0x96a8b8, metalness: 0.85, roughness: 0.40 });
+      const steel    = new THREE.MeshStandardMaterial({ color: 0xccdce8, metalness: 1.0,  roughness: 0.22 });
+      const emitMat  = new THREE.MeshBasicMaterial({ color: 0xff2a14, transparent: true, opacity: 0.6,
+        blending: THREE.AdditiveBlending, depthWrite: false });
+      const beamMat  = new THREE.MeshBasicMaterial({ color: 0xff2a14, transparent: true, opacity: 0.12,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide });
+
+      // Octagon "stop sign" hologram texture: glowing red border + bloom, hot text.
+      const signTex = (() => {
+        const S = 512; const cv = document.createElement('canvas'); cv.width = S; cv.height = S;
+        const c = cv.getContext('2d'); const mid = S / 2, R = S * 0.46;
+        c.beginPath();
+        for (let i = 0; i < 8; i++) {
+          const a = Math.PI / 8 + i * Math.PI / 4;
+          const px = mid + R * Math.cos(a), py = mid + R * Math.sin(a);
+          i ? c.lineTo(px, py) : c.moveTo(px, py);
+        }
+        c.closePath();
+        c.fillStyle = 'rgba(255,30,20,0.10)'; c.fill();                       // faint red wash
+        c.shadowColor = 'rgba(255,30,20,0.95)'; c.shadowBlur = 26;
+        c.lineWidth = 14; c.strokeStyle = 'rgba(255,40,28,0.95)'; c.stroke();  // outer bloomed border
+        c.shadowBlur = 12; c.lineWidth = 7; c.strokeStyle = 'rgba(255,95,75,1)'; c.stroke(); // hot inner border
+        const t = new THREE.CanvasTexture(cv); t.minFilter = THREE.LinearFilter; t.anisotropy = 4; return t;
+      })();
+      const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, depthWrite: false,
+        blending: THREE.AdditiveBlending, side: THREE.DoubleSide });
+
+      const makeHoloStop = (px, pz) => {
+        const g = new THREE.Group(); g.position.set(px, 0, pz);
+        // base ring: metal torus + bright steel band + glowing red emitter disc/ring
+        const ring = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.055, 10, 36), gunmetal);
+        ring.rotation.x = Math.PI / 2; ring.position.y = 0.055; g.add(ring);
+        const band = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.02, 8, 36), steel);
+        band.rotation.x = Math.PI / 2; band.position.y = 0.10; g.add(band);
+        const disc = new THREE.Mesh(new THREE.CircleGeometry(0.44, 36), emitMat);
+        disc.rotation.x = -Math.PI / 2; disc.position.y = 0.045; g.add(disc);
+        const emitRing = new THREE.Mesh(new THREE.TorusGeometry(0.34, 0.03, 8, 36), emitMat);
+        emitRing.rotation.x = Math.PI / 2; emitRing.position.y = 0.07; g.add(emitRing);
+        // projector beam: cone widening from the ring up to the sign
+        const SIGN_Y = 2.05, SIGN = 1.35, beamH = SIGN_Y - 0.1;
+        const beam = new THREE.Mesh(new THREE.CylinderGeometry(SIGN * 0.42, 0.1, beamH, 24, 1, true), beamMat);
+        beam.position.y = 0.1 + beamH / 2; g.add(beam);
+        // the octagon sign, facing the approach (+X / east, toward the incoming player)
+        const sign = new THREE.Mesh(new THREE.PlaneGeometry(SIGN, SIGN), signMat);
+        sign.position.y = SIGN_Y; sign.rotation.y = Math.PI / 2; g.add(sign);
+        // soft red glow at the emitter so the metal base + floor catch it
+        const gl = new THREE.PointLight(0xff2a14, 0.8, 6, 2.2); gl.position.y = 0.35; g.add(gl);
+        br.add(g);
+      };
+      const SX = pxMax + 0.6;             // just east of the pit's near edge (approach side)
+      makeHoloStop(SX, pzMin - 1.4);      // north side of the hole
+      makeHoloStop(SX, pzMax + 1.4);      // south side of the hole
+    }
+
+    // ---- CARD TABLE at the pit's near edge under a gentle spotlight. Props only
+    // for now (cards, chips, a snack bowl); seated figures + eye-follow come later.
+    // The player walks up and is stopped just in front of it (blackRoomTable
+    // blocking in main.js), facing across the table with the chasm glowing behind. ----
+    const tableC = (blackRoomTable = { x: pxMax + 2, z: pitCz, r: 1.15 });
+    {
+      const woodMat  = new THREE.MeshStandardMaterial({ color: 0x6b4a2f, roughness: 0.70, metalness: 0.05 });
+      const darkWood = new THREE.MeshStandardMaterial({ color: 0x4a3220, roughness: 0.75, metalness: 0.05 });
+      const feltMat  = new THREE.MeshStandardMaterial({ color: 0x215036, roughness: 0.90, metalness: 0.0 });
+      const tg = new THREE.Group(); tg.position.set(tableC.x, 0, tableC.z);
+
+      // round felt-topped table on a pedestal + foot
+      const TOP_Y = 0.95, TOP_R = tableC.r;
+      const top = new THREE.Mesh(new THREE.CylinderGeometry(TOP_R, TOP_R, 0.08, 40), woodMat);
+      top.position.y = TOP_Y; tg.add(top);
+      const felt = new THREE.Mesh(new THREE.CylinderGeometry(TOP_R * 0.9, TOP_R * 0.9, 0.012, 40), feltMat);
+      felt.position.y = TOP_Y + 0.046; tg.add(felt);
+      const ped = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.16, TOP_Y - 0.08, 18), darkWood);
+      ped.position.y = (TOP_Y - 0.08) / 2; tg.add(ped);
+      const foot = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.50, 0.06, 24), darkWood);
+      foot.position.y = 0.03; tg.add(foot);
+
+      // four chairs facing the table
+      const SEAT_Y = 0.50;
+      const legGeo = new THREE.CylinderGeometry(0.025, 0.025, SEAT_Y, 8);
+      const makeChair = (ang) => {
+        const ch = new THREE.Group();
+        ch.position.set(Math.cos(ang) * (TOP_R + 0.45), 0, Math.sin(ang) * (TOP_R + 0.45));
+        ch.rotation.y = -ang + Math.PI / 2;                 // face the table centre
+        const seat = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.07, 0.44), darkWood);
+        seat.position.y = SEAT_Y; ch.add(seat);
+        const back = new THREE.Mesh(new THREE.BoxGeometry(0.44, 0.50, 0.06), darkWood);
+        back.position.set(0, SEAT_Y + 0.28, -0.19); ch.add(back);
+        for (const [lx, lz] of [[-0.18, -0.18], [0.18, -0.18], [-0.18, 0.18], [0.18, 0.18]]) {
+          const leg = new THREE.Mesh(legGeo, darkWood); leg.position.set(lx, SEAT_Y / 2, lz); ch.add(leg);
+        }
+        tg.add(ch);
+      };
+      [0, Math.PI / 2, Math.PI, -Math.PI / 2].forEach(makeChair);
+
+      // props on the felt: a fanned hand per seat, a couple of chip stacks, a snack bowl
+      const TY = TOP_Y + 0.06;
+      const cardMat = new THREE.MeshStandardMaterial({ color: 0xf2efe6, roughness: 0.6 });
+      const addCard = (x, z, rot) => {
+        const card = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.004, 0.17), cardMat);
+        card.position.set(x, TY, z); card.rotation.y = rot; tg.add(card);
+      };
+      for (const ang of [0, Math.PI / 2, Math.PI, -Math.PI / 2]) {
+        const hx = Math.cos(ang) * (TOP_R * 0.62), hz = Math.sin(ang) * (TOP_R * 0.62);
+        for (let k = -1; k <= 1; k++) addCard(hx, hz, -ang + k * 0.22);
+      }
+      const chipCols = [0xc23b3b, 0x3b6cc2, 0xe0e0e0];
+      let ci = 0;
+      for (const [cxp, czp] of [[-0.22, 0.10], [0.05, -0.18], [0.24, 0.16]]) {
+        const cm = new THREE.MeshStandardMaterial({ color: chipCols[ci++ % 3], roughness: 0.5 });
+        for (let s = 0; s < 4; s++) {
+          const chip = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.012, 16), cm);
+          chip.position.set(cxp, TY + s * 0.013, czp); tg.add(chip);
+        }
+      }
+      const bowl = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.10, 0.08, 20),
+        new THREE.MeshStandardMaterial({ color: 0x888c92, roughness: 0.4, metalness: 0.5 }));
+      bowl.position.set(0, TY + 0.04, 0); tg.add(bowl);
+      const snackMat = new THREE.MeshStandardMaterial({ color: 0xd8a24a, roughness: 0.7 });
+      for (let s = 0; s < 5; s++) {
+        const sn = new THREE.Mesh(new THREE.SphereGeometry(0.03, 8, 6), snackMat);
+        sn.position.set((Math.random() - 0.5) * 0.12, TY + 0.085, (Math.random() - 0.5) * 0.12); tg.add(sn);
+      }
+
+      br.add(tg);
+
+      // gentle warm spotlight from above onto the table (adds to, doesn't replace,
+      // the pit glow + holo signs). Intensity matches this scene's light scale
+      // (its other spotlights are ~28 @ decay 1.4) — lower values are invisible.
+      const SPOT_Y = 7.5;
+      const spot = new THREE.SpotLight(0xfff1d6, 34, 20, 0.5, 0.5, 1.4);
+      spot.position.set(tableC.x, SPOT_Y, tableC.z);
+      spot.target.position.set(tableC.x, TOP_Y, tableC.z);
+      br.add(spot); br.add(spot.target);
+
+      // visible soft light-cone so the beam reads as "shining down", fading out
+      // before it reaches the table so there's no hard disc.
+      const beamH = SPOT_Y - TOP_Y, halfH = beamH / 2;
+      const coneMat = new THREE.MeshBasicMaterial({
+        color: 0xfff1d6, transparent: true, opacity: 0.07,
+        blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide,
+      });
+      coneMat.onBeforeCompile = (sh) => {
+        sh.vertexShader = sh.vertexShader
+          .replace('#include <common>', '#include <common>\nvarying float vBeamY;')
+          .replace('#include <begin_vertex>', '#include <begin_vertex>\nvBeamY = position.y;');
+        sh.fragmentShader = sh.fragmentShader
+          .replace('#include <common>', '#include <common>\nvarying float vBeamY;')
+          .replace('#include <dithering_fragment>',
+            `gl_FragColor.a *= smoothstep(${(-halfH).toFixed(2)}, ${(-halfH + 1.6).toFixed(2)}, vBeamY);\n#include <dithering_fragment>`);
+      };
+      const cone = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 2.6, beamH, 28, 1, true), coneMat);
+      cone.position.set(tableC.x, TOP_Y + halfH, tableC.z);
+      br.add(cone);
+    }
+
+    group.add(br);
+    blackRoom = br;
+  }
+
   // ===== OCEAN VIEW WALLS — animated water/sky planes facing inward into the room.
   // Shares uTime with the floor water shader so animation is free.
   {
@@ -2187,7 +2551,7 @@ export function buildScene(opts) {
 
   return {
     scene, group, layout,
-    walls, setWalls, shelfWalls, floorMesh: floor, ceilMesh: ceilInst,
+    walls, setWalls, shelfWalls, blackRoom, blackRoomPit, blackRoomTable, floorMesh: floor, ceilMesh: ceilInst,
     torchLights, playerLight,
     waterMat,
     CELL, WALL_H: ROOM_CEIL,
