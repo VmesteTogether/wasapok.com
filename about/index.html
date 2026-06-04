@@ -81,9 +81,9 @@
                   transition: color 0.18s ease; line-height: 1.4; }
     .grid-toggle:hover { color: #f3dcb0; }
     .grid-toggle .t-arrow { display: inline-block; padding: 6px 0; opacity: 0.6; font-size: 0.85rem; }
-    .grid       { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+    .grid       { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }   /* minmax(0,…) lets columns shrink to a true equal third instead of overflowing off-screen on narrow phones */
     .col        { display: flex; flex-direction: column; gap: 14px; transition: gap 0.18s ease;
-                  position: relative; isolation: isolate; align-self: start; }   /* align-self: start so a short column (e.g. middle) doesn't stretch to the tallest col's height — the shadow then matches the actual tile content */
+                  position: relative; isolation: isolate; align-self: start; min-width: 0; }   /* align-self: start so a short column (e.g. middle) doesn't stretch to the tallest col's height — the shadow then matches the actual tile content */
     .col:has(.tile:not(.empty-slot):not(.placeholder):hover) { gap: 24px; }    /* dynamic "hitbox" gap so scaled tiles don't touch each other */
     /* Soft vertical-oblong shadow that fades in behind a column when any active album tile in it is hovered */
     .col::before { content: ''; position: absolute; left: 50%; top: 50%;
