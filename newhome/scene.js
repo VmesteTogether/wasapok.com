@@ -912,6 +912,9 @@ function measureSpaced(text, size) {
 }
 
 // Lay out + paint the overlay canvas, rebuilding ovlElements for hit-testing.
+// Desktop keeps the original 72px corner wordmark; on narrow screens the whole
+// header + menu shrinks by a single fit-to-width scale `k` so "wasapok angleur ☰"
+// always fits the viewport instead of clipping off the right edge.
 function layoutAndDraw() {
   const W = ovlCanvas.width, H = ovlCanvas.height;
   ovlCtx.clearRect(0, 0, W, H);
@@ -919,8 +922,24 @@ function layoutAndDraw() {
   ovlCtx.shadowColor = 'rgba(0,0,0,0.55)'; ovlCtx.shadowBlur = 4; ovlCtx.shadowOffsetY = 1;
   ovlCtx.strokeStyle = 'rgba(255,255,255,0.44)'; ovlCtx.lineWidth = 1.2; ovlCtx.lineJoin = 'round';   // thin, faint white outline around every glyph + the icon
   ovlElements = [];
-  const left = 144, top = 158;
-  const FS = 72.0, IFS = 59.0;     // wordmark + ☰ icon font sizes
+  // Base (desktop) design metrics, then a uniform fit-to-width scale (capped at 1
+  // so wide screens are untouched). Measuring the wordmark + icon at base size
+  // tells us how far to shrink so it + a symmetric right margin fit the canvas.
+  const BASE_LEFT = 144, BASE_TOP = 158, BASE_FS = 72.0, BASE_IFS = 59.0, BASE_GAP = 12;
+  ovlCtx.font = `700 ${BASE_FS}px ${FONT}`;
+  const baseWordW = measureSpaced(BRAND, BASE_FS);
+  ovlCtx.font = `${BASE_IFS}px ${FONT}`;
+  const baseIconW = ovlCtx.measureText('☰').width;
+  const k = Math.min(1, W / (BASE_LEFT * 2 + baseWordW + BASE_GAP + baseIconW));
+  const left = BASE_LEFT * k, top = BASE_TOP * k;
+  const FS = BASE_FS * k, IFS = BASE_IFS * k, GAP = BASE_GAP * k;
+  const minTap = isTouch ? 44 : 0;                 // generous finger-sized tap targets on phones
+  // Push a hit-rect, expanding it to at least minTap on each axis (the drawn
+  // glyphs stay put; only the tappable area grows).
+  const pushEl = (key, x, y, w, h, action) => {
+    const px = Math.max(0, (minTap - w) / 2), py = Math.max(0, (minTap - h) / 2);
+    ovlElements.push({ key, x: x - px, y: y - py, w: w + px * 2, h: h + py * 2, action });
+  };
   // Wordmark (display only — clicks pass through to the diamond behind it).
   ovlCtx.fillStyle = '#f3dcb0';
   ovlCtx.globalAlpha = 1;
@@ -928,34 +947,37 @@ function layoutAndDraw() {
   const wmW = drawSpaced(BRAND, left, top, FS);
   // ☰ menu icon, just right of the wordmark.
   ovlCtx.font = `${IFS}px ${FONT}`;
-  const iconX = left + wmW + 12, iconY = top + 1;
+  const iconX = left + wmW + GAP, iconY = top + k;
   const iconW = ovlCtx.measureText('☰').width;
   ovlCtx.globalAlpha = (menuOpen || hoverKey === 'icon') ? 1 : 0.7;
   chunkChar('☰', iconX, iconY, IFS);
   ovlCtx.fillText('☰', iconX, iconY);
   ovlCtx.strokeText('☰', iconX, iconY);
-  ovlElements.push({ key: 'icon', x: iconX, y: top, w: iconW, h: 24, action: toggleMenu });
+  pushEl('icon', iconX, top, iconW, IFS, toggleMenu);
   if (menuOpen) {
     ovlCtx.font = `700 ${FS}px ${FONT}`;
-    const aboutX = iconX + iconW + 16;
+    const aboutX = iconX + iconW + GAP + 4 * k;
     ovlCtx.globalAlpha = (hoverKey === 'about') ? 1 : 0.7;
     const aboutW = drawSpaced('about', aboutX, top, FS);
-    ovlElements.push({ key: 'about', x: aboutX, y: top, w: aboutW, h: FS, action: openAbout });
+    pushEl('about', aboutX, top, aboutW, FS, openAbout);
   }
-  // Dropdown — one identical "wasapok angleur" link per interactive element.
+  // Dropdown — one identical "wasapok angleur" link per interactive element. Row
+  // pitch is forced to at least minTap on touch so the padded hit-rects tile
+  // without overlapping each other.
   if (menuOpen) {
     ovlCtx.font = `700 ${FS}px ${FONT}`;
-    let yy = top + FS + 12;
+    const rowPitch = Math.max(FS + 7 * k, minTap);
+    let yy = top + FS + GAP;
     menuActions.forEach((act, i) => {
       ovlCtx.globalAlpha = (hoverKey === 'item' + i) ? 1 : 0.62;
       const w = drawSpaced(BRAND, left, yy, FS);
-      ovlElements.push({ key: 'item' + i, x: left, y: yy, w, h: FS, action: act });
-      yy += FS + 7;
+      pushEl('item' + i, left, yy, w, rowPitch, act);
+      yy += rowPitch;
     });
-    yy += 5;
+    yy += 5 * k;
     ovlCtx.globalAlpha = (hoverKey === 'credit') ? 0.85 : 0.5;
     const cw = drawSpaced('v.meste together', left, yy, FS);
-    ovlElements.push({ key: 'credit', x: left, y: yy, w: cw, h: FS, action: openCredit });
+    pushEl('credit', left, yy, cw, rowPitch, openCredit);
   }
   ovlCtx.globalAlpha = 1; ovlCtx.shadowBlur = 0; ovlCtx.shadowOffsetY = 0;
   ovlTex.needsUpdate = true;
