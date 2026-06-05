@@ -629,6 +629,12 @@ export function buildScene(opts) {
   // Three tall maple-colored walls of square shelf compartments stretching far
   // up past the fog. Hidden until the third button press (main.js).
   let shelfWalls = null;
+  // Eerie hallway-door for one shelf wall (bigRoom only). main.js picks the
+  // targeted wall by FOV order, calls shelfDoor.materialize() once (off-screen)
+  // to build it open, then shelfDoor.setOpen(bool) to flip hallway<->shelf on
+  // every later look-away. shelfDoor.open is the current state; shelfDoor.barrier
+  // is the live collision descriptor main.js reads (null while closed).
+  const shelfDoor = { materialize: null, setOpen: null, barrier: null, open: false };
   if (opts && opts.bigRoom) {
     const SHELF_H = 80;       // very tall — fog handles the upper fade
     const OFFSET = 13.8;      // 4 tiles (8m) back from where the set walls land flat (~5.6m)
@@ -761,6 +767,7 @@ export function buildScene(opts) {
       const pivot = new THREE.Group();
       pivot.add(wall);
       pivot.add(cubbies);
+      pivot.userData.shelf = { cubbies, wall, len, nx, ny };
       pivot.visible = false;
       return pivot;
     };
@@ -806,6 +813,120 @@ export function buildScene(opts) {
     group.add(highCeiling);
 
     shelfWalls.highCeiling = highCeiling;
+
+    // ===== EERIE SHELF DOOR — the two bottom-centre cubbies of one wall flip
+    // between an intact shelf and a short walkable hallway. main.js builds it once
+    // (off-screen) then toggles setOpen() on every later look-away, so the wall is
+    // never seen changing — each glance back shows the opposite of last time.
+    // Stub corridor: runs CORRIDOR_LEN back into the void and dead-ends; the
+    // `corridorEnd` panel + the group are the clean hook to extend it later.
+    const CORRIDOR_LEN = 12;       // metres the hallway runs back from the wall
+    const DOOR_ROWS = 2;           // two stacked bottom cubbies (floor → ~3.3m up)
+    const doorStone = new THREE.MeshStandardMaterial({
+      color: 0x141014, roughness: 1, metalness: 0, side: THREE.DoubleSide,
+    });
+    const doorMask = new THREE.MeshBasicMaterial({ color: 0x0a0708, fog: true, side: THREE.DoubleSide });
+
+    shelfDoor.materialize = (wallKey) => {
+      if (shelfDoor._built) return;
+      const pivot = shelfWalls[wallKey];
+      if (!pivot || !pivot.userData.shelf) return;
+      pivot.updateMatrixWorld(true);
+      const { cubbies, len, nx } = pivot.userData.shelf;
+      const ix0 = Math.floor(nx / 2);                  // centre column — natural sightline
+      const cxL = (ix0 + 0.5) * TILE_W - len / 2;      // local x of the door centre
+      const yBot = -SHELF_H / 2;                       // local y of the floor (world y = 0)
+      const yTop = yBot + DOOR_ROWS * TILE_H;          // top of the 2-cubby opening
+      const yMid = (yBot + yTop) / 2, hw = TILE_W / 2;
+
+      // Remember the two cubby instances we flip, plus their original matrices, so
+      // the CLOSED state can restore the intact shelf exactly.
+      const indices = [], orig = [];
+      for (let iy = 0; iy < DOOR_ROWS; iy++) {
+        const idx = iy * nx + ix0, m = new THREE.Matrix4();
+        cubbies.getMatrixAt(idx, m);
+        indices.push(idx); orig.push(m);
+      }
+
+      // Corridor in the wall's LOCAL frame (inherits its transform). Local +z
+      // faces the room; the wall recesses to -z, so the hallway runs -z.
+      const corridor = new THREE.Group();
+      const panel = (w, h, mat) => new THREE.Mesh(new THREE.PlaneGeometry(w, h), mat);
+      const floor = panel(TILE_W, CORRIDOR_LEN, doorStone);
+      floor.rotation.x = -Math.PI / 2; floor.position.set(cxL, yBot, -CORRIDOR_LEN / 2);
+      corridor.add(floor);
+      const ceil = panel(TILE_W, CORRIDOR_LEN, doorStone);
+      ceil.rotation.x = Math.PI / 2; ceil.position.set(cxL, yTop, -CORRIDOR_LEN / 2);
+      corridor.add(ceil);
+      const sL = panel(CORRIDOR_LEN, yTop - yBot, doorStone);
+      sL.rotation.y = Math.PI / 2; sL.position.set(cxL - hw, yMid, -CORRIDOR_LEN / 2);
+      corridor.add(sL);
+      const sR = panel(CORRIDOR_LEN, yTop - yBot, doorStone);
+      sR.rotation.y = -Math.PI / 2; sR.position.set(cxL + hw, yMid, -CORRIDOR_LEN / 2);
+      corridor.add(sR);
+      const back = panel(TILE_W, yTop - yBot, doorStone);       // dead-end (extend hook)
+      back.position.set(cxL, yMid, -CORRIDOR_LEN);
+      corridor.userData.corridorEnd = back; corridor.add(back);
+      // mask the maple plank between the two stacked cubbies so the opening reads
+      // as one clean 2-tall passage instead of a barred shelf.
+      const midPlank = panel(TILE_W, 0.5, doorMask);
+      midPlank.position.set(cxL, yBot + TILE_H, 0.012);
+      corridor.add(midPlank);
+      // faint cold glow deep in the hall — "somewhere leads off"
+      const glow = new THREE.PointLight(0x6fbf9f, 0.6, CORRIDOR_LEN * 1.4, 2);
+      glow.position.set(cxL, yMid, -CORRIDOR_LEN * 0.65);
+      corridor.add(glow);
+      // Slate-navy shag welcome mat on the floor in front of the opening — same
+      // shade as the doormat at newhome's A5 hallway (0x485266).
+      const mat = new THREE.Mesh(
+        new THREE.BoxGeometry(1.6, 0.06, 1.5),
+        new THREE.MeshStandardMaterial({
+          color: 0x485266, roughness: 0.98, metalness: 0,
+          emissive: 0x485266, emissiveIntensity: 0.3,   // faint self-glow so it reads in the dim room (same shade)
+        }),
+      );
+      mat.position.set(cxL, yBot + 0.03, 0.6);   // room-side of the threshold, resting on the floor
+      corridor.add(mat);
+      corridor.visible = false;                  // setOpen() reveals it
+      pivot.add(corridor);
+
+      // World-space collision descriptor: solid wall except across the door's tile
+      // channel, walkable to the corridor end. Applied only while the door is OPEN.
+      const wallPt = pivot.localToWorld(new THREE.Vector3(cxL, yMid, 0));
+      const endPt  = pivot.localToWorld(new THREE.Vector3(cxL, yMid, -CORRIDOR_LEN));
+      const e1 = pivot.localToWorld(new THREE.Vector3(cxL - hw, yMid, 0));
+      const e2 = pivot.localToWorld(new THREE.Vector3(cxL + hw, yMid, 0));
+      const normalX = Math.abs(endPt.x - wallPt.x) > Math.abs(endPt.z - wallPt.z);
+      const tan1 = normalX ? e1.z : e1.x, tan2 = normalX ? e2.z : e2.x;
+      shelfDoor._barrierDesc = {
+        normalX,
+        wallCoord: normalX ? wallPt.x : wallPt.z,
+        endCoord:  normalX ? endPt.x  : endPt.z,
+        doorMin: Math.min(tan1, tan2),
+        doorMax: Math.max(tan1, tan2),
+      };
+      shelfDoor._cubbies = cubbies;
+      shelfDoor._indices = indices;
+      shelfDoor._orig = orig;
+      shelfDoor._corridor = corridor;
+      shelfDoor._zero = new THREE.Matrix4().makeScale(0, 0, 0);
+      shelfDoor._built = true;
+      shelfDoor.setOpen(true);
+    };
+
+    // Flip between hallway (open) and intact shelf (closed). Always invoked by
+    // main.js while the wall is off-screen, so the swap itself is never seen.
+    shelfDoor.setOpen = (isOpen) => {
+      if (!shelfDoor._built) return;
+      const { _cubbies, _indices, _orig, _zero, _corridor, _barrierDesc } = shelfDoor;
+      for (let i = 0; i < _indices.length; i++) {
+        _cubbies.setMatrixAt(_indices[i], isOpen ? _zero : _orig[i]);
+      }
+      _cubbies.instanceMatrix.needsUpdate = true;
+      _corridor.visible = isOpen;
+      shelfDoor.barrier = isOpen ? _barrierDesc : null;
+      shelfDoor.open = isOpen;
+    };
   }
 
   // ===== BLACK ROOM — pitch-black extension WEST of (behind) the hallway wall.
@@ -1035,6 +1156,13 @@ export function buildScene(opts) {
         c.shadowColor = 'rgba(255,30,20,0.95)'; c.shadowBlur = 26;
         c.lineWidth = 14; c.strokeStyle = 'rgba(255,40,28,0.95)'; c.stroke();  // outer bloomed border
         c.shadowBlur = 12; c.lineWidth = 7; c.strokeStyle = 'rgba(255,95,75,1)'; c.stroke(); // hot inner border
+        // warning "!" glyph in the centre — bloomed pass then a hot core
+        c.textAlign = 'center'; c.textBaseline = 'middle';
+        c.font = '900 320px Arial, "Helvetica Neue", sans-serif';
+        c.shadowColor = 'rgba(255,30,20,0.95)'; c.shadowBlur = 30;
+        c.fillStyle = 'rgba(255,40,28,0.95)'; c.fillText('!', mid, mid + 8);   // outer bloom
+        c.shadowBlur = 12;
+        c.fillStyle = 'rgba(255,165,145,1)'; c.fillText('!', mid, mid + 8);    // hot core
         const t = new THREE.CanvasTexture(cv); t.minFilter = THREE.LinearFilter; t.anisotropy = 4; return t;
       })();
       const signMat = new THREE.MeshBasicMaterial({ map: signTex, transparent: true, depthWrite: false,
@@ -2551,7 +2679,7 @@ export function buildScene(opts) {
 
   return {
     scene, group, layout,
-    walls, setWalls, shelfWalls, blackRoom, blackRoomPit, blackRoomTable, floorMesh: floor, ceilMesh: ceilInst,
+    walls, setWalls, shelfWalls, shelfDoor, blackRoom, blackRoomPit, blackRoomTable, floorMesh: floor, ceilMesh: ceilInst,
     torchLights, playerLight,
     waterMat,
     CELL, WALL_H: ROOM_CEIL,

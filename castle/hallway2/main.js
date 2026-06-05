@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { createPlayer } from '../museum/player.js?v=12';
-import { buildScene } from './scene.js?v=108';
+import { buildScene } from './scene.js?v=112';
 import { setupSceneNav } from '../nav.js?v=6';
 
 const opts = {
@@ -48,6 +48,20 @@ if (built.blackRoomPit) {
     const wx = tx * C, wz = ty * C;
     if (wx > pit.xMin && wx < pit.xMax && wz > pit.zMin && wz < pit.zMax) return true;  // the pit
     if (tbl) { const dx = wx - tbl.x, dz = wz - tbl.z; if (dx * dx + dz * dz < tblR2) return true; }  // the table
+    // The targeted shelf wall becomes solid once its hallway opens — passable only
+    // through the door's tile channel, which is walkable to the corridor's end.
+    const d = built.shelfDoor && built.shelfDoor.barrier;
+    if (d) {
+      const n = d.normalX ? wx : wz;          // along the wall normal
+      const tan = d.normalX ? wz : wx;        // along the wall
+      const dir = d.endCoord > d.wallCoord ? 1 : -1;
+      const beyond = dir > 0 ? n > d.wallCoord : n < d.wallCoord;
+      if (beyond) {
+        const inDoor = tan > d.doorMin && tan < d.doorMax;
+        const withinLen = dir > 0 ? n <= d.endCoord : n >= d.endCoord;
+        if (!(inDoor && withinLen)) return true;   // solid wall / corridor sides / dead-end
+      }
+    }
     return false;
   };
 }
@@ -405,6 +419,18 @@ let furnitureHidden = false;
 const _frustum = new THREE.Frustum();
 const _projScreenMatrix = new THREE.Matrix4();
 let furnitureBox = null;
+// Eerie shelf-door FOV tracking: which of the 3 shelf walls have entered the
+// frustum, in order. Once all three are seen, the LAST-seen one is the target;
+// the next time it leaves view we open its hallway (built.shelfDoor.materialize).
+let shelfBoxes = null;
+const shelfSeen = new Set();
+const shelfSeenOrder = [];
+let shelfTarget = null;
+let shelfTargetWasSeen = false;
+let shelfTargetLeftAt = 0;                 // when the target first left view (starts the delay)
+const SHELF_DOOR_DELAY_MS = 20000;         // door may only appear 20s after that first leave
+let shelfDoorActive = false;               // door has been built/opened the first time
+let shelfTargetVisPrev = false;            // was the target wall in view last frame (edge detect)
 function triggerShatter() {
   if (shattered || !centralVase) return;
   shattered = true;
@@ -927,6 +953,18 @@ function resetToCastleSpawn() {
 }
 
 let lastTime = performance.now();
+// True when the camera is past the shelf wall inside the door's tile channel,
+// i.e. standing in the hallway — used to suppress the flip so we never seal the
+// player in or yank the corridor floor out from under them mid-walk.
+function playerInShelfCorridor() {
+  const d = built.shelfDoor && built.shelfDoor._barrierDesc;
+  if (!d) return false;
+  const n   = d.normalX ? camera.position.x : camera.position.z;
+  const tan = d.normalX ? camera.position.z : camera.position.x;
+  const beyond = (d.endCoord > d.wallCoord) ? n > d.wallCoord : n < d.wallCoord;
+  return beyond && tan > d.doorMin && tan < d.doorMax;
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const now = performance.now();
@@ -962,6 +1000,56 @@ function animate() {
     if (!_frustum.intersectsBox(furnitureBox)) {
       furnitureHidden = true;
       built.furnitureGroup.visible = false;
+    }
+  }
+
+  // Eerie shelf-door: track the order the 3 shelf walls first enter the frustum;
+  // once all three are seen, the LAST-seen wall is the target. 20s after the
+  // target first leaves view, build+open the hallway off-screen — then on every
+  // later look-away, FLIP it (hallway <-> intact shelf). Every swap happens while
+  // the wall is out of view, so each glance back shows the opposite of last time.
+  if (wallsFell && built.shelfDoor && built.shelfDoor.materialize && built.shelfWalls) {
+    if (!shelfBoxes) {
+      // Eye-level band per wall (clamp the 80m plane to y 0..6) so "seen" means
+      // looking at the wall, not it perpetually clipping the frustum from above.
+      shelfBoxes = {};
+      for (const k of ['east', 'north', 'south']) {
+        const w = built.shelfWalls[k];
+        w.updateMatrixWorld(true);
+        const b = new THREE.Box3().setFromObject(w);
+        b.min.y = 0; b.max.y = 6;
+        shelfBoxes[k] = b;
+      }
+    }
+    camera.updateMatrixWorld();
+    _projScreenMatrix.multiplyMatrices(camera.projectionMatrix, camera.matrixWorldInverse);
+    _frustum.setFromProjectionMatrix(_projScreenMatrix);
+    for (const k of ['east', 'north', 'south']) {
+      if (_frustum.intersectsBox(shelfBoxes[k]) && !shelfSeen.has(k)) {
+        shelfSeen.add(k);
+        shelfSeenOrder.push(k);
+        if (shelfSeenOrder.length === 3) shelfTarget = shelfSeenOrder[2];
+      }
+    }
+    if (shelfTarget) {
+      const seen = _frustum.intersectsBox(shelfBoxes[shelfTarget]);
+      if (!shelfDoorActive) {
+        // First reveal: 20s after the target first leaves view, build it open.
+        if (seen) {
+          shelfTargetWasSeen = true;
+        } else if (shelfTargetWasSeen) {
+          if (shelfTargetLeftAt === 0) shelfTargetLeftAt = now;
+          if (now - shelfTargetLeftAt >= SHELF_DOOR_DELAY_MS) {
+            built.shelfDoor.materialize(shelfTarget);   // builds + opens, off-screen
+            shelfDoorActive = true;
+          }
+        }
+      } else if (shelfTargetVisPrev && !seen) {
+        // Look-away edge: flip the door — unless the player is inside the corridor
+        // (don't seal them in / pull the floor out mid-walk).
+        if (!playerInShelfCorridor()) built.shelfDoor.setOpen(!built.shelfDoor.open);
+      }
+      shelfTargetVisPrev = seen;
     }
   }
   nav.check();
