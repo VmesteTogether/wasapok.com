@@ -1657,9 +1657,10 @@ function placeAlbumCover(cubbyKey, texPath, audioSrc, labelColor = LABEL_COLOR) 
 // Audio + label color per album. Drop matching MP3 (or OGG) files into
 // newhome/ when you have clips ready — they'll loop on the turntable when
 // the record is loaded. Until the files exist, .play() fails silently.
-placeAlbumCover('C2', 'BiomePlain_Album.png',   'BiomePlain.mp3',    0x4ea84e);   // forest green
-placeAlbumCover('C3', 'PalmTreeSyrup_Cover.png','PalmTreeSyrup.mp3', 0xe8a730);   // amber
-placeAlbumCover('B3', 'Periphsisha_Cover.png',  'Periphsisha.mp3',   0xb8651a);   // burnt orange (default)
+placeAlbumCover('C2', 'SoulPatch_Cover.jpg',    'SoulPatch.mp3',     0x8a4fb0);   // plum — 'a Soul Patch' (newest); medley MP3 TBD, plays silently till dropped in
+placeAlbumCover('C3', 'BiomePlain_Album.png',   'BiomePlain.mp3',    0x4ea84e);   // forest green
+placeAlbumCover('B3', 'PalmTreeSyrup_Cover.png','PalmTreeSyrup.mp3', 0xe8a730);   // amber
+placeAlbumCover('A3', 'Periphsisha_Cover.png',  'Periphsisha.mp3',   0xb8651a);   // burnt orange
 
 // === Cubby B2: harman/kardon T25 turntable. Procedurally modeled to match
 // reference photos — light champagne plinth, bright aluminum platter rim,
