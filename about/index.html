@@ -243,15 +243,15 @@
       { id: 'soul-patch', col: 0, cover: 'SoulPatch-cover.jpg',
         title: 'a Soul Patch', year: '2026', tracks: 7, role: 'sole artist',
         tracklist: [
-          `track 1`,
-          `track 2`,
-          `track 3`,
-          `track 4`,
-          `track 5`,
-          `track 6`,
-          `track 7`,
-        ], featured: '', featuredIndex: 5,
-        links: { spotify: '', apple: '', soundcloud: '', youtube: '' } },
+          `4x4`,
+          `Dreamy on Rainy Days`,
+          `Graphics Tessellation: SPLAAAT`,
+          `•- - - —---•---— - - -•`,
+          `9post`,
+          `Robin & Your Kids`,
+          `Tennis Tennis Tennis Tennis Tennis`,
+        ], featured: 'featured/robin-and-your-kids.mp3', featuredIndex: 5,
+        links: { spotify: '', apple: 'https://music.apple.com/us/album/a-soul-patch/6777945631', soundcloud: '', youtube: '' } },
 
       // MIDDLE column — producer credits / demos / unreleased
       { id: 'eskleon', col: 1, cover: 'eskleon.jpg',
@@ -508,7 +508,47 @@
     entered = true;   // subsequent re-renders (toggle / expand) skip the entrance stagger
   </script>
 
-  <a id="grassDoor" href="/newhome" aria-label="enter the room"><span class="gd-arrow">→</span><span class="gd-wall"><span class="gd-door"></span></span></a>
+  <a id="grassDoor" aria-label="enter the room"><span class="gd-arrow">→</span><span class="gd-wall"><span class="gd-door"></span></span><span class="gd-smoke"></span></a>
+  <style>
+    /* a satisfying smoke ring that puffs up out of the doorway, expands and dissolves */
+    #grassDoor .gd-smoke { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+    #grassDoor .gd-smoke b {
+      position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px;
+      border-radius: 50%; opacity: 0;
+      background: radial-gradient(circle at 50% 50%, rgba(245,248,240,.85), rgba(220,228,210,.45) 55%, rgba(220,228,210,0) 72%);
+      will-change: transform, opacity;
+    }
+    #grassDoor .gd-smoke b.go { animation: gdSmoke 1.2s cubic-bezier(.22,.7,.3,1) forwards; }
+    @keyframes gdSmoke {
+      0%   { opacity: 0;   transform: translate(0,0) scale(.25); }
+      18%  { opacity: .9;  transform: translate(var(--x18), var(--y18)) scale(.7); }
+      100% { opacity: 0;   transform: translate(var(--x), var(--y)) scale(1.9); filter: blur(3px); }
+    }
+  </style>
+  <script>
+    (function () {
+      const door  = document.getElementById('grassDoor');
+      const smoke = door.querySelector('.gd-smoke');
+      const N = 12, R = 34;            // puffs around the ring, final ring radius
+      door.addEventListener('click', function (e) {
+        e.preventDefault();
+        smoke.innerHTML = '';
+        const rise = -26;              // whole ring drifts up as it expands
+        for (let i = 0; i < N; i++) {
+          const a = (i / N) * Math.PI * 2;
+          const b = document.createElement('b');
+          b.style.setProperty('--x18', (Math.cos(a) * R * 0.45).toFixed(1) + 'px');
+          b.style.setProperty('--y18', (Math.sin(a) * R * 0.45 + rise * 0.35).toFixed(1) + 'px');
+          b.style.setProperty('--x',  (Math.cos(a) * R).toFixed(1) + 'px');
+          b.style.setProperty('--y',  (Math.sin(a) * R + rise).toFixed(1) + 'px');
+          b.style.animationDelay = (i * 6) + 'ms';
+          smoke.appendChild(b);
+          void b.offsetWidth;
+          b.classList.add('go');
+        }
+      });
+    })();
+  </script>
   <script>
     // Procedural chunky pixel-grass texture, tiled across the wall + (darkened)
     // the door alcove via the --grass CSS variable. Tall blades wrap top↔bottom
