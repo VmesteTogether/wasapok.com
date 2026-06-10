@@ -511,14 +511,14 @@
   <a id="grassDoor" aria-label="enter the room"><span class="gd-arrow">→</span><span class="gd-wall"><span class="gd-door"></span></span><span class="gd-smoke"></span></a>
   <style>
     /* a satisfying smoke ring that puffs up out of the doorway, expands and dissolves */
-    #grassDoor .gd-smoke { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+    #grassDoor .gd-smoke { position: absolute; left: 50%; top: 0; width: 0; height: 0; pointer-events: none; }
     #grassDoor .gd-smoke b {
       position: absolute; left: 0; top: 0; width: 22px; height: 22px; margin: -11px 0 0 -11px;
       border-radius: 50%; opacity: 0;
       background: radial-gradient(circle at 50% 50%, rgba(245,248,240,.85), rgba(220,228,210,.45) 55%, rgba(220,228,210,0) 72%);
       will-change: transform, opacity;
     }
-    #grassDoor .gd-smoke b.go { animation: gdSmoke 1.2s cubic-bezier(.22,.7,.3,1) forwards; }
+    #grassDoor .gd-smoke b.go { animation: gdSmoke 1.3s cubic-bezier(.05,.85,.1,1) forwards; }
     @keyframes gdSmoke {
       0%   { opacity: 0;   transform: translate(0,0) scale(.25); }
       18%  { opacity: .9;  transform: translate(var(--x18), var(--y18)) scale(.7); }
@@ -529,18 +529,18 @@
     (function () {
       const door  = document.getElementById('grassDoor');
       const smoke = door.querySelector('.gd-smoke');
-      const N = 12, R = 34;            // puffs around the ring, final ring radius
+      const N = 14, R = 52, FLAT = 0.4;   // puffs, ring radius, vertical squash (reads as a ring seen from below)
       door.addEventListener('click', function (e) {
         e.preventDefault();
         smoke.innerHTML = '';
-        const rise = -26;              // whole ring drifts up as it expands
+        const rise = -70;              // the ring shoots up out of the chimney top
         for (let i = 0; i < N; i++) {
           const a = (i / N) * Math.PI * 2;
           const b = document.createElement('b');
           b.style.setProperty('--x18', (Math.cos(a) * R * 0.45).toFixed(1) + 'px');
-          b.style.setProperty('--y18', (Math.sin(a) * R * 0.45 + rise * 0.35).toFixed(1) + 'px');
+          b.style.setProperty('--y18', (Math.sin(a) * R * 0.45 * FLAT + rise * 0.25).toFixed(1) + 'px');
           b.style.setProperty('--x',  (Math.cos(a) * R).toFixed(1) + 'px');
-          b.style.setProperty('--y',  (Math.sin(a) * R + rise).toFixed(1) + 'px');
+          b.style.setProperty('--y',  (Math.sin(a) * R * FLAT + rise).toFixed(1) + 'px');
           b.style.animationDelay = (i * 6) + 'ms';
           smoke.appendChild(b);
           void b.offsetWidth;
