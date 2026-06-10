@@ -15,7 +15,13 @@
          -webkit-text-fill-color: transparent; color: transparent;
          animation: titleFadeIn 1.4s ease-out both; }
     @keyframes titleFadeIn { from { opacity: 0; filter: blur(6px); } to { opacity: 1; filter: blur(0); } }
-    .role { line-height: 1.6; font-size: 1.05rem; margin: 0 0 24px; min-height: 1.6em; letter-spacing: 0.14em; }
+    .role { line-height: 1.6; font-size: 1.05rem; margin: 0 0 6px; min-height: 1.6em; letter-spacing: 0.14em; }
+    /* Artist contact — small + dimmed so it stays out of the way, but selectable plain
+       text (a real mailto link, not JS-injected) so streaming-service crawlers can read
+       it to verify the artist. */
+    .contact { margin: 0 0 24px; font-size: 0.8rem; letter-spacing: 0.12em; }
+    .contact a { color: #f3dcb0; opacity: 0.5; transition: opacity 0.18s ease; }
+    .contact a:hover { opacity: 0.9; }
     a { color: #f3dcb0; text-decoration: none; }
 
     /* Expanded view (above grid, full-width span) */
@@ -195,6 +201,7 @@
     <div id="heroGem"></div>
     <h1>wasapok angleur</h1>
     <p class="role">music</p>
+    <p class="contact"><a href="mailto:wasapokk@gmail.com">wasapokk@gmail.com</a></p>
 
     <div id="expanded" class="expanded"></div>
     <div class="grid-wrap">
