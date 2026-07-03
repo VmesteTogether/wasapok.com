@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>what chord is this?</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0; padding: 0; min-height: 100%;
+      background: #485266; color: #f3dcb0;
+      font-family: 'Share Tech Mono', ui-monospace, monospace;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .wrap { max-width: 760px; margin: 0 auto; padding: 24px 16px 60px; }
+    h1 { font-size: 28px; margin: 0 0 4px; letter-spacing: 1px; }
+    .sub { opacity: .65; font-size: 13px; margin: 0 0 22px; }
+
+    .btnrow { display: flex; flex-wrap: wrap; gap: 10px; margin-bottom: 18px; }
+    button, label.filebtn {
+      background: rgba(0,0,0,.22); color: #f3dcb0;
+      border: 1px solid rgba(243,220,176,.45); border-radius: 6px;
+      padding: 10px 16px; font: inherit; font-size: 14px;
+      cursor: pointer; user-select: none;
+    }
+    button:hover, label.filebtn:hover { background: rgba(0,0,0,.35); }
+    button:disabled { opacity: .35; cursor: default; }
+    button.rec-on { border-color: #ff8f7a; color: #ff8f7a; }
+    input[type=file] { display: none; }
+
+    .dropzone {
+      border: 1px dashed rgba(243,220,176,.4); border-radius: 8px;
+      padding: 26px 16px; text-align: center; font-size: 13px; opacity: .75;
+      margin-bottom: 18px;
+    }
+    .dropzone.over { background: rgba(243,220,176,.08); }
+
+    #wavewrap { display: none; margin-bottom: 8px; }
+    .wavebox { position: relative; }
+    #wave { width: 100%; height: 110px; display: block; border-radius: 6px;
+            background: rgba(0,0,0,.25); touch-action: none; cursor: crosshair; }
+    #waveoverlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      pointer-events: none;
+      opacity: 1; transition: opacity .35s;
+    }
+    #waveoverlay.hidden { opacity: 0; }
+    #waveoverlay span {
+      background: rgba(0,0,0,.6); border: 1px solid rgba(243,220,176,.35);
+      border-radius: 999px; padding: 7px 16px;
+      font-size: 13px; letter-spacing: .5px;
+      max-width: 90%; text-align: center;
+      animation: overlaypulse 2s ease-in-out infinite;
+    }
+    #waveoverlay.hidden span { animation: none; }
+    @keyframes overlaypulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: .45; }
+    }
+    .waverow { display: flex; align-items: center; gap: 12px; margin-top: 8px; flex-wrap: wrap; }
+    .seltime { font-size: 12px; opacity: .7; }
+    .hint { font-size: 11px; opacity: .5; margin-top: 4px; }
+
+    #status { font-size: 13px; min-height: 20px; margin: 14px 0 6px; opacity: .8; }
+
+    .chroma { display: none; gap: 3px; align-items: flex-end; height: 46px; margin: 10px 0 4px; }
+    .chroma .bar { flex: 1; background: rgba(243,220,176,.3); border-radius: 2px 2px 0 0; position: relative; min-height: 1px; }
+    .chroma .bar span { position: absolute; top: 100%; left: 0; right: 0; text-align: center; font-size: 9px; opacity: .6; }
+    .chromalabel { font-size: 11px; opacity: .5; margin: 14px 0 18px; }
+
+    .card {
+      background: rgba(0,0,0,.22); border: 1px solid rgba(243,220,176,.25);
+      border-radius: 8px; padding: 14px 16px; margin-bottom: 12px;
+    }
+    .card.top { border-color: rgba(243,220,176,.65); }
+    .cardhead { display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap; }
+    .chordname { font-size: 26px; }
+    .card.top .chordname { font-size: 34px; }
+    .typename { opacity: .6; font-size: 13px; }
+    .conf { margin-left: auto; font-size: 14px; }
+    .confbar { height: 5px; background: rgba(0,0,0,.35); border-radius: 3px; margin: 8px 0 4px; overflow: hidden; }
+    .confbar i { display: block; height: 100%; background: #f3dcb0; border-radius: 3px; }
+    .slash { font-size: 13px; opacity: .8; margin-top: 4px; }
+    .voicings { display: flex; gap: 14px; flex-wrap: wrap; margin-top: 12px; }
+    .voicing { text-align: center; }
+    .voicing canvas { display: block; }
+    .vlabel { font-size: 10px; opacity: .65; margin-top: 3px; max-width: 96px; }
+
+    .bassline { font-size: 13px; opacity: .8; margin: 0 0 12px; }
+    footer { margin-top: 40px; font-size: 11px; opacity: .4; }
+    footer a { color: inherit; }
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <h1>what chord is this?</h1>
+  <p class="sub">drop in some audio, drag over the wave &mdash; it shows you the chords any slice could be.</p>
+
+  <div class="btnrow">
+    <label class="filebtn">choose audio file<input type="file" id="file" accept="audio/*"></label>
+    <button id="recbtn">record mic</button>
+    <button id="demobtn">demo chord</button>
+  </div>
+
+  <div class="dropzone" id="drop">&hellip;or drag &amp; drop an audio file anywhere on this box</div>
+
+  <div id="wavewrap">
+    <div class="wavebox">
+      <canvas id="wave"></canvas>
+      <div id="waveoverlay"><span>drag across the wave to ask about just one slice/chord</span></div>
+    </div>
+    <div class="waverow">
+      <button id="playbtn">play selection</button>
+      <span class="seltime" id="seltime"></span>
+    </div>
+    <div class="hint">double-click to select everything</div>
+  </div>
+
+  <div id="status"></div>
+  <div class="chroma" id="chroma"></div>
+  <div class="chromalabel" id="chromalabel" style="display:none">detected note energy (C&hellip;B) &mdash; the evidence the guesses below are based on</div>
+  <div id="results"></div>
+
+  <footer><a href="/">wasapok.com</a> &middot; analysis happens in your browser, audio never leaves your device</footer>
+</div>
+
+<script src="analysis.js"></script>
+<script>
+(function () {
+'use strict';
+
+var audioCtx = null;
+var buffer = null;      // decoded AudioBuffer
+var mono = null;        // Float32Array mixdown
+var selStart = 0, selEnd = 0;   // seconds
+var playSource = null;
+var recorder = null, recChunks = [];
+
+var waveCanvas = document.getElementById('wave');
+var statusEl = document.getElementById('status');
+var resultsEl = document.getElementById('results');
+var chromaEl = document.getElementById('chroma');
+var chromaLabelEl = document.getElementById('chromalabel');
+var seltimeEl = document.getElementById('seltime');
+var playBtn = document.getElementById('playbtn');
+var recBtn = document.getElementById('recbtn');
+
+function ctx() {
+  if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  if (audioCtx.state === 'suspended') audioCtx.resume();
+  return audioCtx;
+}
+
+function setStatus(t) { statusEl.textContent = t; }
+
+// ------------------------------------------------------------- loading
+
+function loadArrayBuffer(ab, name) {
+  setStatus('decoding ' + name + '…');
+  ctx().decodeAudioData(ab).then(function (buf) {
+    setBuffer(buf);
+    setStatus('');
+  }).catch(function () {
+    setStatus("couldn't decode that file — is it an audio format the browser knows?");
+  });
+}
+
+function setBuffer(buf) {
+  buffer = buf;
+  mono = new Float32Array(buf.length);
+  for (var c = 0; c < buf.numberOfChannels; c++) {
+    var d = buf.getChannelData(c);
+    for (var i = 0; i < d.length; i++) mono[i] += d[i] / buf.numberOfChannels;
+  }
+  selStart = 0;
+  selEnd = buf.duration;
+  document.getElementById('wavewrap').style.display = 'block';
+  sizeWave();
+  drawWave();
+  scheduleAnalyze();
+}
+
+document.getElementById('file').addEventListener('change', function (e) {
+  var f = e.target.files[0];
+  if (!f) return;
+  f.arrayBuffer().then(function (ab) { loadArrayBuffer(ab, f.name); });
+});
+
+var drop = document.getElementById('drop');
+['dragover', 'dragenter'].forEach(function (ev) {
+  drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('over'); });
+});
+['dragleave', 'drop'].forEach(function (ev) {
+  drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('over'); });
+});
+drop.addEventListener('drop', function (e) {
+  var f = e.dataTransfer.files && e.dataTransfer.files[0];
+  if (f) f.arrayBuffer().then(function (ab) { loadArrayBuffer(ab, f.name); });
+});
+
+// ------------------------------------------------------------- mic
+
+recBtn.addEventListener('click', function () {
+  if (recorder && recorder.state === 'recording') {
+    recorder.stop();
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    setStatus('mic recording not available in this browser.');
+    return;
+  }
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(function (stream) {
+    recChunks = [];
+    recorder = new MediaRecorder(stream);
+    recorder.ondataavailable = function (e) { recChunks.push(e.data); };
+    recorder.onstop = function () {
+      stream.getTracks().forEach(function (t) { t.stop(); });
+      recBtn.textContent = 'record mic';
+      recBtn.classList.remove('rec-on');
+      new Blob(recChunks).arrayBuffer().then(function (ab) { loadArrayBuffer(ab, 'recording'); });
+    };
+    recorder.start();
+    recBtn.textContent = 'stop recording';
+    recBtn.classList.add('rec-on');
+    setStatus('recording… play your chord, then hit stop.');
+  }).catch(function () {
+    setStatus('mic permission denied.');
+  });
+});
+
+// ------------------------------------------------------------- demo
+
+var DEMOS = [
+  { label: 'Am', notes: [45, 52, 57, 60, 64] },
+  { label: 'C', notes: [48, 52, 55, 60, 64] },
+  { label: 'G', notes: [43, 47, 50, 55, 59, 67] },
+  { label: 'E', notes: [40, 47, 52, 56, 59, 64] },
+  { label: 'Dm', notes: [50, 57, 62, 65] },
+  { label: 'G7', notes: [43, 47, 50, 53, 55, 59] },
+  { label: 'Fmaj7', notes: [53, 57, 60, 64] },
+  { label: 'Asus4', notes: [45, 52, 57, 62, 64] },
+  { label: 'Bm', notes: [47, 54, 59, 62, 66] }
+];
+var lastDemo = -1;
+
+document.getElementById('demobtn').addEventListener('click', function () {
+  var i;
+  do { i = Math.floor(Math.random() * DEMOS.length); } while (i === lastDemo);
+  lastDemo = i;
+  var demo = DEMOS[i];
+  var sr = ctx().sampleRate;
+  var secs = 2.5;
+  var n = Math.floor(sr * secs);
+  var buf = ctx().createBuffer(1, n, sr);
+  var out = buf.getChannelData(0);
+  demo.notes.forEach(function (m) {
+    var f0 = 440 * Math.pow(2, (m - 69) / 12);
+    var phase = Math.random() * Math.PI * 2;
+    for (var h = 1; h <= 6; h++) {
+      var f = f0 * h;
+      if (f > sr / 2 * 0.9) break;
+      var amp = 0.25 / (h * demo.notes.length);
+      for (var k = 0; k < n; k++) {
+        var t = k / sr;
+        out[k] += amp * Math.exp(-t * (1.2 + h * 0.6)) * Math.sin(2 * Math.PI * f * t + phase * h);
+      }
+    }
+  });
+  setBuffer(buf);
+  playSelection();
+  setStatus('demo: it synthesized a mystery chord and analyzed it. (spoiler on the card — was it right?)');
+});
+
+// ------------------------------------------------------------- waveform
+
+var dpr = window.devicePixelRatio || 1;
+
+function sizeWave() {
+  var w = waveCanvas.clientWidth;
+  waveCanvas.width = Math.floor(w * dpr);
+  waveCanvas.height = Math.floor(110 * dpr);
+}
+
+function drawWave(playheadSec) {
+  if (!mono) return;
+  var g = waveCanvas.getContext('2d');
+  var W = waveCanvas.width, H = waveCanvas.height;
+  g.clearRect(0, 0, W, H);
+
+  // selection background
+  var x0 = W * selStart / buffer.duration;
+  var x1 = W * selEnd / buffer.duration;
+  g.fillStyle = 'rgba(243,220,176,.14)';
+  g.fillRect(x0, 0, x1 - x0, H);
+
+  // peaks
+  g.strokeStyle = 'rgba(243,220,176,.85)';
+  g.lineWidth = 1;
+  g.beginPath();
+  var samplesPerPx = mono.length / W;
+  for (var x = 0; x < W; x++) {
+    var a = Math.floor(x * samplesPerPx);
+    var b = Math.min(mono.length, Math.floor((x + 1) * samplesPerPx) + 1);
+    var mn = 1, mx = -1;
+    var step = Math.max(1, Math.floor((b - a) / 40));
+    for (var i = a; i < b; i += step) {
+      var v = mono[i];
+      if (v < mn) mn = v;
+      if (v > mx) mx = v;
+    }
+    g.moveTo(x + .5, H / 2 - mx * H * 0.48);
+    g.lineTo(x + .5, H / 2 - mn * H * 0.48 + 1);
+  }
+  g.stroke();
+
+  // selection edges
+  g.fillStyle = 'rgba(243,220,176,.9)';
+  g.fillRect(x0 - 1, 0, 2, H);
+  g.fillRect(x1 - 1, 0, 2, H);
+
+  if (playheadSec !== undefined) {
+    g.fillStyle = '#ff8f7a';
+    g.fillRect(W * playheadSec / buffer.duration, 0, 2 * dpr, H);
+  }
+
+  seltimeEl.textContent = fmtTime(selStart) + ' – ' + fmtTime(selEnd) +
+    '  (' + (selEnd - selStart).toFixed(2) + 's)';
+}
+
+function fmtTime(s) {
+  var m = Math.floor(s / 60);
+  return m + ':' + ('0' + (s - m * 60).toFixed(1)).slice(-4);
+}
+
+var dragging = false, dragAnchor = 0;
+
+function evSec(e) {
+  var r = waveCanvas.getBoundingClientRect();
+  var frac = Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+  return frac * buffer.duration;
+}
+
+waveCanvas.addEventListener('pointerdown', function (e) {
+  if (!buffer) return;
+  document.getElementById('waveoverlay').classList.add('hidden');
+  waveCanvas.setPointerCapture(e.pointerId);
+  dragging = true;
+  dragAnchor = evSec(e);
+  selStart = selEnd = dragAnchor;
+  drawWave();
+});
+waveCanvas.addEventListener('pointermove', function (e) {
+  if (!dragging) return;
+  var s = evSec(e);
+  selStart = Math.min(dragAnchor, s);
+  selEnd = Math.max(dragAnchor, s);
+  drawWave();
+});
+waveCanvas.addEventListener('pointerup', function (e) {
+  if (!dragging) return;
+  dragging = false;
+  if (selEnd - selStart < 0.05) { selStart = 0; selEnd = buffer.duration; } // a click, not a drag
+  drawWave();
+  scheduleAnalyze();
+});
+waveCanvas.addEventListener('dblclick', function () {
+  if (!buffer) return;
+  selStart = 0; selEnd = buffer.duration;
+  drawWave();
+  scheduleAnalyze();
+});
+window.addEventListener('resize', function () { sizeWave(); drawWave(); });
+
+// ------------------------------------------------------------- playback
+
+function stopPlayback() {
+  if (playSource) {
+    try { playSource.stop(); } catch (e) {}
+    playSource = null;
+  }
+  playBtn.textContent = 'play selection';
+}
+
+function playSelection() {
+  if (!buffer) return;
+  stopPlayback();
+  var src = ctx().createBufferSource();
+  src.buffer = buffer;
+  src.connect(audioCtx.destination);
+  var dur = selEnd - selStart;
+  var startedAt = audioCtx.currentTime;
+  var startSec = selStart;
+  src.onended = function () {
+    if (playSource === src) { playSource = null; playBtn.textContent = 'play selection'; drawWave(); }
+  };
+  src.start(0, selStart, dur);
+  playSource = src;
+  playBtn.textContent = 'stop';
+  (function tick() {
+    if (playSource !== src) return;
+    drawWave(startSec + (audioCtx.currentTime - startedAt));
+    requestAnimationFrame(tick);
+  })();
+}
+
+playBtn.addEventListener('click', function () {
+  if (playSource) stopPlayback(); else playSelection();
+});
+
+// ------------------------------------------------------------- analysis
+
+var analyzeTimer = null;
+
+function scheduleAnalyze() {
+  if (analyzeTimer) clearTimeout(analyzeTimer);
+  setStatus('analyzing…');
+  analyzeTimer = setTimeout(runAnalyze, 60); // let the UI paint first
+}
+
+function runAnalyze() {
+  analyzeTimer = null;
+  if (!mono) return;
+  var sr = buffer.sampleRate;
+  var a = Math.floor(selStart * sr);
+  var b = Math.min(mono.length, Math.ceil(selEnd * sr));
+  var res = WCIT.analyze(mono.subarray(a, b), sr);
+  render(res);
+}
+
+function render(res) {
+  resultsEl.innerHTML = '';
+  chromaEl.style.display = 'none';
+  chromaLabelEl.style.display = 'none';
+  if (!res.ok) { setStatus(res.reason); return; }
+  setStatus('');
+
+  // chroma strip
+  chromaEl.style.display = 'flex';
+  chromaLabelEl.style.display = 'block';
+  chromaEl.innerHTML = '';
+  for (var i = 0; i < 12; i++) {
+    var bar = document.createElement('div');
+    bar.className = 'bar';
+    bar.style.height = Math.max(2, res.chroma[i] * 100) + '%';
+    bar.style.background = res.chroma[i] > 0.6 ? 'rgba(243,220,176,.85)' : 'rgba(243,220,176,.3)';
+    bar.innerHTML = '<span>' + WCIT.NOTE_NAMES[i] + '</span>';
+    chromaEl.appendChild(bar);
+  }
+
+  if (res.bassName) {
+    var bl = document.createElement('p');
+    bl.className = 'bassline';
+    bl.textContent = 'lowest strong note: ' + res.bassName;
+    resultsEl.appendChild(bl);
+  }
+
+  res.candidates.forEach(function (c, idx) {
+    var card = document.createElement('div');
+    card.className = 'card' + (idx === 0 ? ' top' : '');
+    var pct = Math.round(c.score * 100);
+
+    var head = document.createElement('div');
+    head.className = 'cardhead';
+    head.innerHTML =
+      '<span class="chordname">' + esc(c.label) + '</span>' +
+      '<span class="typename">' + esc(c.typeName) + (idx === 0 ? ' · best guess' : '') + '</span>' +
+      '<span class="conf">' + pct + '%</span>';
+    card.appendChild(head);
+
+    var barwrap = document.createElement('div');
+    barwrap.className = 'confbar';
+    barwrap.innerHTML = '<i style="width:' + pct + '%"></i>';
+    card.appendChild(barwrap);
+
+    if (c.slash) {
+      var sl = document.createElement('div');
+      sl.className = 'slash';
+      sl.textContent = 'with ' + WCIT.NOTE_NAMES[res.bassPc] + ' in the bass → could be voiced as ' + c.slash;
+      card.appendChild(sl);
+    }
+
+    if (c.voicings.length) {
+      var vw = document.createElement('div');
+      vw.className = 'voicings';
+      c.voicings.forEach(function (v) {
+        var vd = document.createElement('div');
+        vd.className = 'voicing';
+        vd.appendChild(drawDiagram(v));
+        var lab = document.createElement('div');
+        lab.className = 'vlabel';
+        lab.textContent = v.shape + ' · ' + v.position + ' · ' + Math.round(v.score * 100) + '% match';
+        vd.appendChild(lab);
+        vw.appendChild(vd);
+      });
+      card.appendChild(vw);
+    }
+    resultsEl.appendChild(card);
+  });
+}
+
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// ------------------------------------------------------ chord diagrams
+
+function drawDiagram(v) {
+  var W = 96, H = 118;
+  var cv = document.createElement('canvas');
+  cv.width = W * dpr; cv.height = H * dpr;
+  cv.style.width = W + 'px'; cv.style.height = H + 'px';
+  var g = cv.getContext('2d');
+  g.scale(dpr, dpr);
+
+  var fretted = v.frets.filter(function (f) { return f > 0; });
+  var minF = fretted.length ? Math.min.apply(null, fretted) : 1;
+  var maxF = fretted.length ? Math.max.apply(null, fretted) : 1;
+  var startFret = maxF <= 4 ? 1 : minF;   // window of 4 frets
+  var nFrets = 4;
+
+  var left = 14, right = W - 8, top = 22, bottom = H - 10;
+  var sw = (right - left) / 5;
+  var fh = (bottom - top) / nFrets;
+  var cream = '#f3dcb0';
+
+  g.strokeStyle = 'rgba(243,220,176,.7)';
+  g.fillStyle = cream;
+  g.lineWidth = 1;
+
+  // nut or fret-number label
+  if (startFret === 1) {
+    g.fillRect(left - 1, top - 3, right - left + 2, 3);
+  } else {
+    g.font = '10px ui-monospace, monospace';
+    g.textAlign = 'right';
+    g.fillText(startFret + 'fr', left - 3, top + fh * 0.65);
+  }
+
+  // grid
+  g.beginPath();
+  for (var s = 0; s < 6; s++) {
+    g.moveTo(left + s * sw, top);
+    g.lineTo(left + s * sw, bottom);
+  }
+  for (var f = 0; f <= nFrets; f++) {
+    g.moveTo(left, top + f * fh);
+    g.lineTo(right, top + f * fh);
+  }
+  g.stroke();
+
+  // markers
+  g.font = '10px ui-monospace, monospace';
+  g.textAlign = 'center';
+  for (var i = 0; i < 6; i++) {
+    var x = left + i * sw;
+    var fr = v.frets[i];
+    if (fr < 0) {
+      g.fillText('×', x, top - 7);
+    } else if (fr === 0) {
+      g.strokeStyle = cream;
+      g.beginPath();
+      g.arc(x, top - 10, 3.2, 0, Math.PI * 2);
+      g.stroke();
+    } else {
+      var row = fr - startFret;           // 0-based fret row in window
+      if (row < 0 || row >= nFrets) continue;
+      g.beginPath();
+      g.arc(x, top + (row + 0.5) * fh, 4.6, 0, Math.PI * 2);
+      g.fill();
+    }
+  }
+  return cv;
+}
+
+})();
+</script></body>
+</html>
