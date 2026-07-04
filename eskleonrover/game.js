@@ -191,9 +191,14 @@ const ship = new THREE.Mesh(
   new THREE.MeshStandardMaterial({ color: 0x8d939c, metalness: 0.95, roughness: 0.28 })
 );
 ship.castShadow = true;
-ship.position.set(0, HOVER_Y, -0.5);
 scene.add(ship);
 belt.receiveShadow = true;
+
+// logical grid position: gx 0..2 (left→right lanes), gz 0..3 (far→near rows)
+const shipTile = { gx: 1, gz: 1 };
+const tileX = (gx) => (gx - 1) * TILE;
+const tileZ = (gz) => (gz - 1.5) * TILE;
+ship.position.set(tileX(shipTile.gx), HOVER_Y, tileZ(shipTile.gz));
 
 // ------------------------------------------------------------ input
 // WASD never moves the ship — it only aims. Screen-up (W) is -z (the far end).
@@ -216,16 +221,21 @@ window.addEventListener('blur', () => { held.length = 0; });
 
 // The most recent key wins its axis outright (holding A then D aims right);
 // the most recent held key on the OTHER axis joins it for the 8 diagonals.
-function aimDir() {
+// Returns whole-tile steps [dx, dz], each -1/0/1.
+function aimStep() {
   if (!held.length) return null;
   const latest = KEYDIR[held[held.length - 1]];
-  const v = new THREE.Vector3(latest[0], 0, latest[1]);
+  const s = [latest[0], latest[1]];
   const latestIsX = latest[0] !== 0;
   for (let i = held.length - 2; i >= 0; i--) {
     const d = KEYDIR[held[i]];
-    if ((d[0] !== 0) !== latestIsX) { v.x += d[0]; v.z += d[1]; break; }
+    if ((d[0] !== 0) !== latestIsX) { s[0] += d[0]; s[1] += d[1]; break; }
   }
-  return v.normalize();
+  return s;
+}
+
+function stepVec(step) {
+  return new THREE.Vector3(step[0], 0, step[1]).normalize();
 }
 
 // ------------------------------------------------------------ jump
@@ -236,15 +246,75 @@ function aimDir() {
 const JUMP_H = 0.85, JUMP_DUR = 0.62;
 const TILT = THREE.MathUtils.degToRad(62);
 const DOWN = new THREE.Vector3(0, -1, 0);
-const jump = { active: false, t: 0, tilt: 0, axis: new THREE.Vector3(1, 0, 0) };
+const jump = { active: false, t: 0, tilt: 0, axis: new THREE.Vector3(1, 0, 0), step: null };
+
+// Asymmetric "gravity" arc, 0→1→0: a hard launch that decelerates into a
+// hang at the apex, then a heavier, accelerating fall. kr = fraction of the
+// move spent rising (< .5 means the fall takes longer and hits harder).
+function arc(k, kr) {
+  if (k < kr) { const t = k / kr; return 1 - Math.pow(1 - t, 2.4); }
+  const t = (k - kr) / (1 - kr);
+  return 1 - Math.pow(t, 2.6);
+}
+
+// ease-in-out with adjustable bite: p=1 is linear, higher = slower ends and
+// a faster, snappier middle
+function sigmoid(k, p) {
+  const a = Math.pow(k, p), b = Math.pow(1 - k, p);
+  return a / (a + b);
+}
+
+// landing settle: momentum carries the ship into a damped dip + rock
+const SETTLE_DUR = 0.5;
+const settle = { active: false, t: 0, amp: 0, axis: new THREE.Vector3(1, 0, 0) };
+
+function land(axis, energy) {
+  settle.active = true;
+  settle.t = 0;
+  settle.amp = energy;
+  settle.axis.copy(axis);
+}
+
+// Double click: a second click while airborne converts the jump into a full
+// 360° somersault onto the aimed tile — same rotation axis the tilt already
+// started, continued through a whole turn, so it lands upright. Refused if
+// the aimed tile is off the 3×4 grid (the jump just finishes normally).
+const FLIP_DUR = 0.8, FLIP_H = 0.65;
+const flip = {
+  active: false, t: 0, theta0: 0, h0: 0,
+  from: new THREE.Vector3(), to: new THREE.Vector3()
+};
 
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || jump.active) return;
-  const dir = aimDir();
-  jump.active = true;
-  jump.t = 0;
-  jump.tilt = dir ? TILT : 0;
-  if (dir) jump.axis.crossVectors(DOWN, dir).normalize();
+  if (e.button !== 0 || flip.active) return;
+
+  if (!jump.active) {                              // first click: jump
+    const step = aimStep();
+    jump.active = true;
+    jump.t = 0;
+    jump.step = step;
+    jump.tilt = step ? TILT : 0;
+    if (step) jump.axis.crossVectors(DOWN, stepVec(step)).normalize();
+    return;
+  }
+
+  // second click, still airborne: try to convert into a flip
+  const step = jump.step || aimStep();             // aim from the first click wins
+  if (!step) return;                               // no direction — nothing to flip at
+  const tx = shipTile.gx + step[0], tz = shipTile.gz + step[1];
+  if (tx < 0 || tx > 2 || tz < 0 || tz > 3) return; // no tile there — refuse
+
+  const k = Math.min(jump.t / JUMP_DUR, 1);
+  flip.active = true;
+  flip.t = 0;
+  flip.h0 = JUMP_H * 4 * k * (1 - k);              // hand off current height…
+  flip.theta0 = jump.tilt * Math.sin(Math.PI * k); // …and current tilt angle
+  if (!jump.step) jump.axis.crossVectors(DOWN, stepVec(step)).normalize();
+  flip.from.set(tileX(shipTile.gx), 0, tileZ(shipTile.gz));
+  flip.to.set(tileX(tx), 0, tileZ(tz));
+  shipTile.gx = tx;
+  shipTile.gz = tz;
+  jump.active = false;
 });
 canvas.addEventListener('contextmenu', (e) => e.preventDefault());
 
@@ -273,15 +343,42 @@ function tick() {
   beltTex.offset.y = (beltTex.offset.y + beltSpeed * dt) % 1;
   for (const r of rollers) r.rotation.x += (beltSpeed / ROLLER_R) * dt;
 
-  if (jump.active) {
+  if (flip.active) {
+    flip.t += dt;
+    const k = Math.min(flip.t / FLIP_DUR, 1);
+    const move = sigmoid(k, 1.35);                 // near-ballistic travel
+    const spin = sigmoid(k, 2.2);                  // windup → fast mid-spin → decisive finish
+    ship.position.x = flip.from.x + (flip.to.x - flip.from.x) * move;
+    ship.position.z = flip.from.z + (flip.to.z - flip.from.z) * move;
+    ship.position.y = HOVER_Y + flip.h0 * Math.pow(1 - k, 1.5) + FLIP_H * arc(k, 0.42);
+    ship.quaternion.setFromAxisAngle(jump.axis, flip.theta0 + (Math.PI * 2 - flip.theta0) * spin);
+    if (k >= 1) {
+      flip.active = false;
+      ship.position.y = HOVER_Y;
+      ship.quaternion.identity();
+      land(jump.axis, 1);                          // full-weight touchdown
+    }
+  } else if (jump.active) {
     jump.t += dt;
     const k = Math.min(jump.t / JUMP_DUR, 1);
-    ship.position.y = HOVER_Y + JUMP_H * 4 * k * (1 - k);
+    ship.position.y = HOVER_Y + JUMP_H * arc(k, 0.46);
     if (jump.tilt > 0) {
       ship.quaternion.setFromAxisAngle(jump.axis, jump.tilt * Math.sin(Math.PI * k));
     }
     if (k >= 1) {
       jump.active = false;
+      ship.position.y = HOVER_Y;
+      ship.quaternion.identity();
+      land(jump.axis, jump.tilt > 0 ? 0.6 : 0.45); // lighter than a flip landing
+    }
+  } else if (settle.active) {
+    settle.t += dt;
+    const s = Math.min(settle.t / SETTLE_DUR, 1);
+    const decay = Math.exp(-5 * s);
+    ship.position.y = HOVER_Y - 0.10 * settle.amp * decay * Math.sin(Math.PI * 2.2 * s);
+    ship.quaternion.setFromAxisAngle(settle.axis, 0.12 * settle.amp * decay * Math.sin(Math.PI * 3.2 * s));
+    if (s >= 1) {
+      settle.active = false;
       ship.position.y = HOVER_Y;
       ship.quaternion.identity();
     }
@@ -295,3 +392,7 @@ function tick() {
 
 layout();
 tick();
+
+// debug handle for headless tests (virtual time races ahead of THREE.Clock,
+// so tests force-complete animations by poking jump.t / flip.t)
+window.__rover = { ship, shipTile, jump, flip };
