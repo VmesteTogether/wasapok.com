@@ -312,6 +312,28 @@ const jut = {
   from: new THREE.Vector3(), to: new THREE.Vector3()
 };
 
+// ------------------------------------------------------------ juice
+// One shared energy pool for offense (cannon) and escape (jut); jumps and
+// flips stay free. NO regen by design — energy will come back via physical
+// pickups on the belt (future). A kill = 2 shots = 17.5, marked by the notch
+// on the meter. Refusing an action (too low) double-blinks the bar.
+
+const JUICE_MAX = 100, COST_SHOT = 8.75, COST_JUT = 5;
+const juiceState = { v: JUICE_MAX, flash: 0, blink: 0 };
+const juiceEl = document.getElementById('juice');
+const juiceFill = document.getElementById('juicefill');
+const juiceEdge = document.getElementById('juiceedge');
+
+function spendJuice(cost) {
+  if (juiceState.v < cost) {
+    juiceState.blink = 0.4;            // can't afford it: double-blink
+    return false;
+  }
+  juiceState.v -= cost;
+  juiceState.flash = 0.35;             // receipt: edge flash while the fill dips
+  return true;
+}
+
 // ------------------------------------------------------------ cannon
 // Space fires the undercarriage cannon at the aimed tile — but only mid
 // tilt-jump: the belly has to be presented. One shot per jump. A flat jump
@@ -413,6 +435,7 @@ window.addEventListener('keydown', (e) => {
   if (!jump.active || jump.tilt === 0 || jump.fired || !jump.step) return;
   const tx = shipTile.gx + jump.step[0], tz = shipTile.gz + jump.step[1];
   if (tx < 0 || tx > 2 || tz < 0 || tz > 3) return;  // aiming off the belt
+  if (!spendJuice(COST_SHOT)) return;                // tank's too low
   jump.fired = true;
   fireCannon(tx, tz);
 });
@@ -423,6 +446,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const d = KEYDIR[held[held.length - 1]];
     const tx = shipTile.gx + d[0], tz = shipTile.gz + d[1];
     if (tx < 0 || tx > 2 || tz < 0 || tz > 3) return;   // no tile there — refuse
+    if (!spendJuice(COST_JUT)) return;                  // tank's too low
     jut.active = true;
     jut.t = 0;
     settle.active = false;                              // a dodge outranks the wobble
@@ -581,6 +605,28 @@ function tick() {
     }
   }
 
+  // juice meter: breathing pulse whose tempo and brightness track fullness —
+  // slow confident glow when full, quick dim ember flicker when low
+  const frac = juiceState.v / JUICE_MAX;
+  const period = 0.55 + 1.05 * frac;
+  const pulse = 0.5 + 0.5 * Math.sin(now * Math.PI * 2 / period);
+  juiceFill.style.width = (frac * 100) + '%';
+  juiceFill.style.filter = 'brightness(' + (0.55 + 0.45 * frac + pulse * (0.18 + 0.22 * frac)).toFixed(3) + ')';
+  juiceEl.style.boxShadow = '0 0 ' + (2 + 10 * pulse * (0.3 + 0.7 * frac)).toFixed(1) + 'px ' +
+    (pulse * 2).toFixed(1) + 'px rgba(255,150,80,' + (0.25 + 0.45 * pulse * frac).toFixed(3) + ')';
+  if (juiceState.flash > 0) {
+    juiceState.flash = Math.max(0, juiceState.flash - dt);
+    juiceEdge.style.opacity = (juiceState.flash / 0.35).toFixed(2);
+  }
+  if (juiceState.blink > 0) {
+    juiceState.blink -= dt;
+    juiceEl.style.opacity = (Math.floor(Math.max(0, juiceState.blink) * 12) % 2) ? 0.15 : 1;
+    if (juiceState.blink <= 0) juiceEl.style.opacity = 1;
+  }
+  // the belly port ring is the diegetic version of the same meter: it dims as
+  // the tank drains, so opponents can read your charge off the vehicle itself
+  portRing.material.color.setHex(ORANGE).multiplyScalar(0.3 + 0.7 * frac + 0.25 * pulse * frac);
+
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
@@ -590,4 +636,4 @@ tick();
 
 // debug handle for headless tests (virtual time races ahead of THREE.Clock,
 // so tests force-complete animations by poking jump.t / flip.t)
-window.__rover = { ship, shipTile, jump, flip, jut, shots, effects };
+window.__rover = { ship, shipTile, jump, flip, jut, shots, effects, juiceState };

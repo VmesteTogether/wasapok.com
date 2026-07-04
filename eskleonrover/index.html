@@ -22,15 +22,38 @@
       font-size: 11px; opacity: .75; user-select: none;
     }
     input[type=range] { width: 110px; accent-color: #f3dcb0; }
+    /* juice meter: no text — fullness, pulse tempo and glow do the talking */
+    #juice {
+      position: fixed; right: 16px; bottom: 44px;
+      width: 220px; height: 10px; border-radius: 5px;
+      background: rgba(0,0,0,.35);
+      border: 1px solid rgba(255,160,86,.35);
+    }
+    #juicefill {
+      position: absolute; left: 0; top: 0; bottom: 0; width: 100%;
+      display: block; border-radius: 4px;
+      background: linear-gradient(90deg, #ff8f5a, #ffb974);
+      transition: width .15s;
+    }
+    #juiceedge {
+      position: absolute; right: 0; top: -2px; bottom: -2px; width: 7px;
+      display: block; border-radius: 3px;
+      background: #ffe4b8; opacity: 0;
+    }
+    #juicenotch {
+      position: absolute; left: 17.5%; top: -3px; bottom: -3px; width: 1px;
+      background: rgba(243,220,176,.4);
+    }
   </style>
 </head>
 <body>
 <canvas id="scene"></canvas>
 <div class="hud">
   <h1>eskleon rover</h1>
-  <p>v0.4 &mdash; the mill + jump/flip/jut/cannon test</p>
+  <p>v0.5 &mdash; the mill + jump/flip/jut/cannon/juice test</p>
   <p>wasd aims &middot; left-click jumps &middot; double-click flips &middot; right-click juts &middot; space fires mid tilt-jump</p>
 </div>
+<div id="juice"><i id="juicefill"><b id="juiceedge"></b></i><span id="juicenotch"></span></div>
 <div class="speedbox">
   <label for="speed">belt speed</label>
   <input id="speed" type="range" min="0" max="2.5" step="0.05" value="1">
