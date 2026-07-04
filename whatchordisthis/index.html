@@ -87,6 +87,23 @@
     .voicing canvas { display: block; }
     .vlabel { font-size: 10px; opacity: .65; margin-top: 3px; max-width: 96px; }
 
+    .nonebtn {
+      display: block; width: 100%;
+      background: rgba(0,0,0,.22); color: #f3dcb0;
+      border: 1px dashed rgba(243,220,176,.45); border-radius: 8px;
+      padding: 12px 16px; font: inherit; font-size: 14px;
+      cursor: pointer; user-select: none; text-align: center;
+      transition: filter .15s, border-color .2s, color .2s, background .2s;
+    }
+    .nonebtn:hover { filter: brightness(.7); }
+    .nonebtn.confirmed {
+      filter: none; cursor: default;
+      border-style: solid; border-color: #8fce91; color: #8fce91;
+      background: rgba(143,206,145,.12);
+    }
+    .deeper { font-size: 11px; opacity: .5; margin: 18px 0 8px; }
+    .exhausted { font-size: 13px; opacity: .65; margin-top: 16px; text-align: center; }
+
     .bassline { font-size: 13px; opacity: .8; margin: 0 0 12px; }
     footer { margin-top: 40px; font-size: 11px; opacity: .4; }
     footer a { color: inherit; }
@@ -411,9 +428,12 @@ playBtn.addEventListener('click', function () {
 // ------------------------------------------------------------- analysis
 
 var analyzeTimer = null;
+var candLimit = 5;          // grows by 5 per "none of these" click
+var CAND_MAX = 15;
 
 function scheduleAnalyze() {
   if (analyzeTimer) clearTimeout(analyzeTimer);
+  candLimit = 5;            // fresh slice, fresh guesses
   setStatus('analyzing…');
   analyzeTimer = setTimeout(runAnalyze, 60); // let the UI paint first
 }
@@ -424,7 +444,7 @@ function runAnalyze() {
   var sr = buffer.sampleRate;
   var a = Math.floor(selStart * sr);
   var b = Math.min(mono.length, Math.ceil(selEnd * sr));
-  var res = WCIT.analyze(mono.subarray(a, b), sr);
+  var res = WCIT.analyze(mono.subarray(a, b), sr, candLimit);
   render(res);
 }
 
@@ -456,6 +476,12 @@ function render(res) {
   }
 
   res.candidates.forEach(function (c, idx) {
+    if (idx === 5) {
+      var dp = document.createElement('div');
+      dp.className = 'deeper';
+      dp.textContent = 'deeper guesses — longer shots below';
+      resultsEl.appendChild(dp);
+    }
     var card = document.createElement('div');
     card.className = 'card' + (idx === 0 ? ' top' : '');
     var pct = Math.round(c.score * 100);
@@ -497,6 +523,24 @@ function render(res) {
     }
     resultsEl.appendChild(card);
   });
+
+  if (candLimit < CAND_MAX && res.candidates.length >= candLimit) {
+    var none = document.createElement('button');
+    none.className = 'nonebtn';
+    none.textContent = 'none of these';
+    none.addEventListener('click', function () {
+      if (none.classList.contains('confirmed')) return;
+      none.classList.add('confirmed');
+      none.textContent = 'ok — digging deeper…';
+      setTimeout(function () { candLimit += 5; runAnalyze(); }, 400);
+    });
+    resultsEl.appendChild(none);
+  } else if (candLimit >= CAND_MAX) {
+    var ex = document.createElement('div');
+    ex.className = 'exhausted';
+    ex.textContent = "that's everything it can hear in this slice — try dragging a tighter selection around just the chord.";
+    resultsEl.appendChild(ex);
+  }
 }
 
 function esc(s) {

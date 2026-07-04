@@ -309,7 +309,7 @@ function getVoicings(rootPc, suffix, sal, salMax, bassPc) {
 
 // ----------------------------------------------------------------- main
 
-function analyze(samples, sampleRate) {
+function analyze(samples, sampleRate, maxCandidates) {
   var rms = 0;
   for (var i = 0; i < samples.length; i++) rms += samples[i] * samples[i];
   rms = Math.sqrt(rms / Math.max(1, samples.length));
@@ -329,8 +329,9 @@ function analyze(samples, sampleRate) {
   var bassPc = detectBass(sal);
   var ranked = scoreChords(chroma);
 
+  var limit = maxCandidates || 5;
   var candidates = [];
-  for (var c = 0; c < ranked.length && candidates.length < 5; c++) {
+  for (var c = 0; c < ranked.length && candidates.length < limit; c++) {
     var cand = ranked[c];
     cand.voicings = getVoicings(cand.rootPc, cand.suffix, sal, salMax, bassPc);
     // slash-chord hint: bass note is a chord tone but not the root
