@@ -285,8 +285,34 @@ const flip = {
   from: new THREE.Vector3(), to: new THREE.Vector3()
 };
 
+// Right click: the jut — a panic dodge. One tile, strict 4-way (the most
+// recently pressed key alone decides, so diagonals degrade to their newest
+// component), grounded only. Will eventually spend "juice" from the shared
+// energy meter; free while that system doesn't exist.
+const JUT_DUR = 0.25, JUT_LEAN = THREE.MathUtils.degToRad(22);
+const jut = {
+  active: false, t: 0, axis: new THREE.Vector3(1, 0, 0),
+  from: new THREE.Vector3(), to: new THREE.Vector3()
+};
+
 canvas.addEventListener('pointerdown', (e) => {
-  if (e.button !== 0 || flip.active) return;
+  if (e.button === 2) {
+    if (jump.active || flip.active || jut.active || !held.length) return;
+    const d = KEYDIR[held[held.length - 1]];
+    const tx = shipTile.gx + d[0], tz = shipTile.gz + d[1];
+    if (tx < 0 || tx > 2 || tz < 0 || tz > 3) return;   // no tile there — refuse
+    jut.active = true;
+    jut.t = 0;
+    settle.active = false;                              // a dodge outranks the wobble
+    jut.axis.crossVectors(DOWN, stepVec(d)).normalize();
+    jut.from.set(tileX(shipTile.gx), 0, tileZ(shipTile.gz));
+    jut.to.set(tileX(tx), 0, tileZ(tz));
+    shipTile.gx = tx;
+    shipTile.gz = tz;
+    return;
+  }
+
+  if (e.button !== 0 || flip.active || jut.active) return;
 
   if (!jump.active) {                              // first click: jump
     const step = aimStep();
@@ -371,6 +397,22 @@ function tick() {
       ship.quaternion.identity();
       land(jump.axis, jump.tilt > 0 ? 0.6 : 0.45); // lighter than a flip landing
     }
+  } else if (jut.active) {
+    jut.t += dt;
+    const k = Math.min(jut.t / JUT_DUR, 1);
+    const ease = 1 - Math.pow(1 - k, 2.4);         // hard launch, skidding arrival
+    ship.position.x = jut.from.x + (jut.to.x - jut.from.x) * ease;
+    ship.position.z = jut.from.z + (jut.to.z - jut.from.z) * ease;
+    ship.position.y = HOVER_Y;
+    // drone-style bank: top leans toward travel, level again before arrival
+    ship.quaternion.setFromAxisAngle(jut.axis, -JUT_LEAN * Math.sin(Math.PI * Math.min(k * 1.25, 1)));
+    if (k >= 1) {
+      jut.active = false;
+      ship.quaternion.identity();
+      // skid stop: weight pitches toward travel, so rock opposite the flip's
+      // carry direction (negate mutates jut.axis; it's reset on the next jut)
+      land(jut.axis.negate(), 0.35);
+    }
   } else if (settle.active) {
     settle.t += dt;
     const s = Math.min(settle.t / SETTLE_DUR, 1);
@@ -395,4 +437,4 @@ tick();
 
 // debug handle for headless tests (virtual time races ahead of THREE.Clock,
 // so tests force-complete animations by poking jump.t / flip.t)
-window.__rover = { ship, shipTile, jump, flip };
+window.__rover = { ship, shipTile, jump, flip, jut };
