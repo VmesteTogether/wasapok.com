@@ -200,6 +200,23 @@ const tileX = (gx) => (gx - 1) * TILE;
 const tileZ = (gz) => (gz - 1.5) * TILE;
 ship.position.set(tileX(shipTile.gx), HOVER_Y, tileZ(shipTile.gz));
 
+// undercarriage cannon port: dark circular inset with an orange energy ring
+const ORANGE = 0xffa056;
+const port = new THREE.Group();
+port.add(new THREE.Mesh(
+  new THREE.CylinderGeometry(0.1, 0.1, 0.035, 20),
+  new THREE.MeshStandardMaterial({ color: 0x14171f, roughness: 0.55 })
+));
+const portRing = new THREE.Mesh(
+  new THREE.TorusGeometry(0.082, 0.013, 10, 28),
+  new THREE.MeshBasicMaterial({ color: ORANGE })
+);
+portRing.rotation.x = Math.PI / 2;
+portRing.position.y = -0.018;
+port.add(portRing);
+port.position.y = -0.09;               // centered on the belly
+ship.add(port);
+
 // ------------------------------------------------------------ input
 // WASD never moves the ship — it only aims. Screen-up (W) is -z (the far end).
 
@@ -246,7 +263,7 @@ function stepVec(step) {
 const JUMP_H = 0.85, JUMP_DUR = 0.62;
 const TILT = THREE.MathUtils.degToRad(62);
 const DOWN = new THREE.Vector3(0, -1, 0);
-const jump = { active: false, t: 0, tilt: 0, axis: new THREE.Vector3(1, 0, 0), step: null };
+const jump = { active: false, t: 0, tilt: 0, axis: new THREE.Vector3(1, 0, 0), step: null, fired: false };
 
 // Asymmetric "gravity" arc, 0→1→0: a hard launch that decelerates into a
 // hang at the apex, then a heavier, accelerating fall. kr = fraction of the
@@ -295,6 +312,111 @@ const jut = {
   from: new THREE.Vector3(), to: new THREE.Vector3()
 };
 
+// ------------------------------------------------------------ cannon
+// Space fires the undercarriage cannon at the aimed tile — but only mid
+// tilt-jump: the belly has to be presented. One shot per jump. A flat jump
+// reserves space for the future vertical double-jump (nothing yet).
+
+const glowTex = makeCanvas(128, 128, (g, w, h) => {
+  const r = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  r.addColorStop(0, 'rgba(255,195,130,1)');
+  r.addColorStop(0.4, 'rgba(255,150,80,.55)');
+  r.addColorStop(1, 'rgba(255,140,70,0)');
+  g.fillStyle = r;
+  g.fillRect(0, 0, w, h);
+});
+
+const BALL_GEO = new THREE.SphereGeometry(0.085, 16, 12);
+const BALL_MAT = new THREE.MeshBasicMaterial({ color: 0xffc37e });
+const BALL_GLOW = new THREE.SpriteMaterial({
+  map: glowTex, color: ORANGE, transparent: true,
+  blending: THREE.AdditiveBlending, depthWrite: false
+});
+const BALL_SPEED = 7;                  // world units / second
+
+const shots = [];                      // in-flight energy balls
+const effects = [];                    // bursts / scorches / port pulses
+
+function fireCannon(tx, tz) {
+  const ball = new THREE.Mesh(BALL_GEO, BALL_MAT);
+  const glow = new THREE.Sprite(BALL_GLOW);
+  glow.scale.set(0.55, 0.55, 1);
+  ball.add(glow);
+  const from = port.getWorldPosition(new THREE.Vector3());
+  const to = new THREE.Vector3(tileX(tx), BELT_Y + 0.03, tileZ(tz));
+  ball.position.copy(from);
+  scene.add(ball);
+  shots.push({ mesh: ball, from, to, t: 0, dur: from.distanceTo(to) / BALL_SPEED });
+  // muzzle pulse on the port ring
+  effects.push({
+    t: 0, dur: 0.25,
+    update(k) { portRing.scale.setScalar(1 + 0.8 * (1 - k)); },
+    end() { portRing.scale.setScalar(1); }
+  });
+}
+
+function impact(pos) {
+  const ring = new THREE.Mesh(
+    new THREE.RingGeometry(0.18, 0.28, 32),
+    new THREE.MeshBasicMaterial({
+      color: ORANGE, transparent: true, opacity: 0.9,
+      side: THREE.DoubleSide, depthWrite: false
+    })
+  );
+  ring.rotation.x = -Math.PI / 2;
+  ring.position.set(pos.x, BELT_Y + 0.012, pos.z);
+  scene.add(ring);
+  effects.push({
+    t: 0, dur: 0.35, mesh: ring,
+    update(k) {
+      const s = 1 + 2.2 * k;
+      ring.scale.set(s, s, 1);
+      ring.material.opacity = 0.9 * (1 - k);
+    }
+  });
+
+  const flash = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTex, color: 0xffc98a, transparent: true,
+    blending: THREE.AdditiveBlending, depthWrite: false
+  }));
+  flash.position.set(pos.x, BELT_Y + 0.1, pos.z);
+  flash.scale.set(0.9, 0.9, 1);
+  scene.add(flash);
+  effects.push({
+    t: 0, dur: 0.22, mesh: flash,
+    update(k) {
+      const s = 0.9 + 0.8 * k;
+      flash.scale.set(s, s, 1);
+      flash.material.opacity = 1 - k;
+    }
+  });
+
+  const scorch = new THREE.Mesh(
+    new THREE.PlaneGeometry(0.66, 0.66),
+    new THREE.MeshBasicMaterial({
+      map: glowTex, color: 0xff7a3a, transparent: true, opacity: 0.8,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    })
+  );
+  scorch.rotation.x = -Math.PI / 2;
+  scorch.position.set(pos.x, BELT_Y + 0.004, pos.z);
+  scene.add(scorch);
+  effects.push({
+    t: 0, dur: 1.2, mesh: scorch,
+    update(k) { scorch.material.opacity = 0.8 * (1 - k); }
+  });
+}
+
+window.addEventListener('keydown', (e) => {
+  if (e.code !== 'Space') return;
+  e.preventDefault();
+  if (!jump.active || jump.tilt === 0 || jump.fired || !jump.step) return;
+  const tx = shipTile.gx + jump.step[0], tz = shipTile.gz + jump.step[1];
+  if (tx < 0 || tx > 2 || tz < 0 || tz > 3) return;  // aiming off the belt
+  jump.fired = true;
+  fireCannon(tx, tz);
+});
+
 canvas.addEventListener('pointerdown', (e) => {
   if (e.button === 2) {
     if (jump.active || flip.active || jut.active || !held.length) return;
@@ -318,6 +440,7 @@ canvas.addEventListener('pointerdown', (e) => {
     const step = aimStep();
     jump.active = true;
     jump.t = 0;
+    jump.fired = false;                            // fresh cannon charge
     jump.step = step;
     jump.tilt = step ? TILT : 0;
     if (step) jump.axis.crossVectors(DOWN, stepVec(step)).normalize();
@@ -428,6 +551,36 @@ function tick() {
     ship.position.y = HOVER_Y + Math.sin(now * 2.2) * 0.035;  // idle hover bob
   }
 
+  // in-flight energy balls
+  for (let i = shots.length - 1; i >= 0; i--) {
+    const s = shots[i];
+    s.t += dt;
+    const k = Math.min(s.t / s.dur, 1);
+    s.mesh.position.lerpVectors(s.from, s.to, k);
+    if (k >= 1) {
+      scene.remove(s.mesh);            // geometry/material are shared, keep them
+      shots.splice(i, 1);
+      impact(s.to);
+    }
+  }
+
+  // transient effects (bursts, scorches, port pulses)
+  for (let i = effects.length - 1; i >= 0; i--) {
+    const fx = effects[i];
+    fx.t += dt;
+    const k = Math.min(fx.t / fx.dur, 1);
+    fx.update(k);
+    if (k >= 1) {
+      if (fx.end) fx.end();
+      if (fx.mesh) {
+        scene.remove(fx.mesh);
+        fx.mesh.material.dispose();
+        if (fx.mesh.geometry) fx.mesh.geometry.dispose();
+      }
+      effects.splice(i, 1);
+    }
+  }
+
   renderer.render(scene, camera);
   requestAnimationFrame(tick);
 }
@@ -437,4 +590,4 @@ tick();
 
 // debug handle for headless tests (virtual time races ahead of THREE.Clock,
 // so tests force-complete animations by poking jump.t / flip.t)
-window.__rover = { ship, shipTile, jump, flip, jut };
+window.__rover = { ship, shipTile, jump, flip, jut, shots, effects };
