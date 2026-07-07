@@ -262,68 +262,109 @@ function stamp(cls, text, sub) {
   return `<div class="stamp ${cls}">${text}${sub ? `<small>${sub}</small>` : ""}</div>`;
 }
 
-function renderDefense(team) {
+// Pure analysis of a team (array of dex entries) — no DOM. Also drives the recommender.
+function analyzeTeam(team) {
+  const defRows = {};                    // attacking type -> { weak, resist, status }
+  const exposed = [], secure = [];
+  TYPES.forEach(atk => {
+    let weak = 0, resist = 0;
+    team.forEach(p => {
+      const m = effOn(atk, p.t1, p.t2);
+      if (m >= 2) weak++;
+      if (m < 1) resist++;
+    });
+    let status = "mid";
+    if (weak >= 3 || (weak >= 2 && resist === 0)) { status = "bad"; exposed.push({ t: atk, weak }); }
+    else if (weak === 0 && resist >= Math.min(3, team.length)) { status = "good"; secure.push(atk); }
+    else if (weak > resist) status = "soft";
+    defRows[atk] = { weak, resist, status };
+  });
+
+  const stabs = [...new Set(team.flatMap(p => [p.t1, p.t2]).filter(Boolean))];
+  const offRows = {};                    // defending type -> best STAB multiplier
+  const uncovered = [], walled = [];
+  TYPES.forEach(def => {
+    const best = stabs.length ? Math.max(...stabs.map(atk => effOn(atk, def, null))) : 0;
+    offRows[def] = best;
+    if (best < 1) { walled.push(def); uncovered.push(def); }
+    else if (best < 2) uncovered.push(def);
+  });
+
+  const vacant = DUTIES.filter(d => !team.some(p => d.test(p.stats)));
+
+  let score = 100;
+  const notes = [];
+  const dEx = Math.min(28, exposed.length * 9);
+  if (dEx) { score -= dEx; notes.push(`−${dEx} shared weaknesses (${exposed.map(x => x.t).join(", ")})`); }
+  const dWall = Math.min(16, walled.length * 8);
+  if (dWall) { score -= dWall; notes.push(`−${dWall} walled offensively`); }
+  const neutralOnly = uncovered.length - walled.length;
+  const dOff = Math.min(15, Math.max(0, neutralOnly - 1) * 3);
+  if (dOff) { score -= dOff; notes.push(`−${dOff} coverage gaps`); }
+  const dRole = Math.min(30, vacant.length * 6);
+  if (dRole) { score -= dRole; notes.push(`−${dRole} vacant duties`); }
+  if (team.length < 6) {
+    const dSize = (6 - team.length) * 4;
+    score -= dSize; notes.push(`−${dSize} incomplete roster (${team.length}/6)`);
+  }
+  score = Math.max(0, Math.round(score));
+
+  return { defRows, exposed, secure, stabs, offRows, uncovered, walled, vacant, score, notes };
+}
+
+function renderDefense(team, A) {
   const table = document.getElementById("defMatrix");
   const head = `<tr><th class="rowtype">VS ↓</th>${team.map(p =>
     `<th title="${p.name}"><img src="${SPRITE(p.id)}" alt="${p.name}"
        onerror="this.onerror=null;this.src='${SPRITE(p.dexno)}'"></th>`).join("")}<th>NET</th></tr>`;
 
-  const exposed = [], secure = [];
+  const NET = { bad: ["EXPOSED","cell-net-bad"], good: ["SECURE","cell-net-good"],
+                soft: ["SOFT","cell-net-mid"], mid: ["—","cell-net-mid"] };
   const rows = TYPES.map(atk => {
-    let weak = 0, resist = 0;
     const cells = team.map(p => {
       const m = effOn(atk, p.t1, p.t2);
-      if (m >= 2) weak++;
-      if (m < 1) resist++;
       const cls = m >= 4 ? "cell-x4" : m >= 2 ? "cell-x2" : m === 0 ? "cell-x0"
                 : m <= .25 ? "cell-x025" : m < 1 ? "cell-x05" : "";
       const txt = m === 0 ? "0" : m === .25 ? "¼" : m === .5 ? "½" : m === 1 ? "·" : m + "×";
       return `<td class="${cls}">${txt}</td>`;
     }).join("");
-    let net, netCls;
-    if (weak >= 3 || (weak >= 2 && resist === 0)) { net = "EXPOSED"; netCls = "cell-net-bad"; exposed.push({ t:atk, weak }); }
-    else if (weak === 0 && resist >= Math.min(3, team.length)) { net = "SECURE"; netCls = "cell-net-good"; secure.push(atk); }
-    else { net = weak > resist ? "SOFT" : "—"; netCls = "cell-net-mid"; }
+    const [net, netCls] = NET[A.defRows[atk].status];
     return `<tr><td class="rowtype">${typeBadge(atk)}</td>${cells}<td class="${netCls}">${net}</td></tr>`;
   }).join("");
   table.innerHTML = head + rows;
 
   const st = document.getElementById("defStamps");
   let s = "";
-  exposed.sort((a,b) => b.weak - a.weak).forEach(x =>
-    s += stamp("bad", `WEAK TO ${x.t.toUpperCase()}`, `${x.weak} of ${members().length} members hit hard`));
-  if (!exposed.length) s += stamp("good", "NO SHARED WEAKNESS", "no type threatens the whole party");
-  if (secure.length >= 4) s += stamp("good", "DEFENSIVE CORE INTACT", `secure vs ${secure.length} types`);
+  [...A.exposed].sort((a,b) => b.weak - a.weak).forEach(x =>
+    s += stamp("bad", `WEAK TO ${x.t.toUpperCase()}`, `${x.weak} of ${team.length} members hit hard`));
+  if (!A.exposed.length) s += stamp("good", "NO SHARED WEAKNESS", "no type threatens the whole party");
+  if (A.secure.length >= 4) s += stamp("good", "DEFENSIVE CORE INTACT", `secure vs ${A.secure.length} types`);
   st.innerHTML = s;
-  return exposed;
 }
 
-function renderOffense(team) {
-  const stabs = [...new Set(team.flatMap(p => [p.t1, p.t2]).filter(Boolean))];
+function renderOffense(team, A) {
   document.getElementById("stabLine").innerHTML =
-    `STAB types on staff:&nbsp; ${stabs.map(t => typeBadge(t)).join(" ")}`;
+    `STAB types on staff:&nbsp; ${A.stabs.map(t => typeBadge(t)).join(" ")}`;
 
-  const uncovered = [], walled = [];
   document.getElementById("offGrid").innerHTML = TYPES.map(def => {
-    const best = Math.max(...stabs.map(atk => effOn(atk, def, null)));
+    const best = A.offRows[def];
     let cls, txt;
     if (best >= 2) { cls = "off-se"; txt = best + "×"; }
-    else if (best >= 1) { cls = "off-neutral"; txt = "1× only"; uncovered.push(def); }
-    else { cls = "off-walled"; txt = best === 0 ? "immune" : "resisted"; walled.push(def); uncovered.push(def); }
+    else if (best >= 1) { cls = "off-neutral"; txt = "1× only"; }
+    else { cls = "off-walled"; txt = best === 0 ? "immune" : "resisted"; }
     return `<div class="off-tile ${cls}">${typeBadge(def)}<div class="off-mult">${txt}</div></div>`;
   }).join("");
 
   const st = document.getElementById("offStamps");
   let s = "";
-  if (walled.length)
-    s += stamp("bad", "WALLED BY " + walled.map(t => t.toUpperCase()).join(", "), "no STAB even lands neutral");
-  const neutralOnly = uncovered.filter(t => !walled.includes(t));
+  if (A.walled.length)
+    s += stamp("bad", "WALLED BY " + A.walled.map(t => t.toUpperCase()).join(", "), "no STAB even lands neutral");
+  const neutralOnly = A.uncovered.filter(t => !A.walled.includes(t));
   if (neutralOnly.length)
     s += stamp("warn", "CANNOT PRESSURE " + neutralOnly.map(t => t.toUpperCase()).join(", "), "no super-effective STAB available");
-  if (!uncovered.length)
+  if (!A.uncovered.length)
     s += stamp("good", "FULL COVERAGE", "every type takes super-effective STAB");
   st.innerHTML = s;
-  return { uncovered, walled, stabs };
 }
 
 const DUTIES = [
@@ -341,11 +382,9 @@ const DUTIES = [
     test: s => s[0] >= 85 && s[2] >= 70 && s[4] >= 70 },
 ];
 
-function renderRoles(team) {
-  const vacant = [];
+function renderRoles(team, A) {
   document.getElementById("dutyTable").innerHTML = DUTIES.map(d => {
     const holders = team.filter(p => d.test(p.stats));
-    if (!holders.length) vacant.push(d);
     return `<div class="duty-row">
       <span class="duty-name">${d.name}</span>
       <span class="duty-desc">${d.desc}</span>
@@ -357,30 +396,13 @@ function renderRoles(team) {
   }).join("");
 
   const st = document.getElementById("roleStamps");
-  st.innerHTML = vacant.length
-    ? vacant.map(d => stamp("bad", "LACKING: " + d.name)).join("")
+  st.innerHTML = A.vacant.length
+    ? A.vacant.map(d => stamp("bad", "LACKING: " + d.name)).join("")
     : stamp("good", "ALL DUTIES STAFFED", "a complete outfit");
-  return vacant;
 }
 
-function renderVerdict(team, exposed, off, vacant) {
-  let score = 100;
-  const notes = [];
-  const dEx = Math.min(28, exposed.length * 9);
-  if (dEx) { score -= dEx; notes.push(`−${dEx} shared weaknesses (${exposed.map(x=>x.t).join(", ")})`); }
-  const dWall = Math.min(16, off.walled.length * 8);
-  if (dWall) { score -= dWall; notes.push(`−${dWall} walled offensively`); }
-  const neutralOnly = off.uncovered.length - off.walled.length;
-  const dOff = Math.min(15, Math.max(0, neutralOnly - 1) * 3);
-  if (dOff) { score -= dOff; notes.push(`−${dOff} coverage gaps`); }
-  const dRole = Math.min(30, vacant.length * 6);
-  if (dRole) { score -= dRole; notes.push(`−${dRole} vacant duties`); }
-  if (team.length < 6) {
-    const dSize = (6 - team.length) * 4;
-    score -= dSize; notes.push(`−${dSize} incomplete roster (${team.length}/6)`);
-  }
-  score = Math.max(0, Math.round(score));
-
+function renderVerdict(A) {
+  const { score, notes } = A;
   let cls, label, sub;
   if (score >= 88)      { cls = "v-exemplary";   label = "EXEMPLARY";   sub = "glory to your team"; }
   else if (score >= 72) { cls = "v-approved";    label = "APPROVED";    sub = "fit for the league"; }
@@ -397,6 +419,100 @@ function renderVerdict(team, exposed, off, vacant) {
   vs.innerHTML = `${label}<small>${sub}</small>`;
 }
 
+// ---------------------------------------------------------------- recruitment
+const bstOf = p => p.stats.reduce((a,b) => a+b, 0);
+
+// mythicals — can't tell the player to just go catch one
+const MYTHICALS = new Set([151,251,385,386,489,490,491,492,493,494,647,648,649,
+  719,720,721,801,802,807,808,809,893,1025]);
+
+// What changed for the better (or worse) between analyses — fuels the reason line.
+function recReasons(A, A2) {
+  const r = [];
+  const duties = A.vacant.filter(d => !A2.vacant.includes(d)).map(d => d.name);
+  if (duties.length) r.push("staffs " + duties.join(" + "));
+  const patched = A.exposed.filter(x => !A2.exposed.some(y => y.t === x.t)).map(x => x.t.toUpperCase());
+  if (patched.length) r.push("patches the " + patched.join("/") + " weakness");
+  const cov = A.uncovered.filter(t => !A2.uncovered.includes(t)).map(t => t.toUpperCase());
+  if (cov.length) r.push("adds S.E. pressure on " + cov.slice(0,4).join(", "));
+  const opened = A2.exposed.filter(x => !A.exposed.some(y => y.t === x.t)).map(x => x.t.toUpperCase());
+  if (opened.length) r.push("but opens a " + opened.join("/") + " weakness");
+  return r;
+}
+
+function renderRecs(A) {
+  const note = document.getElementById("recsNote");
+  const list = document.getElementById("recsList");
+  const slots = party.map((m, i) => m ? { slot: i, p: byId.get(m.id) } : null).filter(Boolean);
+  const team = slots.map(s => s.p);
+  const full = team.length >= 6;
+  const onTeam = new Set(team.map(p => p.dexno));
+  // canonical forms only, solid but obtainable (pseudo-legend ceiling, no box legendaries)
+  const pool = DEX.filter(p => p.id < 10000 && !onTeam.has(p.dexno)
+    && !MYTHICALS.has(p.dexno) && bstOf(p) >= 500 && bstOf(p) <= 610);
+  // prefer candidates whose types are new to the team
+  const tie = c => [c.t1, c.t2].filter(t => t && !A.stabs.includes(t)).length * 10 + bstOf(c) / 100;
+
+  const sugg = [];
+  if (!full) {
+    const openSlot = party.findIndex(m => !m);
+    pool.forEach(c => {
+      const A2 = analyzeTeam(team.concat(c));
+      const delta = A2.score - A.score;
+      if (delta > 0) sugg.push({ inn: c, out: null, slot: openSlot, delta, reasons: recReasons(A, A2), tie: tie(c) });
+    });
+    note.textContent = `Roster incomplete (${team.length}/6) — the bureau recommends the following additions. No discharges necessary.`;
+  } else {
+    slots.forEach((s, i) => {
+      const rest = team.slice(0, i).concat(team.slice(i + 1));
+      pool.forEach(c => {
+        const A2 = analyzeTeam(rest.concat(c));
+        const delta = A2.score - A.score;
+        if (delta > 0) sugg.push({ inn: c, out: s.p, slot: s.slot, delta, reasons: recReasons(A, A2), tie: tie(c) });
+      });
+    });
+    note.textContent = "Roster full — improvement requires substitution. Proposed personnel changes below.";
+  }
+
+  sugg.sort((a, b) => b.delta - a.delta || b.tie - a.tie);
+  const picks = [], seen = new Set();
+  for (const s of sugg) {
+    if (seen.has(s.inn.dexno)) continue;
+    seen.add(s.inn.dexno);
+    picks.push(s);
+    if (picks.length === 3) break;
+  }
+
+  if (!picks.length) {
+    list.innerHTML = stamp("good", "NO CHANGES ADVISED",
+      full ? "no substitution would raise the score" : "recruit whoever you like — the fundamentals are sound");
+    return;
+  }
+
+  list.innerHTML = picks.map((s, pi) => `
+    <div class="rec-card">
+      <div class="rec-photo"><img src="${SPRITE(s.inn.id)}" alt="${s.inn.name}"
+        onerror="this.onerror=null;this.src='${SPRITE(s.inn.dexno)}'"></div>
+      <div class="rec-body">
+        <div class="rec-top">
+          <span class="rec-name">${s.inn.name}</span>
+          <span class="rec-delta">+${s.delta}</span>
+          <span class="rec-class">${archetype(s.inn.stats)}</span>
+        </div>
+        <div class="types">${typeBadge(s.inn.t1)}${s.inn.t2 ? typeBadge(s.inn.t2) : ""}</div>
+        <div class="rec-reason">${s.out ? `relieves <b>${s.out.name}</b> &mdash; ` : ""}${s.reasons.join(" · ") || "general reinforcement"}</div>
+      </div>
+      <button class="rec-enlist" data-pi="${pi}">${s.out ? "SUBSTITUTE" : "ENLIST"}</button>
+    </div>`).join("");
+
+  list.querySelectorAll(".rec-enlist").forEach(btn =>
+    btn.addEventListener("click", () => {
+      const s = picks[+btn.dataset.pi];
+      party[s.slot] = { id: s.inn.id, alias: "" };
+      saveParty(); thud(); renderAll();
+    }));
+}
+
 // ---------------------------------------------------------------- render all
 function renderAll() {
   renderParty();
@@ -405,10 +521,12 @@ function renderAll() {
   const body = document.getElementById("reportBody");
   if (!team.length) { empty.hidden = false; body.hidden = true; return; }
   empty.hidden = true; body.hidden = false;
-  const exposed = renderDefense(team);
-  const off = renderOffense(team);
-  const vacant = renderRoles(team);
-  renderVerdict(team, exposed, off, vacant);
+  const A = analyzeTeam(team);
+  renderDefense(team, A);
+  renderOffense(team, A);
+  renderRoles(team, A);
+  renderVerdict(A);
+  renderRecs(A);
 }
 
 // ---------------------------------------------------------------- chrome
