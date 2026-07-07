@@ -5,6 +5,7 @@
 
 import * as THREE from 'three';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { createScenery } from './scenery.js';
 
 // ------------------------------------------------------------ constants
 
@@ -73,19 +74,44 @@ function makeCanvas(w, h, draw) {
   return tex;
 }
 
-// one 1×1-unit tile of belt rubber: seam across the top, faint tread + speckle
+// one 1×1-unit tile of sun-baked desert hardpan: mottled sand, cracked earth,
+// pebbles — plus a faint seam that admits it's still a belt. Features are
+// stamped 5-way (center + 4 wrap offsets) so the tile loops in both axes.
 const beltTex = makeCanvas(256, 256, (g, w, h) => {
-  g.fillStyle = '#262b36'; g.fillRect(0, 0, w, h);
-  for (let y = 32; y < h; y += 32) {                 // tread grooves
-    g.fillStyle = 'rgba(0,0,0,.18)';
-    g.fillRect(0, y, w, 3);
+  g.fillStyle = '#8a7355'; g.fillRect(0, 0, w, h);
+  const stamp = (draw) => {
+    for (const [ox, oy] of [[0, 0], [-w, 0], [w, 0], [0, -h], [0, h]]) {
+      g.save(); g.translate(ox, oy); draw(); g.restore();
+    }
+  };
+  for (let i = 0; i < 22; i++) {                     // mottled sand patches
+    const x = Math.random() * w, y = Math.random() * h, r = 10 + Math.random() * 26;
+    const tone = Math.random() < 0.5 ? '138,110,78' : '156,133,98';
+    const rot = Math.random() * Math.PI;
+    stamp(() => {
+      g.fillStyle = 'rgba(' + tone + ',.28)';
+      g.beginPath(); g.ellipse(x, y, r, r * 0.6, rot, 0, Math.PI * 2); g.fill();
+    });
   }
-  for (let i = 0; i < 500; i++) {                    // rubber speckle
-    g.fillStyle = Math.random() < 0.5 ? 'rgba(255,255,255,.035)' : 'rgba(0,0,0,.14)';
+  g.strokeStyle = 'rgba(74,58,40,.5)'; g.lineWidth = 1.5;   // cracked earth
+  for (let i = 0; i < 9; i++) {
+    const pts = [[Math.random() * w, Math.random() * h]];
+    for (let s = 0; s < 4; s++) {
+      const [px, py] = pts[pts.length - 1];
+      pts.push([px + (Math.random() - 0.5) * 34, py + Math.random() * 22]);
+    }
+    stamp(() => {
+      g.beginPath(); g.moveTo(pts[0][0], pts[0][1]);
+      for (const [px, py] of pts.slice(1)) g.lineTo(px, py);
+      g.stroke();
+    });
+  }
+  for (let i = 0; i < 320; i++) {                    // pebbles + pale glints
+    g.fillStyle = Math.random() < 0.6 ? 'rgba(60,48,34,.35)' : 'rgba(240,225,195,.25)';
     g.fillRect(Math.random() * w, Math.random() * h, 2, 2);
   }
-  g.fillStyle = '#12151c'; g.fillRect(0, 0, w, 7);   // seam groove
-  g.fillStyle = '#4a5266'; g.fillRect(0, 7, w, 2);   // seam highlight
+  g.fillStyle = 'rgba(40,32,22,.5)'; g.fillRect(0, 0, w, 4);   // belt seam
+  g.fillStyle = 'rgba(200,175,135,.4)'; g.fillRect(0, 4, w, 1);
 });
 beltTex.wrapS = beltTex.wrapT = THREE.RepeatWrapping;
 beltTex.repeat.set(BELT_W, BELT_L);                  // 1 canvas per world unit
@@ -180,6 +206,9 @@ for (const z of [-BELT_L / 2, BELT_L / 2]) {                          // axle ca
 for (const [x, z] of [[-1.4, -1.8], [1.4, -1.8], [-1.4, 1.8], [1.4, 1.8]]) {
   box(0.28, 0.36, 0.28, 0x232735, x, 0.18, z);                        // legs
 }
+
+// the anti-western desert rolling past (belt props + side lots — scenery.js)
+const scenery = createScenery(scene, { BELT_W, BELT_L, BELT_Y });
 
 // ------------------------------------------------------------ ship
 // One vehicle = one grid cell. Grid row centers sit at z = -1.5,-0.5,.5,1.5
@@ -522,6 +551,7 @@ function tick() {
   // increasing offset.v shifts the visible pattern toward +z: far → near
   beltTex.offset.y = (beltTex.offset.y + beltSpeed * dt) % 1;
   for (const r of rollers) r.rotation.x += (beltSpeed / ROLLER_R) * dt;
+  scenery.update(dt, beltSpeed);
 
   if (flip.active) {
     flip.t += dt;
@@ -649,4 +679,4 @@ tick();
 
 // debug handle for headless tests (virtual time races ahead of THREE.Clock,
 // so tests force-complete animations by poking jump.t / flip.t)
-window.__rover = { ship, shipTile, jump, flip, jut, shots, effects, juiceState };
+window.__rover = { ship, shipTile, jump, flip, jut, shots, effects, juiceState, scenery };
