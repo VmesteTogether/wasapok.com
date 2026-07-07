@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ARE MY POKÉMON GOOD? — Team Inspection Bureau</title>
+<meta name="description" content="Submit your Pokémon party for inspection. Type coverage, defensive audit, role analysis — stamped verdict included.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Special+Elite&family=Archivo+Black&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>&#128203;</text></svg>">
+</head>
+<body>
+
+<header class="bureau">
+  <div class="bureau-top">
+    <span class="crest">◆</span>
+    <span class="dept">ORRE REGION &middot; DEPARTMENT OF TEAM INSPECTION</span>
+    <span class="crest">◆</span>
+  </div>
+  <h1>ARE MY POKÉMON GOOD?</h1>
+  <div class="docmeta">
+    FORM TR-6 &mdash; PARTY AUDIT &nbsp;&middot;&nbsp; <span id="docdate"></span> &nbsp;&middot;&nbsp; DOSSIER Nº <span id="docno"></span>
+  </div>
+</header>
+
+<main>
+  <section class="desk-label">
+    <span class="desk-label-text">SUBMIT PARTY MEMBERS FOR PROCESSING — SIX (6) SLOTS PROVIDED</span>
+  </section>
+
+  <section id="party" class="desk" aria-label="Your party"></section>
+
+  <section id="report" class="report" aria-label="Inspection report">
+    <div class="report-head">
+      <span class="report-head-line"></span>
+      <span class="report-head-text">INSPECTION REPORT</span>
+      <span class="report-head-line"></span>
+    </div>
+
+    <div id="emptyNotice" class="empty-notice">
+      <div class="empty-stamp">AWAITING SUBMISSION</div>
+      <p class="empty-sub">No party members on file. Place a Pokémon in a slot above to begin the audit.</p>
+    </div>
+
+    <div id="reportBody" hidden>
+
+      <div class="sec" id="defenseSec">
+        <h2 class="sec-title"><span class="sec-no">SEC. 1</span> DEFENSIVE AUDIT</h2>
+        <p class="sec-note">Incoming damage by attacking type. Red entries are liabilities; green entries are assets.</p>
+        <div class="matrix-wrap"><table id="defMatrix" class="matrix"></table></div>
+        <div id="defStamps" class="stamp-row"></div>
+      </div>
+
+      <div class="sec" id="offenseSec">
+        <h2 class="sec-title"><span class="sec-no">SEC. 2</span> OFFENSIVE COVERAGE</h2>
+        <p class="sec-note">Best STAB multiplier your party lands on each defending type.</p>
+        <div id="stabLine" class="stab-line"></div>
+        <div id="offGrid" class="off-grid"></div>
+        <div id="offStamps" class="stamp-row"></div>
+      </div>
+
+      <div class="sec" id="rolesSec">
+        <h2 class="sec-title"><span class="sec-no">SEC. 3</span> ROLE ROSTER</h2>
+        <p class="sec-note">Duties every functioning party is expected to staff. Assessed from base stats.</p>
+        <div id="dutyTable" class="duty-table"></div>
+        <div id="roleStamps" class="stamp-row"></div>
+      </div>
+
+      <div class="sec verdict-sec" id="verdictSec">
+        <h2 class="sec-title"><span class="sec-no">SEC. 4</span> FINAL DETERMINATION</h2>
+        <div class="verdict-area">
+          <div class="score-block">
+            <div class="score-dial"><span id="scoreNum">—</span><span class="score-outof">/100</span></div>
+            <div id="scoreNotes" class="score-notes"></div>
+          </div>
+          <div id="verdictStamp" class="verdict-stamp"></div>
+        </div>
+      </div>
+
+    </div>
+  </section>
+</main>
+
+<footer class="foot">
+  <button id="shareBtn" class="foot-btn" title="Copy a link to this exact party">COPY PARTY LINK</button>
+  <button id="clearBtn" class="foot-btn danger" title="Clear all six slots">SHRED DOSSIER</button>
+  <div class="foot-line">inspections conducted without appointment &middot; glory to your team</div>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
