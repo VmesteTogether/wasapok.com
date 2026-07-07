@@ -293,14 +293,20 @@ function land(axis, energy) {
 }
 
 // Double click: a second click while airborne converts the jump into a full
-// 360° somersault onto the aimed tile — same rotation axis the tilt already
-// started, continued through a whole turn, so it lands upright. Refused if
-// the aimed tile is off the 3×4 grid (the jump just finishes normally).
+// 360° somersault onto the aimed tile, landing upright. The flip aims FRESH:
+// whatever WASD is held at the second click wins, independent of the jump's
+// tilt — so you can tilt-jump right, shoot, then flip away up-left. Any
+// leftover tilt from the jump unwinds (about its own axis) while the flip
+// spins up about the new one. Refused if the aimed tile is off the 3×4 grid
+// (the jump just finishes normally).
 const FLIP_DUR = 0.8, FLIP_H = 0.65;
 const flip = {
   active: false, t: 0, theta0: 0, h0: 0,
+  axis: new THREE.Vector3(1, 0, 0),      // spin axis, from the flip's own aim
+  axis0: new THREE.Vector3(1, 0, 0),     // residual tilt axis inherited from the jump
   from: new THREE.Vector3(), to: new THREE.Vector3()
 };
+const flipResid = new THREE.Quaternion();
 
 // Right click: the jut — a panic dodge. One tile, strict 4-way (the most
 // recently pressed key alone decides, so diagonals degrade to their newest
@@ -472,7 +478,7 @@ canvas.addEventListener('pointerdown', (e) => {
   }
 
   // second click, still airborne: try to convert into a flip
-  const step = jump.step || aimStep();             // aim from the first click wins
+  const step = aimStep() || jump.step;             // keys held NOW win; else the jump's aim
   if (!step) return;                               // no direction — nothing to flip at
   const tx = shipTile.gx + step[0], tz = shipTile.gz + step[1];
   if (tx < 0 || tx > 2 || tz < 0 || tz > 3) return; // no tile there — refuse
@@ -482,7 +488,8 @@ canvas.addEventListener('pointerdown', (e) => {
   flip.t = 0;
   flip.h0 = JUMP_H * 4 * k * (1 - k);              // hand off current height…
   flip.theta0 = jump.tilt * Math.sin(Math.PI * k); // …and current tilt angle
-  if (!jump.step) jump.axis.crossVectors(DOWN, stepVec(step)).normalize();
+  flip.axis.crossVectors(DOWN, stepVec(step)).normalize();
+  flip.axis0.copy(jump.axis);
   flip.from.set(tileX(shipTile.gx), 0, tileZ(shipTile.gz));
   flip.to.set(tileX(tx), 0, tileZ(tz));
   shipTile.gx = tx;
@@ -524,12 +531,18 @@ function tick() {
     ship.position.x = flip.from.x + (flip.to.x - flip.from.x) * move;
     ship.position.z = flip.from.z + (flip.to.z - flip.from.z) * move;
     ship.position.y = HOVER_Y + flip.h0 * Math.pow(1 - k, 1.5) + FLIP_H * arc(k, 0.42);
-    ship.quaternion.setFromAxisAngle(jump.axis, flip.theta0 + (Math.PI * 2 - flip.theta0) * spin);
+    // full turn about the flip's own axis, while the jump's leftover tilt
+    // unwinds about ITS axis on the same easing (when the two axes coincide
+    // the angles just add, reproducing the old single-axis handoff exactly)
+    ship.quaternion.setFromAxisAngle(flip.axis, Math.PI * 2 * spin);
+    if (flip.theta0 > 0) {
+      ship.quaternion.multiply(flipResid.setFromAxisAngle(flip.axis0, flip.theta0 * (1 - spin)));
+    }
     if (k >= 1) {
       flip.active = false;
       ship.position.y = HOVER_Y;
       ship.quaternion.identity();
-      land(jump.axis, 1);                          // full-weight touchdown
+      land(flip.axis, 1);                          // full-weight touchdown
     }
   } else if (jump.active) {
     jump.t += dt;
