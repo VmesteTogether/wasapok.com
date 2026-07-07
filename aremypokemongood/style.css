@@ -378,6 +378,20 @@ main, header.bureau, footer.foot { max-width: 1060px; margin: 0 auto; }
   transition: background .15s, transform .15s;
 }
 .rec-enlist:hover { background: rgba(63,122,60,.14); transform: rotate(-2deg) scale(1.06); }
+.rec-more {
+  cursor: pointer; align-self: center;
+  font-family: var(--mono); font-size: 12px; letter-spacing: 2px;
+  color: var(--ink); background: none;
+  border: 2px dashed var(--ink-faint); border-radius: 3px;
+  padding: 9px 22px; margin-top: 4px;
+  transition: background .15s, border-color .15s;
+}
+.rec-more:hover { background: rgba(58,50,38,.07); border-color: var(--ink); }
+.rec-more small { display: block; font-size: 10px; letter-spacing: 1px; color: var(--ink-faint); margin-top: 3px; }
+.rec-end {
+  text-align: center; font-family: var(--typed); font-size: 12px;
+  color: var(--ink-faint); padding: 8px 0 2px; letter-spacing: 1px;
+}
 
 /* verdict */
 .verdict-sec { padding-bottom: 8px; }

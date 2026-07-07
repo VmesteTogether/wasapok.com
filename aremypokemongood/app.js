@@ -440,12 +440,15 @@ function recReasons(A, A2) {
   return r;
 }
 
-function renderRecs(A) {
+let recPicks = [];      // full ranked list of worthwhile suggestions
+let recLimit = 3;       // how many are currently shown
+let recFull = false;    // whether the current picks are substitutions
+
+function computeRecs(A) {
   const note = document.getElementById("recsNote");
-  const list = document.getElementById("recsList");
   const slots = party.map((m, i) => m ? { slot: i, p: byId.get(m.id) } : null).filter(Boolean);
   const team = slots.map(s => s.p);
-  const full = team.length >= 6;
+  recFull = team.length >= 6;
   const onTeam = new Set(team.map(p => p.dexno));
   // canonical forms only, solid but obtainable (pseudo-legend ceiling, no box legendaries)
   const pool = DEX.filter(p => p.id < 10000 && !onTeam.has(p.dexno)
@@ -454,7 +457,7 @@ function renderRecs(A) {
   const tie = c => [c.t1, c.t2].filter(t => t && !A.stabs.includes(t)).length * 10 + bstOf(c) / 100;
 
   const sugg = [];
-  if (!full) {
+  if (!recFull) {
     const openSlot = party.findIndex(m => !m);
     pool.forEach(c => {
       const A2 = analyzeTeam(team.concat(c));
@@ -475,21 +478,29 @@ function renderRecs(A) {
   }
 
   sugg.sort((a, b) => b.delta - a.delta || b.tie - a.tie);
-  const picks = [], seen = new Set();
+  // one entry per species; keep only candidates that hold up against the best on offer
+  const floor = sugg.length ? Math.max(1, Math.ceil(sugg[0].delta / 2)) : 1;
+  recPicks = [];
+  const seen = new Set();
   for (const s of sugg) {
+    if (s.delta < floor) break;
     if (seen.has(s.inn.dexno)) continue;
     seen.add(s.inn.dexno);
-    picks.push(s);
-    if (picks.length === 3) break;
+    recPicks.push(s);
+    if (recPicks.length === 30) break;
   }
+}
 
-  if (!picks.length) {
+function drawRecs() {
+  const list = document.getElementById("recsList");
+  if (!recPicks.length) {
     list.innerHTML = stamp("good", "NO CHANGES ADVISED",
-      full ? "no substitution would raise the score" : "recruit whoever you like — the fundamentals are sound");
+      recFull ? "no substitution would raise the score" : "recruit whoever you like — the fundamentals are sound");
     return;
   }
 
-  list.innerHTML = picks.map((s, pi) => `
+  const shown = recPicks.slice(0, recLimit);
+  let html = shown.map((s, pi) => `
     <div class="rec-card">
       <div class="rec-photo"><img src="${SPRITE(s.inn.id)}" alt="${s.inn.name}"
         onerror="this.onerror=null;this.src='${SPRITE(s.inn.dexno)}'"></div>
@@ -505,12 +516,22 @@ function renderRecs(A) {
       <button class="rec-enlist" data-pi="${pi}">${s.out ? "SUBSTITUTE" : "ENLIST"}</button>
     </div>`).join("");
 
+  if (recPicks.length > recLimit) {
+    html += `<button class="rec-more" id="recMore">REQUEST FURTHER CANDIDATES
+      <small>${recPicks.length - recLimit} more on file</small></button>`;
+  } else {
+    html += `<div class="rec-end">— end of list. no further candidates meet bureau standards. —</div>`;
+  }
+  list.innerHTML = html;
+
   list.querySelectorAll(".rec-enlist").forEach(btn =>
     btn.addEventListener("click", () => {
-      const s = picks[+btn.dataset.pi];
+      const s = recPicks[+btn.dataset.pi];
       party[s.slot] = { id: s.inn.id, alias: "" };
       saveParty(); thud(); renderAll();
     }));
+  const more = document.getElementById("recMore");
+  if (more) more.addEventListener("click", () => { recLimit += 3; drawRecs(); });
 }
 
 // ---------------------------------------------------------------- render all
@@ -526,7 +547,9 @@ function renderAll() {
   renderOffense(team, A);
   renderRoles(team, A);
   renderVerdict(A);
-  renderRecs(A);
+  recLimit = 3;          // party changed — start the advisory fresh
+  computeRecs(A);
+  drawRecs();
 }
 
 // ---------------------------------------------------------------- chrome
