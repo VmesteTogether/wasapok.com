@@ -621,6 +621,7 @@ const reportOpen = { input: true, mixed: true, party: false };
 
 function applyMode() {
   const isInput = viewMode === "input", isParty = viewMode === "party", isMixed = viewMode === "mixed";
+  document.body.dataset.mode = viewMode;
   deskLabelEl.hidden = isParty;
   partyEl.hidden = isParty;
   sceneEl.hidden = isInput;

@@ -13,6 +13,8 @@
 </head>
 <body>
 
+<canvas id="envCanvas" aria-hidden="true"></canvas>
+
 <header class="bureau">
   <div class="bureau-top">
     <span class="crest">◆</span>
@@ -30,6 +32,13 @@
     <button id="modeInputBtn" class="mode-btn">INPUT MODE</button>
     <button id="modeMixedBtn" class="mode-btn active">MIXED MODE</button>
     <button id="modePartyBtn" class="mode-btn">PARTY MODE</button>
+  </section>
+
+  <section class="env-picker" aria-label="Field venue">
+    <span class="env-label">FIELD VENUE:</span>
+    <button class="env-btn" data-env="oasis">OASIS</button>
+    <button class="env-btn" data-env="cave">CAVE</button>
+    <button class="env-btn" data-env="rock">ROCK</button>
   </section>
 
   <section class="desk-label">
@@ -140,5 +149,6 @@
 </footer>
 
 <script src="app.js"></script>
+<script src="environments.js"></script>
 </body>
 </html>
