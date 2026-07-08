@@ -26,11 +26,29 @@
 </header>
 
 <main>
+  <section class="mode-toggle" aria-label="View mode">
+    <button id="modeInputBtn" class="mode-btn">INPUT MODE</button>
+    <button id="modeMixedBtn" class="mode-btn active">MIXED MODE</button>
+    <button id="modePartyBtn" class="mode-btn">PARTY MODE</button>
+  </section>
+
   <section class="desk-label">
     <span class="desk-label-text">SUBMIT PARTY MEMBERS FOR PROCESSING — SIX (6) SLOTS PROVIDED</span>
   </section>
 
-  <section id="party" class="desk" aria-label="Your party"></section>
+  <div id="workspace" class="workspace">
+    <section id="party" class="desk" aria-label="Your party"></section>
+
+    <section id="partyScene" class="party-scene" hidden aria-label="Party portrait">
+      <div class="stage">
+        <div class="platform"></div>
+        <div id="stageSprites" class="stage-sprites"></div>
+      </div>
+      <div class="scene-controls">
+        <button id="sceneReportBtn" class="foot-btn">SHOW INSPECTION REPORT</button>
+      </div>
+    </section>
+  </div>
 
   <section id="report" class="report" aria-label="Inspection report">
     <div class="report-head">

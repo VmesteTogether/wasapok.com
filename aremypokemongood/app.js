@@ -199,6 +199,35 @@ function renderParty() {
   });
 }
 
+// ---------------------------------------------------------------- party scene
+// fixed stage positions: slots 1-3 front row, 4-6 back row, bunched like the Hall of Fame
+const STAGE_SPOTS = [
+  { x: 10, b: 58,  row: "front" },
+  { x: 36, b: 42,  row: "front" },
+  { x: 62, b: 60,  row: "front" },
+  { x: 20, b: 150, row: "back"  },
+  { x: 45, b: 166, row: "back"  },
+  { x: 74, b: 146, row: "back"  },
+];
+
+function renderScene() {
+  const wrap = document.getElementById("stageSprites");
+  if (!party.some(Boolean)) {
+    wrap.innerHTML = `<div class="stage-empty">NO PARTY ON FILE<small>file a pokémon to take the stage</small></div>`;
+    return;
+  }
+  wrap.innerHTML = party.map((m, i) => {
+    if (!m) return "";
+    const p = byId.get(m.id);
+    const s = STAGE_SPOTS[i];
+    return `<div class="stage-mon ${s.row}" style="left:${s.x}%; --b:${s.b}"
+        title="${(m.alias || p.name).replace(/"/g, "&quot;")}">
+      <img src="${SPRITE(p.id)}" alt="${p.name}"
+        onerror="this.onerror=null;this.src='${SPRITE(p.dexno)}'">
+    </div>`;
+  }).join("");
+}
+
 // ---------------------------------------------------------------- search
 function wireSearch(input, slot, slotIdx) {
   let box = null, sel = -1, results = [];
@@ -557,6 +586,7 @@ function drawRecs() {
 // ---------------------------------------------------------------- render all
 function renderAll() {
   renderParty();
+  renderScene();
   const team = members();
   const empty = document.getElementById("emptyNotice");
   const body = document.getElementById("reportBody");
@@ -572,6 +602,41 @@ function renderAll() {
   computeRecs(A);
   drawRecs();
 }
+
+// ---------------------------------------------------------------- view mode
+const sceneEl = document.getElementById("partyScene");
+const workspaceEl = document.getElementById("workspace");
+const deskLabelEl = document.querySelector(".desk-label");
+const reportEl = document.getElementById("report");
+const modeInputBtn = document.getElementById("modeInputBtn");
+const modeMixedBtn = document.getElementById("modeMixedBtn");
+const modePartyBtn = document.getElementById("modePartyBtn");
+const sceneReportBtn = document.getElementById("sceneReportBtn");
+
+// land on the last-used mode; new visitors (or anything unrecognized) get mixed
+const MODE_KEY = "ampg-mode";
+let viewMode = ["input", "mixed", "party"].includes(localStorage.getItem(MODE_KEY))
+  ? localStorage.getItem(MODE_KEY) : "mixed";
+const reportOpen = { input: true, mixed: true, party: false };
+
+function applyMode() {
+  const isInput = viewMode === "input", isParty = viewMode === "party", isMixed = viewMode === "mixed";
+  deskLabelEl.hidden = isParty;
+  partyEl.hidden = isParty;
+  sceneEl.hidden = isInput;
+  workspaceEl.classList.toggle("mixed", isMixed);
+  reportEl.hidden = !reportOpen[viewMode];
+  modeInputBtn.classList.toggle("active", isInput);
+  modeMixedBtn.classList.toggle("active", isMixed);
+  modePartyBtn.classList.toggle("active", isParty);
+  sceneReportBtn.textContent = reportOpen[viewMode] ? "HIDE INSPECTION REPORT" : "SHOW INSPECTION REPORT";
+  localStorage.setItem(MODE_KEY, viewMode);
+}
+modeInputBtn.addEventListener("click", () => { viewMode = "input"; applyMode(); });
+modeMixedBtn.addEventListener("click", () => { viewMode = "mixed"; applyMode(); });
+modePartyBtn.addEventListener("click", () => { viewMode = "party"; applyMode(); });
+sceneReportBtn.addEventListener("click", () => { reportOpen[viewMode] = !reportOpen[viewMode]; applyMode(); });
+applyMode();
 
 // ---------------------------------------------------------------- rec filters
 const recTypeSel = document.getElementById("recTypeSel");
