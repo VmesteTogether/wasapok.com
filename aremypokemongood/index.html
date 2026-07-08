@@ -82,12 +82,38 @@
       <div class="sec" id="recsSec">
         <h2 class="sec-title"><span class="sec-no">SEC. 5</span> RECRUITMENT ADVISORY</h2>
         <p class="sec-note" id="recsNote"></p>
+        <div class="rec-filters" aria-label="Recruitment criteria">
+          <span class="rec-filters-label">SPECIFY CRITERIA:</span>
+          <label>TYPE
+            <select id="recTypeSel"></select>
+          </label>
+          <label>DUTY
+            <select id="recRoleSel"></select>
+          </label>
+          <label>GEN
+            <select id="recGenSel"></select>
+          </label>
+          <button id="recFilterClear" class="rec-filter-clear" hidden>✕ CLEAR ALL</button>
+          <div id="recChips" class="rec-chips"></div>
+        </div>
         <div id="recsList" class="recs-list"></div>
       </div>
 
     </div>
   </section>
 </main>
+
+<aside id="chartPanel" class="chart-panel" aria-label="Type effectiveness reference">
+  <button id="chartTab" class="chart-tab" aria-expanded="false" title="Type effectiveness reference">TYPE CHART</button>
+  <div class="chart-inner">
+    <div class="chart-head">
+      <span class="chart-title">FIELD REFERENCE — TYPE EFFECTIVENESS</span>
+      <button id="chartClose" class="chart-close" title="Close reference">✕</button>
+    </div>
+    <p class="chart-sub">rows attack &middot; columns defend &middot; blank = 1×</p>
+    <div class="chart-scroll"><table id="chartTable" class="chart-table"></table></div>
+  </div>
+</aside>
 
 <footer class="foot">
   <button id="shareBtn" class="foot-btn" title="Copy a link to this exact party">COPY PARTY LINK</button>

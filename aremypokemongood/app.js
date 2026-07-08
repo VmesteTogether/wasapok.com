@@ -443,6 +443,14 @@ function recReasons(A, A2) {
 let recPicks = [];      // full ranked list of worthwhile suggestions
 let recLimit = 3;       // how many are currently shown
 let recFull = false;    // whether the current picks are substitutions
+const recFilters = { type: new Set(), duty: new Set(), gen: new Set() };  // OR within, AND across
+let lastA = null;            // analysis of the current party, for filter re-runs
+
+const GEN_CAPS = [151, 251, 386, 493, 649, 721, 809, 905, 1025];
+const GEN_ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX"];
+const genOf = p => GEN_CAPS.findIndex(cap => p.dexno <= cap) + 1;
+
+function recFiltersActive() { return recFilters.type.size || recFilters.duty.size || recFilters.gen.size; }
 
 function computeRecs(A) {
   const note = document.getElementById("recsNote");
@@ -451,8 +459,15 @@ function computeRecs(A) {
   recFull = team.length >= 6;
   const onTeam = new Set(team.map(p => p.dexno));
   // canonical forms only, solid but obtainable (pseudo-legend ceiling, no box legendaries)
-  const pool = DEX.filter(p => p.id < 10000 && !onTeam.has(p.dexno)
+  let pool = DEX.filter(p => p.id < 10000 && !onTeam.has(p.dexno)
     && !MYTHICALS.has(p.dexno) && bstOf(p) >= 500 && bstOf(p) <= 610);
+  // trainer-stated criteria narrow the pool — any listed type/duty/gen qualifies
+  if (recFilters.type.size)
+    pool = pool.filter(p => recFilters.type.has(p.t1) || (p.t2 && recFilters.type.has(p.t2)));
+  if (recFilters.duty.size)
+    pool = pool.filter(p => DUTIES.some(d => recFilters.duty.has(d.key) && d.test(p.stats)));
+  if (recFilters.gen.size)
+    pool = pool.filter(p => recFilters.gen.has(genOf(p)));
   // prefer candidates whose types are new to the team
   const tie = c => [c.t1, c.t2].filter(t => t && !A.stabs.includes(t)).length * 10 + bstOf(c) / 100;
 
@@ -464,7 +479,8 @@ function computeRecs(A) {
       const delta = A2.score - A.score;
       if (delta > 0) sugg.push({ inn: c, out: null, slot: openSlot, delta, reasons: recReasons(A, A2), tie: tie(c) });
     });
-    note.textContent = `Roster incomplete (${team.length}/6) — the bureau recommends the following additions. No discharges necessary.`;
+    note.textContent = `Roster incomplete (${team.length}/6) — the bureau recommends the following additions. No discharges necessary.`
+      + (recFiltersActive() ? " Candidates limited to your stated criteria." : "");
   } else {
     slots.forEach((s, i) => {
       const rest = team.slice(0, i).concat(team.slice(i + 1));
@@ -474,7 +490,8 @@ function computeRecs(A) {
         if (delta > 0) sugg.push({ inn: c, out: s.p, slot: s.slot, delta, reasons: recReasons(A, A2), tie: tie(c) });
       });
     });
-    note.textContent = "Roster full — improvement requires substitution. Proposed personnel changes below.";
+    note.textContent = "Roster full — improvement requires substitution. Proposed personnel changes below."
+      + (recFiltersActive() ? " Candidates limited to your stated criteria." : "");
   }
 
   sugg.sort((a, b) => b.delta - a.delta || b.tie - a.tie);
@@ -494,8 +511,11 @@ function computeRecs(A) {
 function drawRecs() {
   const list = document.getElementById("recsList");
   if (!recPicks.length) {
-    list.innerHTML = stamp("good", "NO CHANGES ADVISED",
-      recFull ? "no substitution would raise the score" : "recruit whoever you like — the fundamentals are sound");
+    list.innerHTML = recFiltersActive()
+      ? stamp("warn", "NO QUALIFIED CANDIDATES",
+          "no pokémon meeting the stated criteria would improve the outfit — broaden your criteria")
+      : stamp("good", "NO CHANGES ADVISED",
+          recFull ? "no substitution would raise the score" : "recruit whoever you like — the fundamentals are sound");
     return;
   }
 
@@ -540,9 +560,10 @@ function renderAll() {
   const team = members();
   const empty = document.getElementById("emptyNotice");
   const body = document.getElementById("reportBody");
-  if (!team.length) { empty.hidden = false; body.hidden = true; return; }
+  if (!team.length) { empty.hidden = false; body.hidden = true; lastA = null; return; }
   empty.hidden = true; body.hidden = false;
   const A = analyzeTeam(team);
+  lastA = A;
   renderDefense(team, A);
   renderOffense(team, A);
   renderRoles(team, A);
@@ -551,6 +572,91 @@ function renderAll() {
   computeRecs(A);
   drawRecs();
 }
+
+// ---------------------------------------------------------------- rec filters
+const recTypeSel = document.getElementById("recTypeSel");
+const recRoleSel = document.getElementById("recRoleSel");
+const recGenSel = document.getElementById("recGenSel");
+const recFilterClear = document.getElementById("recFilterClear");
+const recChips = document.getElementById("recChips");
+
+recTypeSel.innerHTML = `<option value="">ADD TYPE…</option>`
+  + TYPES.map(t => `<option value="${t}">${t.toUpperCase()}</option>`).join("");
+recRoleSel.innerHTML = `<option value="">ADD DUTY…</option>`
+  + DUTIES.map(d => `<option value="${d.key}">${d.name}</option>`).join("");
+recGenSel.innerHTML = `<option value="">ADD GEN…</option>`
+  + GEN_ROMAN.map((r, i) => `<option value="${i+1}">GEN ${r}</option>`).join("");
+
+function drawChips() {
+  const bits = [];
+  recFilters.type.forEach(t => bits.push({ cat:"type", val:t, label:t.toUpperCase(), cls:` t-${t}` }));
+  recFilters.duty.forEach(k => bits.push({ cat:"duty", val:k, label:DUTIES.find(d => d.key === k).name, cls:"" }));
+  recFilters.gen.forEach(g => bits.push({ cat:"gen", val:g, label:"GEN " + GEN_ROMAN[g-1], cls:"" }));
+  recChips.innerHTML = bits.map(b =>
+    `<button class="rec-chip${b.cls}" data-cat="${b.cat}" data-val="${b.val}"
+       title="Remove criterion">${b.label} ✕</button>`).join("");
+  recChips.querySelectorAll(".rec-chip").forEach(el =>
+    el.addEventListener("click", () => {
+      const cat = el.dataset.cat;
+      recFilters[cat].delete(cat === "gen" ? +el.dataset.val : el.dataset.val);
+      refreshRecFilters();
+    }));
+}
+
+function refreshRecFilters() {
+  drawChips();
+  recFilterClear.hidden = !recFiltersActive();
+  recLimit = 3;
+  if (lastA) { computeRecs(lastA); drawRecs(); }
+}
+
+function wireCriterion(sel, cat, toVal) {
+  sel.addEventListener("change", () => {
+    if (!sel.value) return;
+    recFilters[cat].add(toVal(sel.value));
+    sel.value = "";
+    refreshRecFilters();
+  });
+}
+wireCriterion(recTypeSel, "type", v => v);
+wireCriterion(recRoleSel, "duty", v => v);
+wireCriterion(recGenSel, "gen", v => +v);
+
+recFilterClear.addEventListener("click", () => {
+  recFilters.type.clear(); recFilters.duty.clear(); recFilters.gen.clear();
+  refreshRecFilters();
+});
+
+// ---------------------------------------------------------------- type chart pullout
+const TYPE_ABBR = { normal:"NOR", fire:"FIR", water:"WAT", electric:"ELE", grass:"GRA",
+  ice:"ICE", fighting:"FIG", poison:"POI", ground:"GRO", flying:"FLY", psychic:"PSY",
+  bug:"BUG", rock:"ROC", ghost:"GHO", dragon:"DRA", dark:"DAR", steel:"STE", fairy:"FAI" };
+
+(function buildChartTable() {
+  const head = `<tr><th class="ct-corner">ATK ↓</th>${TYPES.map(d =>
+    `<th><span class="ct-tag t-${d}" title="${d}">${TYPE_ABBR[d]}</span></th>`).join("")}</tr>`;
+  const rows = TYPES.map(atk =>
+    `<tr><th class="ct-row"><span class="ct-tag t-${atk}" title="${atk}">${TYPE_ABBR[atk]}</span></th>${
+      TYPES.map(def => {
+        const m = CHART[atk][def] ?? 1;
+        const cls = m === 2 ? "ct-2" : m === .5 ? "ct-05" : m === 0 ? "ct-0" : "";
+        const txt = m === 2 ? "2" : m === .5 ? "½" : m === 0 ? "0" : "";
+        return `<td class="${cls}">${txt}</td>`;
+      }).join("")}</tr>`).join("");
+  document.getElementById("chartTable").innerHTML = head + rows;
+})();
+
+const chartPanel = document.getElementById("chartPanel");
+const chartTab = document.getElementById("chartTab");
+let chartOpen = false;
+function setChart(open) {
+  chartOpen = open;
+  chartPanel.classList.toggle("open", open);
+  chartTab.setAttribute("aria-expanded", String(open));
+}
+chartTab.addEventListener("click", () => setChart(!chartOpen));
+document.getElementById("chartClose").addEventListener("click", () => setChart(false));
+document.addEventListener("keydown", e => { if (e.key === "Escape" && chartOpen) setChart(false); });
 
 // ---------------------------------------------------------------- chrome
 document.getElementById("docdate").textContent =
