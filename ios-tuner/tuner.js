@@ -258,6 +258,157 @@
 
   let stringButtons = [];
 
+  // ---------- guitar headstock ----------
+
+  const headstock = document.getElementById("headstock");
+  let pegEls = []; // { g, line, noteIndex, octave }
+
+  function buildHeadstock(inst) {
+    const cx = 163;
+    const n = inst.strings.length;
+    const leftCount = Math.ceil(n / 2);
+    const spacing = n === 6 ? 7 : 6;
+    const firstX = cx - spacing * (n - 1) / 2;
+    // post heights: left column runs low string (near nut) to high, right column mirrors
+    const leftYs = n === 6 ? [86, 57, 28] : [96, 72, 48, 24];
+    const rightYs = [28, 57, 86];
+
+    const pegs = inst.strings.map((s, i) => {
+      const { noteIndex, octave } = parseNote(s);
+      const left = i < leftCount;
+      return {
+        noteIndex, octave,
+        nutX: firstX + i * spacing,
+        y: left ? leftYs[i] : rightYs[i - leftCount],
+        side: left ? -1 : 1,
+        name: NOTES[noteIndex].replace("#", "♯"),
+      };
+    });
+
+    // Les Paul silhouette: open-book crown, sides flaring out from a narrow nut
+    const plate = `M ${cx - 33} 13
+      Q ${cx - 28} 8 ${cx - 20} 9
+      C ${cx - 12} 10 ${cx - 6} 12.8 ${cx} 15
+      C ${cx + 6} 12.8 ${cx + 12} 10 ${cx + 20} 9
+      Q ${cx + 28} 8 ${cx + 33} 13
+      C ${cx + 34} 20 ${cx + 32} 40 ${cx + 29} 60
+      C ${cx + 27} 80 ${cx + 25} 90 ${cx + 24.5} 98
+      Q ${cx + 24.5} 104 ${cx + 19} 104
+      L ${cx - 19} 104
+      Q ${cx - 24.5} 104 ${cx - 24.5} 98
+      C ${cx - 25} 90 ${cx - 27} 80 ${cx - 29} 60
+      C ${cx - 32} 40 ${cx - 34} 20 ${cx - 33} 13 Z`;
+
+    let s = `<svg viewBox="0 0 326 136" xmlns="http://www.w3.org/2000/svg">
+      <defs>
+        <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#c08a4e"/>
+          <stop offset="0.45" stop-color="#a06a32"/>
+          <stop offset="1" stop-color="#7c4c20"/>
+        </linearGradient>
+        <radialGradient id="sunburst" cx="0.5" cy="0.42" r="0.75">
+          <stop offset="0" stop-color="rgba(255,222,160,0.4)"/>
+          <stop offset="0.55" stop-color="rgba(255,222,160,0.12)"/>
+          <stop offset="1" stop-color="rgba(60,28,8,0.35)"/>
+        </radialGradient>
+        <linearGradient id="rosewood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#4a2a18"/>
+          <stop offset="1" stop-color="#331d10"/>
+        </linearGradient>
+        <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#faf5e8"/>
+          <stop offset="0.5" stop-color="#ece0c4"/>
+          <stop offset="1" stop-color="#d9cba9"/>
+        </linearGradient>
+        <linearGradient id="pegMetal" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#f4f6f9"/>
+          <stop offset="0.5" stop-color="#c9ced7"/>
+          <stop offset="1" stop-color="#9aa1ad"/>
+        </linearGradient>
+        <clipPath id="plateClip"><path d="${plate}"/></clipPath>
+      </defs>
+      <g style="filter: drop-shadow(0 5px 9px rgba(50,55,75,0.32))">
+        <path d="${plate}" fill="url(#wood)"/>
+      </g>
+      <path d="${plate}" fill="url(#sunburst)"/>
+      <g clip-path="url(#plateClip)" fill="none">
+        <g stroke="rgba(78,42,12,0.2)" stroke-width="1">
+          <path d="M ${cx - 20} 4 C ${cx - 23} 40 ${cx - 18} 80 ${cx - 21} 116"/>
+          <path d="M ${cx - 10} 4 C ${cx - 8} 45 ${cx - 12} 85 ${cx - 9} 116"/>
+          <path d="M ${cx} 4 C ${cx - 3} 40 ${cx + 2} 90 ${cx - 1} 116"/>
+          <path d="M ${cx + 10} 4 C ${cx + 13} 50 ${cx + 8} 90 ${cx + 11} 116"/>
+          <path d="M ${cx + 20} 4 C ${cx + 17} 45 ${cx + 22} 85 ${cx + 19} 116"/>
+        </g>
+        <g stroke="rgba(78,42,12,0.07)" stroke-width="5">
+          <path d="M ${cx - 14} 4 C ${cx - 17} 45 ${cx - 12} 85 ${cx - 15} 116"/>
+          <path d="M ${cx + 13} 4 C ${cx + 16} 50 ${cx + 10} 90 ${cx + 14} 116"/>
+        </g>
+      </g>
+      <path d="${plate}" fill="none" stroke="rgba(38,18,4,0.45)" stroke-width="1.5"/>
+      <path d="M ${cx - 29} 12 Q ${cx - 24} 9 ${cx - 18} 10.2 C ${cx - 11} 11.2 ${cx - 5} 13.4 ${cx} 15.6 C ${cx + 5} 13.4 ${cx + 11} 11.2 ${cx + 18} 10.2 Q ${cx + 24} 9 ${cx + 29} 12"
+        stroke="rgba(255,235,200,0.35)" stroke-width="1.3" fill="none" stroke-linecap="round"/>
+      <path d="M ${cx} 30 L ${cx + 5.5} 39 L ${cx} 48 L ${cx - 5.5} 39 Z"
+        fill="#efe8d6" opacity="0.92" stroke="rgba(120,90,40,0.4)" stroke-width="0.6"/>
+      <path d="M ${cx - 5} 84 Q ${cx} 81.4 ${cx + 5} 84 L ${cx + 6.5} 95 Q ${cx} 98 ${cx - 6.5} 95 Z"
+        fill="#241610" stroke="rgba(226,196,140,0.55)" stroke-width="0.8"/>
+      <path d="M ${cx - 21} 108 L ${cx - 21} 136 L ${cx + 21} 136 L ${cx + 21} 108 Z" fill="url(#rosewood)"/>
+      <line x1="${cx - 21}" y1="130" x2="${cx + 21}" y2="130" stroke="rgba(20,10,4,0.55)" stroke-width="2.4"/>
+      <line x1="${cx - 21}" y1="129.5" x2="${cx + 21}" y2="129.5" stroke="url(#pegMetal)" stroke-width="1.6"/>`;
+
+    // strings: over the plate (nut to post) and down the fretboard
+    pegs.forEach((p, i) => {
+      const w = (1.8 - (1.8 - 1.0) * (i / (n - 1))).toFixed(2);
+      s += `<line class="string str-${i}" x1="${p.nutX}" y1="101" x2="${cx + p.side * 18}" y2="${p.y}" stroke-width="${w}"/>`;
+      s += `<line class="string str-${i}" x1="${p.nutX}" y1="107" x2="${p.nutX}" y2="136" stroke-width="${w}"/>`;
+    });
+
+    // bone nut with string notches, drawn over the string ends
+    s += `<rect x="${cx - 22}" y="101" width="44" height="6.5" rx="1.8" fill="url(#bone)" stroke="#c9bb98" stroke-width="0.7"/>`;
+    pegs.forEach((p) => {
+      s += `<line x1="${p.nutX}" y1="101.8" x2="${p.nutX}" y2="104.4" stroke="rgba(96,74,40,0.55)" stroke-width="1" stroke-linecap="round"/>`;
+    });
+
+    // machine heads: shaft, kidney button, capped post, label, hit area
+    pegs.forEach((p, i) => {
+      const bx = p.side < 0 ? cx - 54 : cx + 40;
+      const hx = p.side < 0 ? cx - 86 : cx + 12;
+      const tx = cx + p.side * 60;
+      const px = cx + p.side * 18;
+      s += `<g class="peg" data-i="${i}">
+        <rect class="hit" x="${hx}" y="${p.y - 14}" width="74" height="28"/>
+        <line x1="${px}" y1="${p.y}" x2="${cx + p.side * 40}" y2="${p.y}" stroke="rgba(40,25,10,0.35)" stroke-width="3.6"/>
+        <line class="shaft" x1="${px}" y1="${p.y}" x2="${cx + p.side * 40}" y2="${p.y}" stroke="url(#pegMetal)"/>
+        <rect class="btn" x="${bx}" y="${p.y - 6}" width="14" height="12" rx="5" fill="url(#pegMetal)"/>
+        <ellipse cx="${bx + 7}" cy="${p.y - 3}" rx="4.2" ry="1.9" fill="rgba(255,255,255,0.55)"/>
+        <circle class="post" cx="${px}" cy="${p.y}" r="3.4" fill="url(#pegMetal)"/>
+        <circle cx="${px}" cy="${p.y}" r="1.2" fill="rgba(60,66,76,0.9)"/>
+        <text x="${tx}" y="${p.y + 5}" text-anchor="${p.side < 0 ? "end" : "start"}">${p.name}<tspan dy="2" font-size="10">${p.octave}</tspan></text>
+      </g>`;
+    });
+
+    s += `</svg>`;
+    headstock.innerHTML = s;
+
+    pegEls = pegs.map((p, i) => {
+      const g = headstock.querySelector(`.peg[data-i="${i}"]`);
+      const lines = headstock.querySelectorAll(`.str-${i}`);
+      g.addEventListener("click", () => {
+        state.noteIndex = p.noteIndex;
+        state.octave = p.octave;
+        syncTarget();
+      });
+      return { g, lines, noteIndex: p.noteIndex, octave: p.octave };
+    });
+  }
+
+  function setPegTune(on) {
+    pegEls.forEach((p) => {
+      const active = on && p.g.classList.contains("sel");
+      p.g.classList.toggle("intune", active);
+      p.lines.forEach((l) => l.classList.toggle("intune", active));
+    });
+  }
+
   function selectInstrument(i) {
     state.instrument = i;
     const inst = INSTRUMENTS[i];
@@ -269,15 +420,23 @@
       left: chip.offsetLeft - instRow.offsetLeft - (instRow.clientWidth - chip.offsetWidth) / 2,
       behavior: "smooth",
     });
+    const isGuitar = !!inst.strings && inst.icon === "guitar";
+    noteGrid.style.display = inst.strings ? "none" : "";
+    stringRow.style.display = inst.strings && !isGuitar ? "" : "none";
+    headstock.style.display = isGuitar ? "" : "none";
+    if (!isGuitar) pegEls = [];
     if (!inst.strings) {
       pickerLabel.textContent = "Target Note";
-      noteGrid.style.display = "";
-      stringRow.style.display = "none";
       stringButtons = [];
+    } else if (isGuitar) {
+      pickerLabel.textContent = "Headstock — Tap a Peg";
+      stringButtons = [];
+      buildHeadstock(inst);
+      const low = parseNote(inst.strings[0]);
+      state.noteIndex = low.noteIndex;
+      state.octave = low.octave;
     } else {
       pickerLabel.textContent = `${inst.name} Strings`;
-      noteGrid.style.display = "none";
-      stringRow.style.display = "";
       stringRow.innerHTML = "";
       stringButtons = inst.strings.map((s) => {
         const { noteIndex, octave } = parseNote(s);
@@ -307,6 +466,11 @@
     noteButtons.forEach((b, i) => b.classList.toggle("selected", i === state.noteIndex));
     stringButtons.forEach((b) => b.classList.toggle("selected",
       +b.dataset.noteIndex === state.noteIndex && +b.dataset.octave === state.octave));
+    pegEls.forEach((p) => {
+      const sel = p.noteIndex === state.noteIndex && p.octave === state.octave;
+      p.g.classList.toggle("sel", sel);
+      p.lines.forEach((l) => l.classList.toggle("sel", sel));
+    });
     noteDisplay.firstChild.textContent = NOTES[state.noteIndex].replace("#", "♯");
     octDisplay.textContent = state.octave;
     octValue.textContent = `${state.octave} · ${f.toFixed(2)} Hz`;
@@ -316,6 +480,7 @@
       metaDisplay.textContent = `target ${f.toFixed(2)} Hz`;
       centsDisplay.innerHTML = "&nbsp;";
       tunePill.classList.remove("show");
+      setPegTune(false);
       setNeedle(null);
     }
     if (toneOsc) toneOsc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.02);
@@ -420,12 +585,15 @@
       const rounded = Math.round(shown);
       centsDisplay.textContent = rounded === 0 ? "0 cents" : `${rounded > 0 ? "+" : ""}${rounded} cents`;
       centsDisplay.style.color = colorFor(shown);
-      tunePill.classList.toggle("show", Math.abs(shown) <= IN_TUNE_CENTS);
+      const inTune = Math.abs(shown) <= IN_TUNE_CENTS;
+      tunePill.classList.toggle("show", inTune);
+      setPegTune(inTune);
     } else {
       state.lastCents = null;
       metaDisplay.textContent = `listening… · target ${f.toFixed(2)} Hz`;
       centsDisplay.innerHTML = "&nbsp;";
       tunePill.classList.remove("show");
+      setPegTune(false);
       setNeedle(null);
     }
     rafId = requestAnimationFrame(tick);

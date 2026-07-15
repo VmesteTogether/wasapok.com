@@ -292,6 +292,49 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
   }
 
+  /* guitar headstock (guitar mode) */
+  .headstock {
+    border-radius: 28px;
+    padding: 4px 8px 0;
+  }
+  .headstock svg { width: 100%; display: block; }
+  #headstock .peg { cursor: pointer; }
+  #headstock .peg .hit { fill: transparent; }
+  #headstock .peg .btn {
+    stroke: #7e8592;
+    stroke-width: 0.9;
+    transition: fill 0.15s;
+  }
+  #headstock .peg .post { stroke: #7c8290; stroke-width: 0.8; }
+  #headstock .peg .shaft { stroke-width: 2.4; stroke-linecap: round; }
+  #headstock .peg text {
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    fill: rgba(60, 60, 67, 0.6);
+    transition: fill 0.15s;
+  }
+  #headstock .peg.sel .btn {
+    fill: var(--blue);
+    stroke: rgba(255, 255, 255, 0.6);
+    filter: drop-shadow(0 0 6px rgba(10, 132, 255, 0.65));
+  }
+  #headstock .peg.sel text { fill: var(--blue); }
+  #headstock .peg.sel.intune .btn {
+    fill: var(--green);
+    filter: drop-shadow(0 0 7px rgba(52, 199, 89, 0.8));
+  }
+  #headstock .peg.sel.intune text { fill: var(--green); }
+  #headstock .string { stroke: #c3c8d1; fill: none; transition: stroke 0.15s; }
+  #headstock .string.sel {
+    stroke: var(--blue);
+    filter: drop-shadow(0 0 2.5px rgba(10, 132, 255, 0.8));
+  }
+  #headstock .string.sel.intune {
+    stroke: var(--green);
+    filter: drop-shadow(0 0 3px rgba(52, 199, 89, 0.9));
+  }
+
   /* octave stepper + tone row */
   .row {
     display: flex;
@@ -364,7 +407,8 @@
     display: flex;
     gap: 8px;
     overflow-x: auto;
-    margin-top: 14px;
+    flex-shrink: 0;
+    margin-top: 8px;
     padding: 2px 2px 8px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
@@ -398,7 +442,9 @@
     border-radius: 9px;
   }
   .inst-chip.selected {
-    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: linear-gradient(180deg, #0a84ff, #0071eb);
     border-color: rgba(255, 255, 255, 0.4);
     color: #fff;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
@@ -513,6 +559,7 @@
       <div class="section-label" id="pickerLabel">Target Note</div>
       <div class="note-grid glass" id="noteGrid"></div>
       <div class="string-row glass" id="stringRow" style="display: none;"></div>
+      <div class="headstock glass" id="headstock" style="display: none;"></div>
 
       <div class="row">
         <div class="octave-card glass">
