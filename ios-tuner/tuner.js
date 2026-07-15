@@ -229,13 +229,46 @@
     return b;
   });
 
+  // desktop scrolling for the chip row: mouse wheel + click-drag
+  instRow.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    instRow.scrollLeft += e.deltaY + e.deltaX;
+  }, { passive: false });
+
+  let dragging = false, dragMoved = false, dragStartX = 0, dragStartScroll = 0;
+  instRow.addEventListener("pointerdown", (e) => {
+    if (e.pointerType !== "mouse") return; // touch scrolls natively
+    dragging = true;
+    dragMoved = false;
+    dragStartX = e.clientX;
+    dragStartScroll = instRow.scrollLeft;
+  });
+  instRow.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const dx = (e.clientX - dragStartX) / phoneScale;
+    if (!dragMoved && Math.abs(dx) > 5) {
+      dragMoved = true;
+      instRow.setPointerCapture(e.pointerId); // keeps the drag, swallows the chip click
+    }
+    if (dragMoved) instRow.scrollLeft = dragStartScroll - dx;
+  });
+  for (const ev of ["pointerup", "pointercancel"]) {
+    instRow.addEventListener(ev, () => { dragging = false; });
+  }
+
   let stringButtons = [];
 
   function selectInstrument(i) {
     state.instrument = i;
     const inst = INSTRUMENTS[i];
     instButtons.forEach((b, j) => b.classList.toggle("selected", j === i));
-    instButtons[i].scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    // center the chip by scrolling the row only — scrollIntoView also scrolls
+    // ancestor containers, which shoved the whole app sideways
+    const chip = instButtons[i];
+    instRow.scrollTo({
+      left: chip.offsetLeft - instRow.offsetLeft - (instRow.clientWidth - chip.offsetWidth) / 2,
+      behavior: "smooth",
+    });
     if (!inst.strings) {
       pickerLabel.textContent = "Target Note";
       noteGrid.style.display = "";
@@ -436,10 +469,12 @@
 
   // ---------- phone frame scaling + clock ----------
 
+  let phoneScale = 1; // mouse-drag deltas need un-scaling to match scrollLeft units
+
   function fitPhone() {
     const wrap = document.getElementById("phoneWrap");
-    const scale = Math.min(1, (innerHeight - 24) / 866, (innerWidth - 24) / 414);
-    wrap.style.transform = `scale(${scale})`;
+    phoneScale = Math.min(1, (innerHeight - 24) / 866, (innerWidth - 24) / 414);
+    wrap.style.transform = `scale(${phoneScale})`;
   }
   addEventListener("resize", fitPhone);
   fitPhone();
