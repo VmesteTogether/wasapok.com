@@ -6,24 +6,23 @@
 <title>Tuner</title>
 <style>
   :root {
-    --bg: #000000;
-    --card: #1c1c1e;
-    --card-2: #2c2c2e;
-    --separator: rgba(84, 84, 88, 0.6);
-    --label: #ffffff;
-    --label-2: rgba(235, 235, 245, 0.6);
-    --label-3: rgba(235, 235, 245, 0.3);
+    --label: rgba(0, 0, 0, 0.88);
+    --label-2: rgba(60, 60, 67, 0.6);
+    --label-3: rgba(60, 60, 67, 0.3);
     --blue: #0a84ff;
-    --green: #30d158;
-    --red: #ff453a;
-    --orange: #ff9f0a;
+    --green: #34c759;
+    --red: #ff3b30;
+    --orange: #ff9500;
+    --glass: rgba(255, 255, 255, 0.52);
+    --glass-strong: rgba(255, 255, 255, 0.68);
+    --glass-edge: rgba(255, 255, 255, 0.75);
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
   html, body {
     height: 100%;
-    background: #101014;
+    background: linear-gradient(160deg, #eef1f6 0%, #e8ecf3 50%, #eceef4 100%);
     font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
     overflow: hidden;
   }
@@ -42,16 +41,55 @@
   .phone {
     width: 390px;
     height: 844px;
-    background: var(--bg);
+    background: #f4f5f9;
     border-radius: 54px;
-    border: 1px solid #3a3a3c;
-    box-shadow: 0 0 0 10px #1a1a1c, 0 0 0 12px #0c0c0d, 0 30px 80px rgba(0,0,0,0.7);
+    border: 1px solid #c8cad2;
+    box-shadow: 0 0 0 10px #e2e3e9, 0 0 0 12px #b9bbc4, 0 30px 80px rgba(50, 55, 75, 0.28);
     position: relative;
     overflow: hidden;
     display: flex;
     flex-direction: column;
     user-select: none;
     -webkit-user-select: none;
+  }
+
+  /* drifting color wash behind the glass */
+  .bg {
+    position: absolute;
+    inset: -60px;
+    z-index: 0;
+    pointer-events: none;
+    filter: blur(42px) saturate(1.25);
+  }
+  .bg .blob {
+    position: absolute;
+    width: 360px;
+    height: 360px;
+    border-radius: 50%;
+    opacity: 0.8;
+  }
+  .bg .b1 { background: radial-gradient(circle, #aee1ff 0%, transparent 70%); top: 2%;  left: -18%; animation: drift1 26s ease-in-out infinite alternate; }
+  .bg .b2 { background: radial-gradient(circle, #c9f5dc 0%, transparent 70%); top: 30%; right: -22%; animation: drift2 31s ease-in-out infinite alternate; }
+  .bg .b3 { background: radial-gradient(circle, #e2d9ff 0%, transparent 70%); bottom: 8%; left: -8%; animation: drift3 37s ease-in-out infinite alternate; }
+  .bg .b4 { background: radial-gradient(circle, #ffe6d4 0%, transparent 70%); bottom: -14%; right: 4%; animation: drift1 29s ease-in-out infinite alternate-reverse; }
+  @keyframes drift1 { from { transform: translate(0, 0) scale(1); }    to { transform: translate(70px, 90px) scale(1.15); } }
+  @keyframes drift2 { from { transform: translate(0, 0) scale(1.1); }  to { transform: translate(-80px, -60px) scale(0.95); } }
+  @keyframes drift3 { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(60px, -80px) scale(1.12); } }
+
+  /* everything above the wash */
+  .phone > *:not(.bg) { position: relative; z-index: 1; }
+
+  /* liquid glass material */
+  .glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(28px) saturate(1.8);
+    backdrop-filter: blur(28px) saturate(1.8);
+    border: 1px solid var(--glass-edge);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+      0 10px 30px rgba(50, 55, 75, 0.10),
+      0 2px 8px rgba(50, 55, 75, 0.06);
   }
 
   /* dynamic island */
@@ -65,7 +103,7 @@
     background: #000;
     border-radius: 20px;
     z-index: 50;
-    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04);
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
   }
 
   /* status bar */
@@ -102,7 +140,6 @@
     font-size: 13px;
     font-weight: 600;
     color: var(--label-2);
-    background: var(--card);
     padding: 6px 12px;
     border-radius: 20px;
   }
@@ -118,8 +155,7 @@
 
   /* gauge card */
   .gauge-card {
-    background: var(--card);
-    border-radius: 24px;
+    border-radius: 28px;
     padding: 16px 12px 4px;
     position: relative;
   }
@@ -173,8 +209,9 @@
     letter-spacing: 1.5px;
     padding: 4px 14px;
     border-radius: 20px;
-    color: #000;
-    background: var(--green);
+    color: #fff;
+    background: linear-gradient(180deg, rgba(52, 199, 89, 0.95), rgba(48, 180, 82, 0.95));
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 6px 16px rgba(52, 199, 89, 0.4);
     opacity: 0;
     transform: scale(0.8);
     transition: opacity 0.2s, transform 0.2s;
@@ -192,8 +229,7 @@
   }
 
   .note-grid {
-    background: var(--card);
-    border-radius: 20px;
+    border-radius: 24px;
     padding: 8px;
     display: grid;
     grid-template-columns: repeat(6, 1fr);
@@ -208,16 +244,52 @@
     font-size: 17px;
     font-weight: 600;
     padding: 11px 0;
-    border-radius: 12px;
+    border-radius: 14px;
     cursor: pointer;
-    transition: background 0.15s, color 0.15s, transform 0.1s;
+    transition: background 0.15s, color 0.15s, transform 0.1s, box-shadow 0.15s;
     font-variant-numeric: tabular-nums;
   }
   .note-btn:active { transform: scale(0.93); }
   .note-btn.sharp { color: var(--label-2); }
   .note-btn.selected {
-    background: var(--blue);
+    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
     color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
+  }
+
+  /* string pills (instrument mode) */
+  .string-row {
+    border-radius: 24px;
+    padding: 8px;
+    display: flex;
+    gap: 6px;
+  }
+  .string-btn {
+    appearance: none;
+    border: none;
+    background: transparent;
+    color: var(--label);
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 600;
+    flex: 1;
+    padding: 21px 0;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: background 0.15s, color 0.15s, transform 0.1s, box-shadow 0.15s;
+    font-variant-numeric: tabular-nums;
+  }
+  .string-btn small {
+    font-size: 12px;
+    font-weight: 600;
+    opacity: 0.6;
+    margin-left: 1px;
+  }
+  .string-btn:active { transform: scale(0.93); }
+  .string-btn.selected {
+    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
   }
 
   /* octave stepper + tone row */
@@ -229,8 +301,7 @@
 
   .octave-card {
     flex: 1;
-    background: var(--card);
-    border-radius: 20px;
+    border-radius: 24px;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -245,8 +316,10 @@
   .oct-label .v { font-size: 13px; color: var(--label-2); font-variant-numeric: tabular-nums; }
   .stepper {
     display: flex;
-    background: var(--card-2);
-    border-radius: 12px;
+    background: rgba(255, 255, 255, 0.55);
+    border: 1px solid rgba(255, 255, 255, 0.8);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 6px rgba(50, 55, 75, 0.08);
+    border-radius: 14px;
     overflow: hidden;
   }
   .stepper button {
@@ -263,26 +336,75 @@
     transition: background 0.15s;
     line-height: 1;
   }
-  .stepper button:active { background: rgba(255,255,255,0.12); }
+  .stepper button:active { background: rgba(0, 0, 0, 0.06); }
   .stepper button:disabled { color: var(--label-3); }
-  .stepper .div { width: 1px; background: var(--separator); margin: 8px 0; }
+  .stepper .div { width: 1px; background: rgba(60, 60, 67, 0.18); margin: 8px 0; }
 
   .tone-btn {
     flex: 0 0 auto;
     appearance: none;
-    border: none;
-    background: var(--card);
     color: var(--blue);
-    border-radius: 20px;
+    border-radius: 24px;
     width: 62px;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
-    transition: background 0.15s, transform 0.1s;
+    transition: transform 0.1s, color 0.15s;
   }
   .tone-btn:active { transform: scale(0.95); }
-  .tone-btn.playing { background: var(--blue); color: #fff; }
+  .tone-btn.playing {
+    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
+  }
+
+  /* ---------- instrument row ---------- */
+  .inst-row {
+    display: flex;
+    gap: 8px;
+    overflow-x: auto;
+    margin-top: 14px;
+    padding: 2px 2px 8px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .inst-row::-webkit-scrollbar { display: none; }
+  .inst-chip {
+    flex: 0 0 auto;
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    padding: 9px 14px;
+    border-radius: 22px;
+    cursor: pointer;
+    color: var(--label);
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    transition: transform 0.1s, color 0.15s;
+  }
+  .inst-chip:active { transform: scale(0.95); }
+  .inst-chip svg { display: block; flex: 0 0 auto; }
+  .inst-chip .cnt {
+    font-size: 11px;
+    font-weight: 700;
+    color: var(--label-2);
+    background: rgba(60, 60, 67, 0.1);
+    padding: 1px 7px;
+    border-radius: 9px;
+  }
+  .inst-chip.selected {
+    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    border-color: rgba(255, 255, 255, 0.4);
+    color: #fff;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
+  }
+  .inst-chip.selected .cnt {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.25);
+  }
 
   /* ---------- mic button ---------- */
   .mic-area {
@@ -290,30 +412,35 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 90px;
+    min-height: 64px;
   }
   .mic-btn {
     appearance: none;
-    border: none;
+    border: 1px solid rgba(255, 255, 255, 0.4);
     font-family: inherit;
-    background: var(--blue);
+    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
     color: #fff;
     font-size: 17px;
     font-weight: 600;
     padding: 15px 0;
     width: 100%;
-    border-radius: 16px;
+    border-radius: 26px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: background 0.2s, transform 0.1s;
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 10px 26px rgba(10, 132, 255, 0.38);
+    transition: background 0.2s, transform 0.1s, box-shadow 0.2s, color 0.2s;
   }
   .mic-btn:active { transform: scale(0.98); }
   .mic-btn.live {
-    background: var(--card);
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-edge);
     color: var(--red);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 10px 26px rgba(50, 55, 75, 0.12);
   }
   .mic-btn .dot {
     width: 8px; height: 8px; border-radius: 50%;
@@ -336,8 +463,7 @@
     width: 139px;
     height: 5px;
     border-radius: 3px;
-    background: var(--label);
-    opacity: 0.9;
+    background: rgba(0, 0, 0, 0.8);
   }
 </style>
 </head>
@@ -345,27 +471,34 @@
 
 <div class="phone-wrap" id="phoneWrap">
   <div class="phone">
+    <div class="bg">
+      <div class="blob b1"></div>
+      <div class="blob b2"></div>
+      <div class="blob b3"></div>
+      <div class="blob b4"></div>
+    </div>
+
     <div class="island"></div>
 
     <div class="statusbar">
       <span id="clock">9:41</span>
       <span class="right">
         <!-- signal -->
-        <svg width="18" height="12" viewBox="0 0 18 12" fill="white"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="#1c1c1e"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
         <!-- wifi -->
-        <svg width="17" height="12" viewBox="0 0 17 12" fill="white"><path d="M8.5 12 L11.2 8.8 A4.4 4.4 0 0 0 5.8 8.8 Z"/><path d="M3.6 6.2 A7.4 7.4 0 0 1 13.4 6.2 L15.4 3.9 A10.4 10.4 0 0 0 1.6 3.9 Z" opacity="0.95"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="#1c1c1e"><path d="M8.5 12 L11.2 8.8 A4.4 4.4 0 0 0 5.8 8.8 Z"/><path d="M3.6 6.2 A7.4 7.4 0 0 1 13.4 6.2 L15.4 3.9 A10.4 10.4 0 0 0 1.6 3.9 Z" opacity="0.95"/></svg>
         <!-- battery -->
-        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="white" stroke-opacity="0.4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="white"/><path d="M25.5 4.5 V8.5 A2.2 2.2 0 0 0 25.5 4.5Z" fill="white" fill-opacity="0.4"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1c1e" stroke-opacity="0.4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#1c1c1e"/><path d="M25.5 4.5 V8.5 A2.2 2.2 0 0 0 25.5 4.5Z" fill="#1c1c1e" fill-opacity="0.4"/></svg>
       </span>
     </div>
 
     <div class="navbar">
       <h1>Tuner</h1>
-      <span class="a4">A4 = 440 Hz</span>
+      <span class="a4 glass">A4 = 440 Hz</span>
     </div>
 
     <div class="content">
-      <div class="gauge-card">
+      <div class="gauge-card glass">
         <svg class="gauge-svg" id="gaugeSvg" viewBox="0 0 340 200"></svg>
         <div class="readout">
           <div class="note" id="noteDisplay">A<sup id="octDisplay">4</sup></div>
@@ -375,11 +508,12 @@
         </div>
       </div>
 
-      <div class="section-label">Target Note</div>
-      <div class="note-grid" id="noteGrid"></div>
+      <div class="section-label" id="pickerLabel">Target Note</div>
+      <div class="note-grid glass" id="noteGrid"></div>
+      <div class="string-row glass" id="stringRow" style="display: none;"></div>
 
       <div class="row">
-        <div class="octave-card">
+        <div class="octave-card glass">
           <div class="oct-label">
             <span class="t">Octave</span>
             <span class="v" id="octValue">4 · 440.00 Hz</span>
@@ -390,7 +524,7 @@
             <button id="octUp" aria-label="Octave up">+</button>
           </div>
         </div>
-        <button class="tone-btn" id="toneBtn" aria-label="Play reference tone">
+        <button class="tone-btn glass" id="toneBtn" aria-label="Play reference tone">
           <svg width="26" height="22" viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 3 L7 7.5 H3 V14.5 H7 L12 19 Z" fill="currentColor" stroke="none"/>
             <path d="M16 7.5 A5 5 0 0 1 16 14.5"/>
@@ -398,6 +532,8 @@
           </svg>
         </button>
       </div>
+
+      <div class="inst-row" id="instRow"></div>
 
       <div class="mic-area">
         <button class="mic-btn" id="micBtn">
