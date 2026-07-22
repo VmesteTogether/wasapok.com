@@ -222,36 +222,52 @@
     transition: transform 0.1s;
   }
 
-  /* tuner readout strip (guitar hero) — large note, bar, cents in one row */
+  /* tuner readout (guitar hero) — floating centered column: note / bar / cents,
+     no capsule; the axis of the headstock carries straight down through it */
   .strip {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    margin-top: 12px;
-    padding: 14px 18px;
-    border-radius: 20px;
-    transition: background 0.3s, box-shadow 0.3s;
+    gap: 10px;
+    margin-top: 10px;
+    padding: 0 8px;
   }
-  .strip.intune {
-    background: linear-gradient(180deg, rgba(52,199,89,0.18), rgba(52,199,89,0.1));
-    box-shadow:
-      inset 0 1px 0 rgba(255,255,255,0.9),
-      inset 0 0 0 1px rgba(52,199,89,0.3),
-      0 10px 30px rgba(52,199,89,0.18),
-      0 2px 8px rgba(50,55,75,0.06);
+  /* string wheel — horizontal picker drum: center note big, neighbors shrink
+     and fade on a radial falloff; drag/tap to select, pegs animate it */
+  .wheel {
+    position: relative;
+    width: 100%;
+    height: 52px;
+    cursor: grab;
+    touch-action: none;
   }
-  .strip-note {
-    font-size: 40px; font-weight: 700; line-height: 1;
-    letter-spacing: -0.8px; color: var(--label);
+  .wheel:active { cursor: grabbing; }
+  .wh-item {
+    position: absolute;
+    left: 50%; top: 50%;
+    font-size: 48px; font-weight: 700; line-height: 1;
+    letter-spacing: -1px; color: var(--label);
     font-variant-numeric: tabular-nums;
-    min-width: 56px;
+    transform-origin: center;
+    will-change: transform, opacity;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.32s, color 0.2s;
   }
-  .strip-note sup { font-size: 19px; font-weight: 600; color: var(--label-2); vertical-align: 14px; margin-left: 1px; }
-  .strip .hbar { flex: 1; margin: 0 26px; }
+  .wh-item sup {
+    font-size: 22px; font-weight: 600; color: var(--label-2);
+    vertical-align: 18px; margin-left: 2px;
+    transition: opacity 0.32s, color 0.2s;
+  }
+  /* while dragging the wheel tracks the finger — no easing */
+  .wheel.dragging .wh-item,
+  .wheel.dragging .wh-item sup { transition: color 0.2s; }
+  .strip.intune .wh-item.center,
+  .strip.intune .wh-item.center sup { color: var(--green); }
+  .strip .hbar { width: 76%; margin: 0; }
   .strip-cents {
-    font-size: 15px; font-weight: 600;
+    font-size: 14px; font-weight: 600;
     color: var(--label-2);
     font-variant-numeric: tabular-nums;
-    min-width: 50px; text-align: right;
+    min-height: 18px; text-align: center;
     transition: color 0.15s;
   }
   .target-field:active { transform: scale(0.985); }
@@ -486,7 +502,7 @@
   /* guitar hero: full-bleed headstock backdrop + floating glass HUD capsule */
   .gauge-card.hero-hs { overflow: hidden; padding: 0; }
   .gauge-card.hero-hs .readout { display: none; }
-  .hs-hero { position: relative; height: 400px; }
+  .hs-hero { position: relative; height: 380px; }
 
   /* hero card is a pure object — deviation feedback lives in the console below */
 
@@ -524,7 +540,7 @@
     overflow: hidden;
     display: flex; justify-content: center; align-items: flex-start;
   }
-  .hs-hero .headstock svg { width: 305px; height: auto; display: block; }
+  .hs-hero .headstock svg { width: 262px; height: auto; display: block; }
   #headstock .peg { cursor: pointer; }
   #headstock .peg .hit { fill: transparent; }
   #headstock .peg .btn {
@@ -907,8 +923,8 @@
         </div>
       </div>
 
-      <div class="strip glass" id="tunerStrip" style="display: none;">
-        <span class="strip-note" id="stripNote">E<sup id="stripOct">2</sup></span>
+      <div class="strip" id="tunerStrip" style="display: none;">
+        <div class="wheel" id="stringWheel"></div>
         <div class="hbar">
           <span class="hbar-flat">&#9837;</span>
           <div class="hbar-track"></div>

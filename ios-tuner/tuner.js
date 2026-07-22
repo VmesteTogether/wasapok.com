@@ -113,8 +113,7 @@
   const referenceRow = document.getElementById("a4Down").closest(".row");
   const hsHero = document.getElementById("hsHero");
   const tunerStrip = document.getElementById("tunerStrip");
-  const stripNote = document.getElementById("stripNote");
-  const stripOct = document.getElementById("stripOct");
+  const stringWheel = document.getElementById("stringWheel");
   const stripCents = document.getElementById("stripCents");
   const hbarDots = document.querySelectorAll(".hbar-dot"); // one bar per view, driven together
 
@@ -253,12 +252,14 @@
     // (biased slightly narrow so stems tuck under the plate, never float)
     const halfW = (y) => 66 - Math.max(0, y - 60) * 0.115;
 
-    // open-book silhouette: sharp twin peaks, crisp V-dip, hard outer corners,
-    // sides taper to a skinny WAIST, then the wings flare out from the pinch
-    // and taper back in to the narrow neck — per the wireframe
+    // open-book silhouette: sharp twin peaks, crisp V-dip, hard outer corners;
+    // each side tapers and flows tangent-smooth into a concave scoop that
+    // flares to an outward-pointing wing tip (slightly rounded), then a second
+    // concave scoop curls back into the narrow neck — per the reference mockup
     const plate = `M ${cx - 33} 264
-      C ${cx - 45} 261 ${cx - 54} 253 ${cx - 58} 243
-      C ${cx - 57.5} 236 ${cx - 54} 228 ${cx - 49} 218
+      C ${cx - 35} 255 ${cx - 41} 247 ${cx - 57} 243.5
+      C ${cx - 59} 243 ${cx - 59} 241 ${cx - 57.5} 239.5
+      C ${cx - 52} 234 ${cx - 48.2} 227 ${cx - 49} 218
       C ${cx - 51} 195 ${cx - 62} 115 ${cx - 66} 60
       C ${cx - 67} 46 ${cx - 67} 34 ${cx - 64} 24
       C ${cx - 58} 19 ${cx - 44} 14 ${cx - 36} 10
@@ -267,8 +268,9 @@
       C ${cx + 44} 14 ${cx + 58} 19 ${cx + 64} 24
       C ${cx + 67} 34 ${cx + 67} 46 ${cx + 66} 60
       C ${cx + 62} 115 ${cx + 51} 195 ${cx + 49} 218
-      C ${cx + 54} 228 ${cx + 57.5} 236 ${cx + 58} 243
-      C ${cx + 54} 253 ${cx + 45} 261 ${cx + 33} 264 Z`;
+      C ${cx + 48.2} 227 ${cx + 52} 234 ${cx + 57.5} 239.5
+      C ${cx + 59} 241 ${cx + 59} 243 ${cx + 57} 243.5
+      C ${cx + 41} 247 ${cx + 35} 255 ${cx + 33} 264 Z`;
 
     // finish palette — "glass" renders the plate in the app's own Liquid
     // Glass material (color reserved for interactive state); "wood" is the
@@ -319,22 +321,22 @@
         fill="${P.inlayMid}"/>
       <path d="M ${cx} 104 L ${cx + 3.5} 113 L ${cx} 122 L ${cx - 3.5} 113 Z"
         fill="${P.inlayFill}"/>
-      <path d="M ${cx} 178
-        C ${cx + 7} 180 ${cx + 9} 196 ${cx + 12} 225
-        C ${cx + 13} 235 ${cx + 14} 242 ${cx + 15} 247
-        L ${cx - 15} 247
-        C ${cx - 14} 242 ${cx - 13} 235 ${cx - 12} 225
-        C ${cx - 9} 196 ${cx - 7} 180 ${cx} 178 Z"
+      <path d="M ${cx} 191
+        C ${cx + 7} 193 ${cx + 9} 209 ${cx + 12} 238
+        C ${cx + 13} 248 ${cx + 14} 255 ${cx + 15} 260
+        L ${cx - 15} 260
+        C ${cx - 14} 255 ${cx - 13} 248 ${cx - 12} 238
+        C ${cx - 9} 209 ${cx - 7} 193 ${cx} 191 Z"
         fill="${P.bellFill}" stroke="${P.bellStroke}" stroke-width="0.9"/>
-      <path d="M ${cx} 184
-        C ${cx + 5} 186 ${cx + 6.5} 200 ${cx + 9} 226
-        C ${cx + 10} 234 ${cx + 11} 239 ${cx + 11.5} 242.5
-        L ${cx - 11.5} 242.5
-        C ${cx - 11} 239 ${cx - 10} 234 ${cx - 9} 226
-        C ${cx - 6.5} 200 ${cx - 5} 186 ${cx} 184 Z"
+      <path d="M ${cx} 197
+        C ${cx + 5} 199 ${cx + 6.5} 213 ${cx + 9} 239
+        C ${cx + 10} 247 ${cx + 11} 252 ${cx + 11.5} 255.5
+        L ${cx - 11.5} 255.5
+        C ${cx - 11} 252 ${cx - 10} 247 ${cx - 9} 239
+        C ${cx - 6.5} 213 ${cx - 5} 199 ${cx} 197 Z"
         fill="none" stroke="${P.bellInner}" stroke-width="0.7"/>
-      <circle cx="${cx}" cy="189" r="1.2" fill="${P.screw}"/>
-      <circle cx="${cx}" cy="244" r="1.2" fill="${P.screw}"/>`;
+      <circle cx="${cx}" cy="202" r="1.2" fill="${P.screw}"/>
+      <circle cx="${cx}" cy="257" r="1.2" fill="${P.screw}"/>`;
 
     let s = `<svg viewBox="0 0 ${cx * 2} 350" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -368,7 +370,7 @@
     // fretboard: straight-sided — a real neck's widening is imperceptible
     // over a few frets, so any visible taper reads as an error
     s += `<rect x="${cx - 32}" y="268" width="64" height="82" fill="${P.board}"/>`;
-    for (const fy of [284, 320]) {
+    for (const fy of [292, 312]) {
       s += `<line x1="${cx - 32}" y1="${fy}" x2="${cx + 32}" y2="${fy}" stroke="${P.fretShadow}" stroke-width="2"/>`;
       s += `<line x1="${cx - 32}" y1="${fy - 0.7}" x2="${cx + 32}" y2="${fy - 0.7}" stroke="url(#pegMetal)" stroke-width="1.1"/>`;
     }
@@ -463,6 +465,129 @@
     });
   }
 
+  // ---------- string wheel (guitar hero) ----------
+  // Horizontal picker drum under the headstock: strings low→high left→right,
+  // center item is the live target. Pegs animate it; dragging/tapping it is
+  // the discoverable alternative to tapping pegs.
+
+  let wheelItems = []; // { el, sup, noteIndex, octave }
+  let wheelPos = 0;    // scroll position in index units (float mid-drag)
+
+  // radial drum falloff: keyframes of [|d|, x, scale, opacity], lerped —
+  // spacing compresses and items fade out just past the second neighbor
+  const WHEEL_KEYS = [
+    [0, 0, 1, 1],
+    [1, 58, 0.46, 0.55],
+    [2, 98, 0.36, 0.25],
+    [2.8, 118, 0.32, 0],
+  ];
+
+  function wheelParams(d) {
+    const a = Math.min(Math.abs(d), 2.8);
+    let i = 0;
+    while (i < WHEEL_KEYS.length - 2 && a > WHEEL_KEYS[i + 1][0]) i++;
+    const [d0, x0, s0, o0] = WHEEL_KEYS[i];
+    const [d1, x1, s1, o1] = WHEEL_KEYS[i + 1];
+    const t = (a - d0) / (d1 - d0);
+    return {
+      x: (d < 0 ? -1 : 1) * (x0 + (x1 - x0) * t),
+      s: s0 + (s1 - s0) * t,
+      o: o0 + (o1 - o0) * t,
+    };
+  }
+
+  function layoutWheel(pos) {
+    wheelPos = pos;
+    wheelItems.forEach((it, i) => {
+      const d = i - pos;
+      const { x, s, o } = wheelParams(d);
+      it.el.style.transform = `translate(calc(-50% + ${x.toFixed(1)}px), -50%) scale(${s.toFixed(3)})`;
+      it.el.style.opacity = o.toFixed(3);
+      it.el.style.zIndex = String(100 - Math.round(Math.abs(d) * 10));
+      it.el.classList.toggle("center", Math.abs(d) < 0.5);
+      // octave rides only the centered item (fades out as it leaves)
+      it.sup.style.opacity = Math.max(0, 1 - Math.abs(d) * 2).toFixed(2);
+    });
+  }
+
+  function buildWheel(inst) {
+    stringWheel.innerHTML = "";
+    wheelItems = inst.strings.map((sname) => {
+      const { noteIndex, octave } = parseNote(sname);
+      const el = document.createElement("span");
+      el.className = "wh-item";
+      el.innerHTML = `${NOTES[noteIndex].replace("#", "♯")}<sup>${octave}</sup>`;
+      stringWheel.appendChild(el);
+      return { el, sup: el.querySelector("sup"), noteIndex, octave };
+    });
+    // seat the drum instantly (no fly-in), then re-enable transitions
+    stringWheel.classList.add("dragging");
+    layoutWheel(0);
+    requestAnimationFrame(() => requestAnimationFrame(() =>
+      stringWheel.classList.remove("dragging")));
+  }
+
+  function wheelSelect(i) {
+    const it = wheelItems[i];
+    if (!it) return;
+    state.noteIndex = it.noteIndex;
+    state.octave = it.octave;
+    syncTarget();
+  }
+
+  const WHEEL_STEP = 58; // px of finger travel per index step (center spacing)
+  let whDragging = false, whMoved = false, whStartX = 0, whStartPos = 0;
+
+  stringWheel.addEventListener("pointerdown", (e) => {
+    whDragging = true;
+    whMoved = false;
+    whStartX = e.clientX;
+    whStartPos = wheelPos;
+    stringWheel.setPointerCapture(e.pointerId);
+  });
+  stringWheel.addEventListener("pointermove", (e) => {
+    if (!whDragging) return;
+    const dx = (e.clientX - whStartX) / phoneScale;
+    if (!whMoved && Math.abs(dx) > 5) {
+      whMoved = true;
+      stringWheel.classList.add("dragging");
+    }
+    if (whMoved) {
+      layoutWheel(Math.max(0, Math.min(wheelItems.length - 1, whStartPos - dx / WHEEL_STEP)));
+    }
+  });
+  stringWheel.addEventListener("pointerup", (e) => {
+    if (!whDragging) return;
+    whDragging = false;
+    stringWheel.classList.remove("dragging");
+    if (whMoved) {
+      wheelSelect(Math.round(wheelPos)); // snap to nearest
+    } else {
+      // tap: select the item whose drum position is nearest the tap
+      const rect = stringWheel.getBoundingClientRect();
+      const tx = (e.clientX - rect.left - rect.width / 2) / phoneScale;
+      let best = 0, bestDist = Infinity;
+      wheelItems.forEach((it, i) => {
+        const dist = Math.abs(wheelParams(i - wheelPos).x - tx);
+        if (dist < bestDist) { bestDist = dist; best = i; }
+      });
+      wheelSelect(best);
+    }
+  });
+  stringWheel.addEventListener("pointercancel", () => {
+    if (!whDragging) return;
+    whDragging = false;
+    stringWheel.classList.remove("dragging");
+    if (whMoved) wheelSelect(Math.round(wheelPos));
+  });
+  stringWheel.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const dir = Math.sign(e.deltaY + e.deltaX);
+    if (dir && wheelItems.length) {
+      wheelSelect(Math.max(0, Math.min(wheelItems.length - 1, Math.round(wheelPos) + dir)));
+    }
+  }, { passive: false });
+
   function selectInstrument(i, byUser) {
     if (byUser) state.instrumentPicked = true;
     state.instrument = i;
@@ -486,6 +611,7 @@
     } else if (isGuitar) {
       stringButtons = [];
       buildHeadstock(inst);
+      buildWheel(inst);
       const low = parseNote(inst.strings[0]);
       state.noteIndex = low.noteIndex;
       state.octave = low.octave;
@@ -570,8 +696,9 @@
     });
     noteDisplay.firstChild.textContent = NOTES[state.noteIndex].replace("#", "♯");
     octDisplay.textContent = state.octave;
-    stripNote.firstChild.textContent = NOTES[state.noteIndex].replace("#", "♯");
-    stripOct.textContent = state.octave;
+    const wi = wheelItems.findIndex((w) =>
+      w.noteIndex === state.noteIndex && w.octave === state.octave);
+    if (wi >= 0) layoutWheel(wi); // scroll the drum to the target (animated)
     octValue.textContent = `${state.octave} · ${f.toFixed(2)} Hz`;
     // keep the Manual-mode target field in sync
     const inst = INSTRUMENTS[state.instrument];
