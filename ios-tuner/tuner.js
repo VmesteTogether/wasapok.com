@@ -6,16 +6,23 @@
   "use strict";
 
   const NOTES = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
-  const A4 = 440;
+  let A4 = 440; // reference pitch, user-calibratable (see setA4)
+  const A4_MIN = 430, A4_MAX = 450;
   const OCT_MIN = 0, OCT_MAX = 8;
   const IN_TUNE_CENTS = 5;
+  // headstock finish: "glass" (Liquid Glass, matches the app material) or
+  // "wood" (the warm representational 3A variant) — one-word switch
+  const HS_STYLE = "glass";
 
   const state = {
+    mode: "auto", // "auto" = detect nearest note; "manual" = tune to a chosen target
     noteIndex: 9, // A
     octave: 4,
     instrument: 0, // index into INSTRUMENTS; 0 = chromatic
+    instrumentPicked: false, // true once the user taps a chip themselves
     listening: false,
     lastCents: null,
+    btn: "requesting", // 4-state mic button: requesting | listening | paused | denied
   };
 
   // ---------- instruments ----------
@@ -64,99 +71,9 @@
     return `${name}${oct}`;
   }
 
-  // ---------- gauge (SVG) ----------
-
-  const svg = document.getElementById("gaugeSvg");
-  const NS = "http://www.w3.org/2000/svg";
-  const CX = 170, CY = 178, R = 140;
-  const SWEEP = 130; // degrees total (-65..+65 from vertical)
-
-  const centsToAngle = (cents) => (Math.max(-50, Math.min(50, cents)) / 50) * (SWEEP / 2);
-  const polar = (angleDeg, radius) => {
-    const rad = (angleDeg - 90) * Math.PI / 180;
-    return [CX + radius * Math.cos(rad), CY + radius * Math.sin(rad)];
-  };
-
-  function el(tag, attrs) {
-    const node = document.createElementNS(NS, tag);
-    for (const k in attrs) node.setAttribute(k, attrs[k]);
-    return node;
-  }
-
-  let needle, needleHub, arcActive;
-
-  function buildGauge() {
-    // background arc
-    const [ax, ay] = polar(-SWEEP / 2, R);
-    const [bx, by] = polar(SWEEP / 2, R);
-    svg.appendChild(el("path", {
-      d: `M ${ax} ${ay} A ${R} ${R} 0 0 1 ${bx} ${by}`,
-      fill: "none", stroke: "rgba(60,60,67,0.16)", "stroke-width": 10, "stroke-linecap": "round",
-    }));
-
-    // in-tune zone (±5 cents)
-    const [gx, gy] = polar(centsToAngle(-IN_TUNE_CENTS), R);
-    const [hx, hy] = polar(centsToAngle(IN_TUNE_CENTS), R);
-    svg.appendChild(el("path", {
-      d: `M ${gx} ${gy} A ${R} ${R} 0 0 1 ${hx} ${hy}`,
-      fill: "none", stroke: "rgba(52,199,89,0.45)", "stroke-width": 10, "stroke-linecap": "round",
-    }));
-
-    // active arc from center to needle, recolored live
-    arcActive = el("path", {
-      fill: "none", stroke: "transparent", "stroke-width": 10, "stroke-linecap": "round",
-    });
-    svg.appendChild(arcActive);
-
-    // ticks every 10 cents, labels at ±50 and 0
-    for (let c = -50; c <= 50; c += 10) {
-      const a = centsToAngle(c);
-      const major = c % 50 === 0;
-      const [x1, y1] = polar(a, R - 14);
-      const [x2, y2] = polar(a, R - (major ? 30 : 24));
-      svg.appendChild(el("line", {
-        x1, y1, x2, y2,
-        stroke: c === 0 ? "rgba(0,0,0,0.75)" : "rgba(60,60,67,0.32)",
-        "stroke-width": c === 0 ? 2.5 : 1.5, "stroke-linecap": "round",
-      }));
-      if (major && c !== 0) {
-        const [tx, ty] = polar(a, R - 44);
-        const label = el("text", {
-          x: tx, y: ty, "text-anchor": "middle", "dominant-baseline": "middle",
-          fill: "rgba(60,60,67,0.5)", "font-size": 12, "font-weight": 600,
-          "font-family": "inherit",
-        });
-        label.textContent = c > 0 ? `+${c}` : `${c}`;
-        svg.appendChild(label);
-      }
-    }
-
-    // ♭ / ♯ hints
-    const [fx, fy] = polar(-SWEEP / 2 + 6, R + 0);
-    const [sx, sy] = polar(SWEEP / 2 - 6, R + 0);
-    for (const [x, y, ch] of [[fx - 18, fy - 12, "♭"], [sx + 18, sy - 12, "♯"]]) {
-      const t = el("text", {
-        x, y, "text-anchor": "middle", fill: "rgba(60,60,67,0.4)",
-        "font-size": 17, "font-weight": 600, "font-family": "inherit",
-      });
-      t.textContent = ch;
-      svg.appendChild(t);
-    }
-
-    // needle
-    needle = el("line", {
-      x1: CX, y1: CY - 36, x2: CX, y2: CY - (R - 34),
-      stroke: "rgba(60,60,67,0.45)", "stroke-width": 4, "stroke-linecap": "round",
-    });
-    needle.style.transformOrigin = `${CX}px ${CY}px`;
-    needle.style.transition = "transform 0.12s ease-out, stroke 0.15s";
-    svg.appendChild(needle);
-
-    needleHub = el("circle", { cx: CX, cy: CY - 36, r: 5, fill: "rgba(60,60,67,0.45)" });
-    needleHub.style.transformOrigin = `${CX}px ${CY}px`;
-    needleHub.style.transition = "transform 0.12s ease-out, fill 0.15s";
-    svg.appendChild(needleHub);
-  }
+  // ---------- deviation indicator ----------
+  // The app's single deviation component is the horizontal bar (setHBar) —
+  // the dial retired in v0.11. setNeedle keeps its name at every call site.
 
   function colorFor(cents) {
     const a = Math.abs(cents);
@@ -165,33 +82,7 @@
     return "var(--red)";
   }
 
-  function setNeedle(cents) {
-    if (cents === null) {
-      needle.style.transform = "rotate(0deg)";
-      needleHub.style.transform = "rotate(0deg)";
-      needle.setAttribute("stroke", "rgba(60,60,67,0.45)");
-      needleHub.setAttribute("fill", "rgba(60,60,67,0.45)");
-      arcActive.setAttribute("stroke", "transparent");
-      return;
-    }
-    const angle = centsToAngle(cents);
-    const color = colorFor(cents);
-    needle.style.transform = `rotate(${angle}deg)`;
-    needleHub.style.transform = `rotate(${angle}deg)`;
-    needle.setAttribute("stroke", color);
-    needleHub.setAttribute("fill", color);
-
-    const a0 = Math.min(0, angle), a1 = Math.max(0, angle);
-    const [px, py] = polar(a0, R);
-    const [qx, qy] = polar(a1, R);
-    if (Math.abs(angle) < 0.5) {
-      arcActive.setAttribute("stroke", "transparent");
-    } else {
-      arcActive.setAttribute("d", `M ${px} ${py} A ${R} ${R} 0 0 1 ${qx} ${qy}`);
-      arcActive.setAttribute("stroke", color);
-      arcActive.setAttribute("opacity", 0.85);
-    }
-  }
+  function setNeedle(cents) { setHBar(cents); }
 
   // ---------- UI ----------
 
@@ -208,6 +99,69 @@
   const micBtn = document.getElementById("micBtn");
   const micLabel = document.getElementById("micLabel");
   const toneBtn = document.getElementById("toneBtn");
+  const gaugeCard = document.getElementById("gaugeCard");
+  const autoHint = document.getElementById("autoHint");
+  const modeSeg = document.getElementById("modeSeg");
+  const targetField = document.getElementById("targetField");
+  const tfInst = document.getElementById("tfInst");
+  const tfNote = document.getElementById("tfNote");
+  const tfIcon = document.getElementById("tfIcon");
+  const sheetScrim = document.getElementById("sheetScrim");
+  const inlinePicker = document.getElementById("inlinePicker");
+  const sheetBody = document.querySelector(".sheet-body");
+  const octaveRow = document.getElementById("octDown").closest(".row");
+  const referenceRow = document.getElementById("a4Down").closest(".row");
+  const hsHero = document.getElementById("hsHero");
+  const tunerStrip = document.getElementById("tunerStrip");
+  const stripNote = document.getElementById("stripNote");
+  const stripOct = document.getElementById("stripOct");
+  const stripCents = document.getElementById("stripCents");
+  const hbarDots = document.querySelectorAll(".hbar-dot"); // one bar per view, driven together
+
+  // ---------- mode (auto detect / manual target) ----------
+
+  function setMode(mode) {
+    state.mode = mode;
+    modeSeg.dataset.mode = mode;
+    modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
+      b.classList.toggle("selected", b.dataset.mode === mode));
+    const auto = mode === "auto";
+    autoHint.style.display = auto ? "" : "none";
+    if (auto) closeSheet();
+    updateHeroView();
+    updateInlinePicker();
+    if (toneOsc) stopTone(); // reference tone is a manual-mode affordance
+    state.lastCents = null;
+    if (auto) {
+      // let the arc/readout reset to the "waiting" look
+      setNeedle(null);
+      gaugeCard.classList.remove("intune");
+      tunerStrip.classList.remove("intune");
+      tunePill.classList.remove("show");
+      noteDisplay.firstChild.textContent = "–";
+      octDisplay.textContent = "";
+      metaDisplay.textContent = state.listening ? "Play a note" : "Play a note";
+      centsDisplay.innerHTML = "&nbsp;";
+    } else {
+      // Manual's job is instrument tuning — land on Guitar 6 unless the user
+      // has explicitly chosen an instrument (chip order stays untouched)
+      if (!state.instrumentPicked && state.instrument === 0) selectInstrument(1);
+      syncTarget();
+    }
+  }
+  modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
+    b.addEventListener("click", () => setMode(b.dataset.mode)));
+
+  // ---------- picker sheet ----------
+
+  function openSheet() { sheetScrim.classList.add("show"); }
+  function closeSheet() {
+    sheetScrim.classList.remove("show");
+    if (toneOsc) stopTone(); // don't leave a reference tone ringing behind a closed sheet
+  }
+  targetField.addEventListener("click", openSheet);
+  document.getElementById("sheetDone").addEventListener("click", closeSheet);
+  sheetScrim.addEventListener("click", (e) => { if (e.target === sheetScrim) closeSheet(); });
 
   const noteButtons = NOTES.map((name, i) => {
     const b = document.createElement("button");
@@ -224,7 +178,7 @@
     b.className = "inst-chip glass";
     b.innerHTML = ICONS[inst.icon] + `<span>${inst.name}</span>` +
       (inst.count !== null ? `<span class="cnt">${inst.count}</span>` : "");
-    b.addEventListener("click", () => selectInstrument(i));
+    b.addEventListener("click", () => selectInstrument(i, true));
     instRow.appendChild(b);
     return b;
   });
@@ -264,125 +218,225 @@
   let pegEls = []; // { g, line, noteIndex, octave }
 
   function buildHeadstock(inst) {
-    const cx = 163;
+    const cx = 110;
     const n = inst.strings.length;
     const leftCount = Math.ceil(n / 2);
-    const spacing = n === 6 ? 7 : 6;
-    const firstX = cx - spacing * (n - 1) / 2;
-    // post heights: left column runs low string (near nut) to high, right column mirrors
-    const leftYs = n === 6 ? [86, 57, 28] : [96, 72, 48, 24];
-    const rightYs = [28, 57, 86];
+    const rightCount = n - leftCount;
 
+    // evenly spaced string slots across the nut (low → high, left → right)
+    const nutHalf = 26;
+    const slotX = (i) => +(cx - nutHalf + nutHalf * 2 * (i / (n - 1))).toFixed(1);
+
+    // tuner rows per side (top → bottom), centered on the plate midline
+    const rows = (count) => Array.from({ length: count },
+      (_, k) => +(129.5 + (k - (count - 1) / 2) * (count === 3 ? 52.5 : 41)).toFixed(1));
+    const leftRows = rows(leftCount);
+    const rightRows = rows(rightCount);
+
+    // Gibson convention: bass strings climb the left side (lowest string on the
+    // tuner nearest the nut), trebles mirror on the right — D/G at the horns
     const pegs = inst.strings.map((s, i) => {
       const { noteIndex, octave } = parseNote(s);
       const left = i < leftCount;
       return {
         noteIndex, octave,
-        nutX: firstX + i * spacing,
-        y: left ? leftYs[i] : rightYs[i - leftCount],
         side: left ? -1 : 1,
+        nutX: slotX(i),
+        postX: left ? cx - 29 : cx + 29,
+        btnX: left ? cx - 88 : cx + 88,
+        y: left ? leftRows[leftCount - 1 - i] : rightRows[i - leftCount],
         name: NOTES[noteIndex].replace("#", "♯"),
       };
     });
 
-    // Les Paul silhouette: open-book crown, sides flaring out from a narrow nut
-    const plate = `M ${cx - 33} 13
-      Q ${cx - 28} 8 ${cx - 20} 9
-      C ${cx - 12} 10 ${cx - 6} 12.8 ${cx} 15
-      C ${cx + 6} 12.8 ${cx + 12} 10 ${cx + 20} 9
-      Q ${cx + 28} 8 ${cx + 33} 13
-      C ${cx + 34} 20 ${cx + 32} 40 ${cx + 29} 60
-      C ${cx + 27} 80 ${cx + 25} 90 ${cx + 24.5} 98
-      Q ${cx + 24.5} 104 ${cx + 19} 104
-      L ${cx - 19} 104
-      Q ${cx - 24.5} 104 ${cx - 24.5} 98
-      C ${cx - 25} 90 ${cx - 27} 80 ${cx - 29} 60
-      C ${cx - 32} 40 ${cx - 34} 20 ${cx - 33} 13 Z`;
+    // plate half-width at a given y — lands the tuner stems on the edge
+    // (biased slightly narrow so stems tuck under the plate, never float)
+    const halfW = (y) => 66 - Math.max(0, y - 60) * 0.115;
 
-    let s = `<svg viewBox="0 0 326 136" xmlns="http://www.w3.org/2000/svg">
+    // open-book silhouette: sharp twin peaks, crisp V-dip, hard outer corners,
+    // sides taper to a skinny WAIST, then the wings flare out from the pinch
+    // and taper back in to the narrow neck — per the wireframe
+    const plate = `M ${cx - 33} 264
+      C ${cx - 45} 261 ${cx - 54} 253 ${cx - 58} 243
+      C ${cx - 57.5} 236 ${cx - 54} 228 ${cx - 49} 218
+      C ${cx - 51} 195 ${cx - 62} 115 ${cx - 66} 60
+      C ${cx - 67} 46 ${cx - 67} 34 ${cx - 64} 24
+      C ${cx - 58} 19 ${cx - 44} 14 ${cx - 36} 10
+      C ${cx - 28} 14 ${cx - 13} 20 ${cx} 26
+      C ${cx + 13} 20 ${cx + 28} 14 ${cx + 36} 10
+      C ${cx + 44} 14 ${cx + 58} 19 ${cx + 64} 24
+      C ${cx + 67} 34 ${cx + 67} 46 ${cx + 66} 60
+      C ${cx + 62} 115 ${cx + 51} 195 ${cx + 49} 218
+      C ${cx + 54} 228 ${cx + 57.5} 236 ${cx + 58} 243
+      C ${cx + 54} 253 ${cx + 45} 261 ${cx + 33} 264 Z`;
+
+    // finish palette — "glass" renders the plate in the app's own Liquid
+    // Glass material (color reserved for interactive state); "wood" is the
+    // warm representational 3A variant, kept one switch away (HS_STYLE)
+    const glass = HS_STYLE === "glass";
+    headstock.classList.toggle("wood", !glass);
+    const P = glass ? {
+      plate: "url(#glassPlate)",
+      edge: "rgba(60,60,67,0.42)",
+      shadow: "0 6px 16px rgba(50,55,75,0.2)",
+      inlayFill: "rgba(255,255,255,0.62)",
+      inlayStroke: "rgba(60,60,67,0.38)",
+      inlayMid: "rgba(60,60,67,0.16)",
+      bellFill: "rgba(255,255,255,0.34)",
+      bellStroke: "rgba(60,60,67,0.4)",
+      bellInner: "rgba(60,60,67,0.25)",
+      screw: "rgba(60,60,67,0.4)",
+      board: "rgba(78,84,100,0.5)",
+      fretShadow: "rgba(60,60,67,0.45)",
+      nutFill: "rgba(255,255,255,0.92)",
+      nutStroke: "rgba(60,60,67,0.4)",
+      slot: "rgba(60,60,67,0.32)",
+      stemShadow: "rgba(60,66,76,0.24)",
+    } : {
+      plate: "url(#wood)",
+      edge: "rgba(34,16,4,0.55)",
+      shadow: "0 4px 7px rgba(50,55,75,0.3)",
+      inlayFill: "#efe6d0",
+      inlayStroke: "rgba(96,66,26,0.55)",
+      inlayMid: "rgba(70,40,14,0.55)",
+      bellFill: "#241610",
+      bellStroke: "rgba(226,196,140,0.6)",
+      bellInner: "rgba(226,196,140,0.4)",
+      screw: "rgba(200,170,120,0.8)",
+      board: "url(#rosewood)",
+      fretShadow: "rgba(18,9,4,0.55)",
+      nutFill: "url(#bone)",
+      nutStroke: "#c9bb98",
+      slot: "rgba(96,74,40,0.5)",
+      stemShadow: "rgba(40,25,10,0.32)",
+    };
+
+    // split-diamond inlay (outlined, layered) + bell truss-rod cover, per wireframe
+    const inlay = `
+      <path d="M ${cx} 78 L ${cx + 13} 113 L ${cx} 148 L ${cx - 13} 113 Z"
+        fill="${P.inlayFill}" stroke="${P.inlayStroke}" stroke-width="0.8"/>
+      <path d="M ${cx} 90 L ${cx + 8} 113 L ${cx} 136 L ${cx - 8} 113 Z"
+        fill="${P.inlayMid}"/>
+      <path d="M ${cx} 104 L ${cx + 3.5} 113 L ${cx} 122 L ${cx - 3.5} 113 Z"
+        fill="${P.inlayFill}"/>
+      <path d="M ${cx} 178
+        C ${cx + 7} 180 ${cx + 9} 196 ${cx + 12} 225
+        C ${cx + 13} 235 ${cx + 14} 242 ${cx + 15} 247
+        L ${cx - 15} 247
+        C ${cx - 14} 242 ${cx - 13} 235 ${cx - 12} 225
+        C ${cx - 9} 196 ${cx - 7} 180 ${cx} 178 Z"
+        fill="${P.bellFill}" stroke="${P.bellStroke}" stroke-width="0.9"/>
+      <path d="M ${cx} 184
+        C ${cx + 5} 186 ${cx + 6.5} 200 ${cx + 9} 226
+        C ${cx + 10} 234 ${cx + 11} 239 ${cx + 11.5} 242.5
+        L ${cx - 11.5} 242.5
+        C ${cx - 11} 239 ${cx - 10} 234 ${cx - 9} 226
+        C ${cx - 6.5} 200 ${cx - 5} 186 ${cx} 184 Z"
+        fill="none" stroke="${P.bellInner}" stroke-width="0.7"/>
+      <circle cx="${cx}" cy="189" r="1.2" fill="${P.screw}"/>
+      <circle cx="${cx}" cy="244" r="1.2" fill="${P.screw}"/>`;
+
+    let s = `<svg viewBox="0 0 ${cx * 2} 350" xmlns="http://www.w3.org/2000/svg">
       <defs>
-        <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#c08a4e"/>
-          <stop offset="0.45" stop-color="#a06a32"/>
-          <stop offset="1" stop-color="#7c4c20"/>
+        <linearGradient id="glassPlate" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="rgba(255,255,255,0.8)"/>
+          <stop offset="0.5" stop-color="rgba(255,255,255,0.55)"/>
+          <stop offset="1" stop-color="rgba(255,255,255,0.65)"/>
         </linearGradient>
-        <radialGradient id="sunburst" cx="0.5" cy="0.42" r="0.75">
-          <stop offset="0" stop-color="rgba(255,222,160,0.4)"/>
-          <stop offset="0.55" stop-color="rgba(255,222,160,0.12)"/>
-          <stop offset="1" stop-color="rgba(60,28,8,0.35)"/>
-        </radialGradient>
+        <linearGradient id="wood" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#b8834a"/>
+          <stop offset="0.5" stop-color="#9c6630"/>
+          <stop offset="1" stop-color="#7a4a1f"/>
+        </linearGradient>
         <linearGradient id="rosewood" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#4a2a18"/>
-          <stop offset="1" stop-color="#331d10"/>
+          <stop offset="0" stop-color="#46281a"/>
+          <stop offset="1" stop-color="#2c1810"/>
         </linearGradient>
         <linearGradient id="bone" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="#faf5e8"/>
           <stop offset="0.5" stop-color="#ece0c4"/>
           <stop offset="1" stop-color="#d9cba9"/>
         </linearGradient>
-        <linearGradient id="pegMetal" x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0" stop-color="#f4f6f9"/>
-          <stop offset="0.5" stop-color="#c9ced7"/>
-          <stop offset="1" stop-color="#9aa1ad"/>
+        <linearGradient id="pegMetal" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#f2f4f7"/>
+          <stop offset="0.5" stop-color="#c6ccd5"/>
+          <stop offset="1" stop-color="#98a0ac"/>
         </linearGradient>
         <clipPath id="plateClip"><path d="${plate}"/></clipPath>
-      </defs>
-      <g style="filter: drop-shadow(0 5px 9px rgba(50,55,75,0.32))">
-        <path d="${plate}" fill="url(#wood)"/>
-      </g>
-      <path d="${plate}" fill="url(#sunburst)"/>
-      <g clip-path="url(#plateClip)" fill="none">
-        <g stroke="rgba(78,42,12,0.2)" stroke-width="1">
-          <path d="M ${cx - 20} 4 C ${cx - 23} 40 ${cx - 18} 80 ${cx - 21} 116"/>
-          <path d="M ${cx - 10} 4 C ${cx - 8} 45 ${cx - 12} 85 ${cx - 9} 116"/>
-          <path d="M ${cx} 4 C ${cx - 3} 40 ${cx + 2} 90 ${cx - 1} 116"/>
-          <path d="M ${cx + 10} 4 C ${cx + 13} 50 ${cx + 8} 90 ${cx + 11} 116"/>
-          <path d="M ${cx + 20} 4 C ${cx + 17} 45 ${cx + 22} 85 ${cx + 19} 116"/>
-        </g>
-        <g stroke="rgba(78,42,12,0.07)" stroke-width="5">
-          <path d="M ${cx - 14} 4 C ${cx - 17} 45 ${cx - 12} 85 ${cx - 15} 116"/>
-          <path d="M ${cx + 13} 4 C ${cx + 16} 50 ${cx + 10} 90 ${cx + 14} 116"/>
-        </g>
-      </g>
-      <path d="${plate}" fill="none" stroke="rgba(38,18,4,0.45)" stroke-width="1.5"/>
-      <path d="M ${cx - 29} 12 Q ${cx - 24} 9 ${cx - 18} 10.2 C ${cx - 11} 11.2 ${cx - 5} 13.4 ${cx} 15.6 C ${cx + 5} 13.4 ${cx + 11} 11.2 ${cx + 18} 10.2 Q ${cx + 24} 9 ${cx + 29} 12"
-        stroke="rgba(255,235,200,0.35)" stroke-width="1.3" fill="none" stroke-linecap="round"/>
-      <path d="M ${cx} 30 L ${cx + 5.5} 39 L ${cx} 48 L ${cx - 5.5} 39 Z"
-        fill="#efe8d6" opacity="0.92" stroke="rgba(120,90,40,0.4)" stroke-width="0.6"/>
-      <path d="M ${cx - 5} 84 Q ${cx} 81.4 ${cx + 5} 84 L ${cx + 6.5} 95 Q ${cx} 98 ${cx - 6.5} 95 Z"
-        fill="#241610" stroke="rgba(226,196,140,0.55)" stroke-width="0.8"/>
-      <path d="M ${cx - 21} 108 L ${cx - 21} 136 L ${cx + 21} 136 L ${cx + 21} 108 Z" fill="url(#rosewood)"/>
-      <line x1="${cx - 21}" y1="130" x2="${cx + 21}" y2="130" stroke="rgba(20,10,4,0.55)" stroke-width="2.4"/>
-      <line x1="${cx - 21}" y1="129.5" x2="${cx + 21}" y2="129.5" stroke="url(#pegMetal)" stroke-width="1.6"/>`;
+      </defs>`;
 
-    // strings: over the plate (nut to post) and down the fretboard
+    // fretboard: straight-sided — a real neck's widening is imperceptible
+    // over a few frets, so any visible taper reads as an error
+    s += `<rect x="${cx - 32}" y="268" width="64" height="82" fill="${P.board}"/>`;
+    for (const fy of [284, 320]) {
+      s += `<line x1="${cx - 32}" y1="${fy}" x2="${cx + 32}" y2="${fy}" stroke="${P.fretShadow}" stroke-width="2"/>`;
+      s += `<line x1="${cx - 32}" y1="${fy - 0.7}" x2="${cx + 32}" y2="${fy - 0.7}" stroke="url(#pegMetal)" stroke-width="1.1"/>`;
+    }
+
+    // plate: soft shadow, finish fill, inner frost rim (glass) or straight
+    // grain (wood), crisp outline
+    s += `<g style="filter: drop-shadow(${P.shadow})"><path d="${plate}" fill="${P.plate}"/></g>`;
+    if (glass) {
+      s += `<g clip-path="url(#plateClip)"><path d="${plate}" fill="none" stroke="rgba(255,255,255,0.85)" stroke-width="3"/></g>`;
+    } else {
+      s += `<g clip-path="url(#plateClip)" fill="none" stroke-linecap="round">
+        <g stroke="rgba(74,40,12,0.18)" stroke-width="1">
+          <path d="M ${cx - 44} 6 L ${cx - 47} 268"/>
+          <path d="M ${cx - 22} 4 L ${cx - 24} 268"/>
+          <path d="M ${cx + 1} 4 L ${cx - 1} 268"/>
+          <path d="M ${cx + 23} 4 L ${cx + 25} 268"/>
+          <path d="M ${cx + 45} 6 L ${cx + 48} 268"/>
+        </g>
+        <g stroke="rgba(74,40,12,0.07)" stroke-width="6">
+          <path d="M ${cx - 33} 4 L ${cx - 35} 268"/>
+          <path d="M ${cx + 34} 4 L ${cx + 36} 268"/>
+        </g>
+      </g>`;
+    }
+    s += `<path d="${plate}" fill="none" stroke="${P.edge}" stroke-width="${glass ? 1.3 : 1.6}"/>
+      ${inlay}`;
+
+    // strings: nut slot → post over the plate, then straight down the board
     pegs.forEach((p, i) => {
-      const w = (1.8 - (1.8 - 1.0) * (i / (n - 1))).toFixed(2);
-      s += `<line class="string str-${i}" x1="${p.nutX}" y1="101" x2="${cx + p.side * 18}" y2="${p.y}" stroke-width="${w}"/>`;
-      s += `<line class="string str-${i}" x1="${p.nutX}" y1="107" x2="${p.nutX}" y2="136" stroke-width="${w}"/>`;
+      const w = (1.9 - (1.9 - 0.9) * (i / (n - 1))).toFixed(2);
+      s += `<line class="string str-${i}" x1="${p.nutX}" y1="262" x2="${p.postX}" y2="${p.y}" stroke-width="${w}"/>`;
+      s += `<line class="string str-${i}" x1="${p.nutX}" y1="271" x2="${p.nutX}" y2="350" stroke-width="${w}"/>`;
     });
 
-    // bone nut with string notches, drawn over the string ends
-    s += `<rect x="${cx - 22}" y="101" width="44" height="6.5" rx="1.8" fill="url(#bone)" stroke="#c9bb98" stroke-width="0.7"/>`;
+    // nut with string slots
+    s += `<rect x="${cx - 32}" y="264" width="64" height="7" rx="1.5" fill="${P.nutFill}" stroke="${P.nutStroke}" stroke-width="0.7"/>`;
     pegs.forEach((p) => {
-      s += `<line x1="${p.nutX}" y1="101.8" x2="${p.nutX}" y2="104.4" stroke="rgba(96,74,40,0.55)" stroke-width="1" stroke-linecap="round"/>`;
+      s += `<line x1="${p.nutX}" y1="264.6" x2="${p.nutX}" y2="269.4" stroke="${P.slot}" stroke-width="1" stroke-linecap="round"/>`;
     });
 
-    // machine heads: shaft, kidney button, capped post, label, hit area
+    // vintage keystone tuner button — straight-edged rounded trapezoid, narrow
+    // at the stem and flaring outward, like the wireframe's Kluson-style keys
+    const keystone = (bx, y, side) => {
+      const o = (d) => (bx + side * d).toFixed(1); // d: negative → toward plate
+      return `M ${o(-10)} ${y - 5}
+        Q ${o(-10.5)} ${y - 9} ${o(-7)} ${y - 9.8}
+        L ${o(8)} ${y - 13}
+        Q ${o(13)} ${y - 13.8} ${o(13)} ${y - 9}
+        L ${o(13)} ${y + 9}
+        Q ${o(13)} ${y + 13.8} ${o(8)} ${y + 13}
+        L ${o(-7)} ${y + 9.8}
+        Q ${o(-10.5)} ${y + 9} ${o(-10)} ${y + 5} Z`;
+    };
+
+    // machine heads: stem from the plate edge, keystone button, washer + post
     pegs.forEach((p, i) => {
-      const bx = p.side < 0 ? cx - 54 : cx + 40;
-      const hx = p.side < 0 ? cx - 86 : cx + 12;
-      const tx = cx + p.side * 60;
-      const px = cx + p.side * 18;
+      const edgeX = (cx + p.side * halfW(p.y)).toFixed(1);
+      const stemX = (p.btnX - p.side * 9).toFixed(1);
       s += `<g class="peg" data-i="${i}">
-        <rect class="hit" x="${hx}" y="${p.y - 14}" width="74" height="28"/>
-        <line x1="${px}" y1="${p.y}" x2="${cx + p.side * 40}" y2="${p.y}" stroke="rgba(40,25,10,0.35)" stroke-width="3.6"/>
-        <line class="shaft" x1="${px}" y1="${p.y}" x2="${cx + p.side * 40}" y2="${p.y}" stroke="url(#pegMetal)"/>
-        <rect class="btn" x="${bx}" y="${p.y - 6}" width="14" height="12" rx="5" fill="url(#pegMetal)"/>
-        <ellipse cx="${bx + 7}" cy="${p.y - 3}" rx="4.2" ry="1.9" fill="rgba(255,255,255,0.55)"/>
-        <circle class="post" cx="${px}" cy="${p.y}" r="3.4" fill="url(#pegMetal)"/>
-        <circle cx="${px}" cy="${p.y}" r="1.2" fill="rgba(60,66,76,0.9)"/>
-        <text x="${tx}" y="${p.y + 5}" text-anchor="${p.side < 0 ? "end" : "start"}">${p.name}<tspan dy="2" font-size="10">${p.octave}</tspan></text>
+        <rect class="hit" x="${p.side < 0 ? 4 : cx * 2 - 90}" y="${p.y - 16}" width="86" height="32"/>
+        <line x1="${edgeX}" y1="${p.y}" x2="${stemX}" y2="${p.y}" stroke="${P.stemShadow}" stroke-width="4"/>
+        <line class="shaft" x1="${edgeX}" y1="${p.y}" x2="${stemX}" y2="${p.y}" stroke="url(#pegMetal)" stroke-width="2.6"/>
+        <path class="btn" d="${keystone(p.btnX, p.y, p.side)}" fill="url(#pegMetal)"/>
+        <line x1="${(p.btnX - p.side * 8).toFixed(1)}" y1="${p.y}" x2="${(p.btnX + p.side * 12).toFixed(1)}" y2="${p.y}" stroke="rgba(60,66,76,0.3)" stroke-width="0.8"/>
+        <circle cx="${p.postX}" cy="${p.y}" r="6.8" fill="none" stroke="url(#pegMetal)" stroke-width="2.4"/>
+        <circle class="post" cx="${p.postX}" cy="${p.y}" r="3.6" fill="url(#pegMetal)"/>
+        <circle cx="${p.postX}" cy="${p.y}" r="1.5" fill="rgba(55,60,70,0.9)"/>
+        <text x="${p.postX}" y="${p.y - 12}" text-anchor="middle">${p.name}<tspan dy="2" font-size="9">${p.octave}</tspan></text>
       </g>`;
     });
 
@@ -409,7 +463,8 @@
     });
   }
 
-  function selectInstrument(i) {
+  function selectInstrument(i, byUser) {
+    if (byUser) state.instrumentPicked = true;
     state.instrument = i;
     const inst = INSTRUMENTS[i];
     instButtons.forEach((b, j) => b.classList.toggle("selected", j === i));
@@ -423,13 +478,12 @@
     const isGuitar = !!inst.strings && inst.icon === "guitar";
     noteGrid.style.display = inst.strings ? "none" : "";
     stringRow.style.display = inst.strings && !isGuitar ? "" : "none";
-    headstock.style.display = isGuitar ? "" : "none";
+    pickerLabel.style.display = isGuitar ? "none" : ""; // guitar picks pegs on the hero, not in the sheet
     if (!isGuitar) pegEls = [];
     if (!inst.strings) {
       pickerLabel.textContent = "Target Note";
       stringButtons = [];
     } else if (isGuitar) {
-      pickerLabel.textContent = "Headstock — Tap a Peg";
       stringButtons = [];
       buildHeadstock(inst);
       const low = parseNote(inst.strings[0]);
@@ -458,7 +512,50 @@
       state.noteIndex = low.noteIndex;
       state.octave = low.octave;
     }
+    updateHeroView();
+    updateInlinePicker();
     syncTarget();
+  }
+
+  // chromatic + manual: the note grid, octave and reference ride on the main
+  // screen, slid up under the tuning bar. The instrument dropdown stays the
+  // shared tap-to-open field (parked below), so only these nodes migrate — the
+  // chip row stays in the sheet that field opens. appendChild moves the live
+  // nodes (ids/handlers intact); appending in-order preserves DOM order, and
+  // in the sheet they re-seat right after the untouched chip row.
+  const PICKER_NODES = [pickerLabel, noteGrid, stringRow, octaveRow, referenceRow];
+  function pickerInline(inline) {
+    const dest = inline ? inlinePicker : sheetBody;
+    for (const n of PICKER_NODES) dest.appendChild(n);
+  }
+
+  function updateInlinePicker() {
+    const inst = INSTRUMENTS[state.instrument];
+    const inline = state.mode === "manual" && !inst.strings; // chromatic only
+    pickerInline(inline);
+    inlinePicker.style.display = inline ? "block" : "none";
+    targetField.style.display = state.mode === "manual" ? "" : "none";
+  }
+
+  // guitar in Manual mode makes the headstock the hero (replaces the gauge dial)
+  function updateHeroView() {
+    const inst = INSTRUMENTS[state.instrument];
+    const hero = state.mode === "manual" && !!inst.strings && inst.icon === "guitar";
+    hsHero.style.display = hero ? "" : "none";
+    tunerStrip.style.display = hero ? "" : "none";
+    gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the headstock
+  }
+
+  // horizontal linear tuner — dot slides flat(−50) ↔ sharp(+50), centered = in tune
+  function setHBar(cents) {
+    const idle = cents === null;
+    const c = idle ? 0 : Math.max(-50, Math.min(50, cents));
+    const left = idle ? "50%" : `${(50 + (c / 50) * 44).toFixed(1)}%`;
+    const bg = idle ? "rgba(60,60,67,0.4)" : colorFor(cents);
+    for (const dot of hbarDots) {
+      dot.style.left = left;
+      dot.style.background = bg;
+    }
   }
 
   function syncTarget() {
@@ -473,12 +570,20 @@
     });
     noteDisplay.firstChild.textContent = NOTES[state.noteIndex].replace("#", "♯");
     octDisplay.textContent = state.octave;
+    stripNote.firstChild.textContent = NOTES[state.noteIndex].replace("#", "♯");
+    stripOct.textContent = state.octave;
     octValue.textContent = `${state.octave} · ${f.toFixed(2)} Hz`;
+    // keep the Manual-mode target field in sync
+    const inst = INSTRUMENTS[state.instrument];
+    tfInst.textContent = inst.count ? `${inst.name} · ${inst.count}-string` : inst.name;
+    tfNote.textContent = `${NOTES[state.noteIndex].replace("#", "♯")}${state.octave} · ${f.toFixed(2)} Hz`;
+    tfIcon.innerHTML = ICONS[inst.icon];
     document.getElementById("octDown").disabled = state.octave <= OCT_MIN;
     document.getElementById("octUp").disabled = state.octave >= OCT_MAX;
     if (!state.listening) {
       metaDisplay.textContent = `target ${f.toFixed(2)} Hz`;
       centsDisplay.innerHTML = "&nbsp;";
+      stripCents.innerHTML = "&nbsp;";
       tunePill.classList.remove("show");
       setPegTune(false);
       setNeedle(null);
@@ -492,6 +597,24 @@
   document.getElementById("octUp").addEventListener("click", () => {
     if (state.octave < OCT_MAX) { state.octave++; syncTarget(); }
   });
+
+  // ---------- A4 reference calibration ----------
+
+  const A4_KEY = "tuner-a4";
+  const a4Value = document.getElementById("a4Value");
+  const a4Pill = document.getElementById("a4Pill");
+
+  function setA4(v) {
+    A4 = Math.max(A4_MIN, Math.min(A4_MAX, Math.round(v)));
+    try { localStorage.setItem(A4_KEY, A4); } catch {}
+    a4Value.textContent = `${A4} Hz`;
+    a4Pill.textContent = `A4 = ${A4} Hz`;
+    document.getElementById("a4Down").disabled = A4 <= A4_MIN;
+    document.getElementById("a4Up").disabled = A4 >= A4_MAX;
+    syncTarget(); // every target + cents reading is derived from A4 — recompute live
+  }
+  document.getElementById("a4Down").addEventListener("click", () => setA4(A4 - 1));
+  document.getElementById("a4Up").addEventListener("click", () => setA4(A4 + 1));
 
   // ---------- reference tone ----------
 
@@ -571,43 +694,143 @@
   function tick() {
     analyser.getFloatTimeDomainData(buf);
     const freq = autoCorrelate(buf, audioCtx.sampleRate);
-    const f = targetFreq();
 
-    if (freq > 0 && freq > f / 4 && freq < f * 4) {
-      const cents = 1200 * Math.log2(freq / f);
+    let cents = null, refFreq = null, autoName = null, autoOct = null;
+
+    if (state.mode === "auto") {
+      // detect the nearest note automatically — no target required
+      if (freq > 0 && freq >= 20 && freq <= 2000) {
+        const midi = Math.round(69 + 12 * Math.log2(freq / A4));
+        refFreq = freqOfMidi(midi);
+        cents = 1200 * Math.log2(freq / refFreq);
+        autoName = NOTES[((midi % 12) + 12) % 12];
+        autoOct = Math.floor(midi / 12) - 1;
+      }
+    } else {
+      const f = targetFreq();
+      if (freq > 0 && freq > f / 4 && freq < f * 4) {
+        cents = 1200 * Math.log2(freq / f);
+        refFreq = f;
+      }
+    }
+
+    if (cents !== null) {
       // light smoothing so the needle doesn't jitter
       state.lastCents = state.lastCents === null
         ? cents
         : state.lastCents * 0.6 + cents * 0.4;
       const shown = state.lastCents;
       setNeedle(shown);
-      metaDisplay.textContent = `${freq.toFixed(1)} Hz · hearing ${describeFreq(freq)} · target ${f.toFixed(2)} Hz`;
+      if (state.mode === "auto") {
+        noteDisplay.firstChild.textContent = autoName.replace("#", "♯");
+        octDisplay.textContent = autoOct;
+        metaDisplay.textContent = `${freq.toFixed(1)} Hz`;
+      } else {
+        metaDisplay.textContent = `${freq.toFixed(1)} Hz · hearing ${describeFreq(freq)} · target ${refFreq.toFixed(2)} Hz`;
+      }
       const rounded = Math.round(shown);
       centsDisplay.textContent = rounded === 0 ? "0 cents" : `${rounded > 0 ? "+" : ""}${rounded} cents`;
       centsDisplay.style.color = colorFor(shown);
+      stripCents.textContent = centsDisplay.textContent.replace(" cents", "¢");
+      stripCents.style.color = centsDisplay.style.color;
       const inTune = Math.abs(shown) <= IN_TUNE_CENTS;
       tunePill.classList.toggle("show", inTune);
+      gaugeCard.classList.toggle("intune", inTune);
+      tunerStrip.classList.toggle("intune", inTune);
       setPegTune(inTune);
     } else {
       state.lastCents = null;
-      metaDisplay.textContent = `listening… · target ${f.toFixed(2)} Hz`;
+      // in auto mode, hold the last detected note between plucks (don't flicker to "–")
+      metaDisplay.textContent = state.mode === "auto"
+        ? "Play a note"
+        : `listening… · target ${targetFreq().toFixed(2)} Hz`;
       centsDisplay.innerHTML = "&nbsp;";
+      stripCents.innerHTML = "&nbsp;";
       tunePill.classList.remove("show");
+      gaugeCard.classList.remove("intune");
+      tunerStrip.classList.remove("intune");
       setPegTune(false);
       setNeedle(null);
     }
     rafId = requestAnimationFrame(tick);
   }
 
+  // ---------- mic permission (simulated iOS) ----------
+  // Persisted so relaunch mimics native: granted → zero-tap listen, denied → Settings route.
+  const PERM_KEY = "tuner-mic-perm";
+  const getPerm = () => { try { return localStorage.getItem(PERM_KEY) || "prompt"; } catch { return "prompt"; } };
+  const setPerm = (v) => { try { localStorage.setItem(PERM_KEY, v); } catch {} };
+
+  const permScrim = document.getElementById("permScrim");
+
+  function showPermissionSheet() {
+    setButtonState("requesting");
+    permScrim.classList.add("show");
+  }
+  function hidePermissionSheet() { permScrim.classList.remove("show"); }
+
+  document.getElementById("permAllow").addEventListener("click", () => {
+    hidePermissionSheet();
+    setPerm("granted");
+    startMic(); // this tap is the user gesture that unlocks audio
+  });
+  document.getElementById("permDeny").addEventListener("click", () => {
+    hidePermissionSheet();
+    setPerm("denied");
+    setButtonState("denied");
+  });
+
+  // dev reset: wipe the stored permission and reload to the first-launch state
+  document.getElementById("devReset").addEventListener("click", () => {
+    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); } catch {}
+    location.reload();
+  });
+
+  // ---------- 4-state button ----------
+
+  function setButtonState(s) {
+    state.btn = s;
+    micBtn.classList.remove("live", "requesting", "denied");
+    micBtn.disabled = false;
+    const dot = micBtn.querySelector(".dot");
+    if (s === "listening") {
+      micBtn.classList.add("live");
+      micLabel.textContent = "Listening — Tap to Stop";
+    } else if (s === "paused") {
+      micLabel.textContent = "Resume";
+    } else if (s === "requesting") {
+      micBtn.classList.add("requesting");
+      micBtn.disabled = true;
+      micLabel.textContent = "Starting…";
+    } else if (s === "denied") {
+      micBtn.classList.add("denied");
+      micLabel.textContent = "Microphone Access Needed";
+    }
+  }
+
+  function resetReadout() {
+    setNeedle(null);
+    gaugeCard.classList.remove("intune");
+    tunerStrip.classList.remove("intune");
+    tunePill.classList.remove("show");
+    if (state.mode === "manual") {
+      syncTarget();
+    } else {
+      centsDisplay.innerHTML = "&nbsp;";
+      metaDisplay.textContent = "Play a note";
+    }
+  }
+
   async function startMic() {
     ensureCtx();
+    setButtonState("requesting");
     try {
       micStream = await navigator.mediaDevices.getUserMedia({
         audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false },
       });
     } catch (err) {
-      micLabel.textContent = "Microphone blocked";
-      setTimeout(() => { if (!state.listening) micLabel.textContent = "Start Tuning"; }, 2200);
+      setPerm("denied");
+      setButtonState("denied");
       return;
     }
     const src = audioCtx.createMediaStreamSource(micStream);
@@ -615,12 +838,11 @@
     analyser.fftSize = BUF_LEN;
     src.connect(analyser);
     state.listening = true;
-    micBtn.classList.add("live");
-    micLabel.textContent = "Listening — Tap to Stop";
+    setButtonState("listening");
     tick();
   }
 
-  function stopMic() {
+  function pauseMic() {
     if (rafId) cancelAnimationFrame(rafId);
     rafId = null;
     if (micStream) micStream.getTracks().forEach((t) => t.stop());
@@ -628,12 +850,25 @@
     analyser = null;
     state.listening = false;
     state.lastCents = null;
-    micBtn.classList.remove("live");
-    micLabel.textContent = "Start Tuning";
-    syncTarget();
+    setButtonState("paused");
+    resetReadout();
   }
 
-  micBtn.addEventListener("click", () => (state.listening ? stopMic() : startMic()));
+  micBtn.addEventListener("click", () => {
+    switch (state.btn) {
+      case "listening": pauseMic(); break;       // pause / mute
+      case "paused":    startMic(); break;        // resume — permission already granted
+      case "denied":    showPermissionSheet(); break; // simulate Settings → re-prompt
+      // "requesting": disabled, no-op
+    }
+  });
+
+  function bootMic() {
+    const perm = getPerm();
+    if (perm === "granted") startMic();          // relaunch: zero-tap listen
+    else if (perm === "denied") setButtonState("denied");
+    else showPermissionSheet();                   // first launch
+  }
 
   // ---------- phone frame scaling + clock ----------
 
@@ -657,6 +892,9 @@
 
   // ---------- init ----------
 
-  buildGauge();
-  selectInstrument(0);
+  const savedA4 = parseInt((() => { try { return localStorage.getItem(A4_KEY); } catch { return null; } })(), 10);
+  setA4(Number.isFinite(savedA4) ? savedA4 : 440); // load calibration before mode reset
+  selectInstrument(0); // primes the manual panel
+  setMode("auto");     // default to hands-free auto-detect
+  bootMic();           // simulate iOS launch: prompt / auto-listen / denied
 })();

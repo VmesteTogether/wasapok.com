@@ -77,7 +77,7 @@
   @keyframes drift3 { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(60px, -80px) scale(1.12); } }
 
   /* everything above the wash */
-  .phone > *:not(.bg) { position: relative; z-index: 1; }
+  .phone > *:not(.bg):not(.overlay) { position: relative; z-index: 1; }
 
   /* liquid glass material */
   .glass {
@@ -153,22 +153,213 @@
     min-height: 0;
   }
 
+  /* segmented control (iOS) */
+  .seg {
+    position: relative;
+    display: flex;
+    padding: 3px;
+    border-radius: 16px;
+    margin: 2px 0 12px;
+    background: rgba(120, 120, 128, 0.14);
+    -webkit-backdrop-filter: blur(20px) saturate(1.6);
+    backdrop-filter: blur(20px) saturate(1.6);
+    border: 1px solid rgba(255, 255, 255, 0.55);
+  }
+  .seg-thumb {
+    position: absolute;
+    top: 3px;
+    left: 3px;
+    width: calc(50% - 3px);
+    height: calc(100% - 6px);
+    border-radius: 13px;
+    background: var(--glass-strong);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 8px rgba(50,55,75,0.14), 0 1px 2px rgba(50,55,75,0.1);
+    transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .seg[data-mode="manual"] .seg-thumb { transform: translateX(100%); }
+  .seg-btn {
+    position: relative;
+    z-index: 1;
+    flex: 1;
+    appearance: none;
+    border: none;
+    background: transparent;
+    font-family: inherit;
+    font-size: 15px;
+    font-weight: 600;
+    color: var(--label);
+    padding: 8px 0;
+    border-radius: 13px;
+    cursor: pointer;
+    transition: color 0.2s;
+  }
+  .seg-btn:not(.selected) { color: var(--label-2); }
+
+  /* auto-mode hint */
+  .auto-hint {
+    text-align: center;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--label-2);
+    margin-top: 22px;
+    transition: opacity 0.25s;
+  }
+
+  /* target field (Manual mode) — tap to open the picker sheet */
+  .target-field {
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    width: 100%;
+    margin-top: 14px;
+    padding: 13px 16px;
+    border-radius: 20px;
+    cursor: pointer;
+    font-family: inherit;
+    text-align: left;
+    color: var(--label);
+    transition: transform 0.1s;
+  }
+
+  /* tuner readout strip (guitar hero) — large note, bar, cents in one row */
+  .strip {
+    display: flex;
+    align-items: center;
+    margin-top: 12px;
+    padding: 14px 18px;
+    border-radius: 20px;
+    transition: background 0.3s, box-shadow 0.3s;
+  }
+  .strip.intune {
+    background: linear-gradient(180deg, rgba(52,199,89,0.18), rgba(52,199,89,0.1));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.9),
+      inset 0 0 0 1px rgba(52,199,89,0.3),
+      0 10px 30px rgba(52,199,89,0.18),
+      0 2px 8px rgba(50,55,75,0.06);
+  }
+  .strip-note {
+    font-size: 40px; font-weight: 700; line-height: 1;
+    letter-spacing: -0.8px; color: var(--label);
+    font-variant-numeric: tabular-nums;
+    min-width: 56px;
+  }
+  .strip-note sup { font-size: 19px; font-weight: 600; color: var(--label-2); vertical-align: 14px; margin-left: 1px; }
+  .strip .hbar { flex: 1; margin: 0 26px; }
+  .strip-cents {
+    font-size: 15px; font-weight: 600;
+    color: var(--label-2);
+    font-variant-numeric: tabular-nums;
+    min-width: 50px; text-align: right;
+    transition: color 0.15s;
+  }
+  .target-field:active { transform: scale(0.985); }
+  .tf-icon { flex: 0 0 auto; color: var(--label-2); display: flex; }
+  .tf-icon svg { display: block; }
+  .tf-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+  .tf-inst {
+    font-size: 17px; font-weight: 600; color: var(--label);
+    letter-spacing: -0.2px;
+  }
+  .tf-note {
+    font-size: 13px; font-weight: 500; color: var(--label-2);
+    font-variant-numeric: tabular-nums;
+  }
+  .tf-chev { flex: 0 0 auto; color: var(--label-3); }
+
+  /* ---------- picker sheet ---------- */
+  .sheet-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 90;
+    display: none;
+    background: rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+  }
+  .sheet-scrim.show { display: block; animation: scrimIn 0.2s ease; }
+  .sheet-scrim.show .sheet { transform: translateY(0); }
+  .sheet {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    display: flex;
+    flex-direction: column;
+    max-height: 80%;
+    padding: 0 20px 26px;
+    background: rgba(244, 245, 249, 0.8);
+    -webkit-backdrop-filter: blur(34px) saturate(1.7);
+    backdrop-filter: blur(34px) saturate(1.7);
+    border-radius: 22px 22px 0 0;
+    border-top: 1px solid rgba(255, 255, 255, 0.7);
+    box-shadow: 0 -12px 44px rgba(50, 55, 75, 0.22);
+    transform: translateY(100%);
+    transition: transform 0.36s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .sheet-grab {
+    flex: 0 0 auto;
+    width: 36px; height: 5px;
+    border-radius: 3px;
+    background: rgba(60, 60, 67, 0.3);
+    margin: 7px auto 2px;
+  }
+  .sheet-head {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 4px 2px 8px;
+  }
+  .sheet-title {
+    font-size: 20px; font-weight: 700;
+    letter-spacing: -0.3px; color: var(--label);
+  }
+  .sheet-done {
+    appearance: none; border: none; background: transparent;
+    font-family: inherit; font-size: 17px; font-weight: 600;
+    color: var(--blue); cursor: pointer; padding: 4px 2px;
+  }
+  .sheet-body {
+    flex: 1 1 auto;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .sheet-body .inst-row { margin-top: 0; }
+  .sheet-body .section-label { margin-top: 14px; }
+
+  /* inline picker (chromatic + manual): picker sections relocated onto the main
+     screen — tightened vertical rhythm so the whole column still clears the mic */
+  .inline-picker { display: none; }
+  .inline-picker .section-label { margin: 8px 6px 4px; }
+  .inline-picker .note-grid { padding: 6px; }
+  .inline-picker .note-btn { padding: 8px 0; }
+  .inline-picker .row { margin-top: 6px; }
+  .inline-picker .octave-card { padding: 6px 8px; }
+  .inline-picker + .target-field { margin-top: 8px; }
+
   /* gauge card */
   .gauge-card {
     border-radius: 28px;
     padding: 16px 12px 4px;
     position: relative;
+    transition: background 0.3s, box-shadow 0.3s;
   }
-
-  .gauge-svg { width: 100%; display: block; }
+  .gauge-card.intune {
+    background: linear-gradient(180deg, rgba(52,199,89,0.16), rgba(52,199,89,0.09));
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.9),
+      inset 0 0 0 1px rgba(52,199,89,0.3),
+      0 10px 30px rgba(52,199,89,0.18),
+      0 2px 8px rgba(50,55,75,0.06);
+  }
 
   .readout {
     text-align: center;
-    margin-top: -86px;
-    padding-bottom: 14px;
+    padding: 14px 8px 12px;
     position: relative;
     z-index: 2;
   }
+  .readout .hbar { margin: 20px 34px 4px; }
   .readout .note {
     font-size: 64px;
     font-weight: 700;
@@ -225,7 +416,7 @@
     text-transform: uppercase;
     letter-spacing: 0.5px;
     color: var(--label-2);
-    margin: 18px 6px 8px;
+    margin: 8px 6px 6px;
   }
 
   .note-grid {
@@ -292,12 +483,48 @@
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
   }
 
-  /* guitar headstock (guitar mode) */
-  .headstock {
-    border-radius: 28px;
-    padding: 4px 8px 0;
+  /* guitar hero: full-bleed headstock backdrop + floating glass HUD capsule */
+  .gauge-card.hero-hs { overflow: hidden; padding: 0; }
+  .gauge-card.hero-hs .readout { display: none; }
+  .hs-hero { position: relative; height: 400px; }
+
+  /* hero card is a pure object — deviation feedback lives in the console below */
+
+  .hbar { position: relative; height: 22px; }
+  .hbar-flat, .hbar-sharp {
+    position: absolute; top: 50%; transform: translateY(-50%);
+    font-size: 14px; font-weight: 600; color: var(--label-3);
+    line-height: 1;
   }
-  .headstock svg { width: 100%; display: block; }
+  .hbar-flat { left: -18px; }
+  .hbar-sharp { right: -18px; }
+  .hbar-track {
+    position: absolute; top: 50%; left: 0; right: 0; height: 8px;
+    transform: translateY(-50%); border-radius: 4px; background: rgba(60,60,67,0.16);
+  }
+  .hbar-zone {
+    position: absolute; top: 50%; left: 50%; width: 10%; height: 8px;
+    transform: translate(-50%,-50%); border-radius: 4px; background: rgba(52,199,89,0.5);
+  }
+  .hbar-center {
+    position: absolute; top: 50%; left: 50%; width: 2px; height: 18px;
+    transform: translate(-50%,-50%); border-radius: 1px; background: rgba(0,0,0,0.5);
+  }
+  .hbar-dot {
+    position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
+    transform: translate(-50%,-50%); border-radius: 50%;
+    background: rgba(60,60,67,0.4);
+    box-shadow: 0 1px 3px rgba(50,55,75,0.32), inset 0 1px 0 rgba(255,255,255,0.5);
+    transition: left 0.12s ease-out, background 0.15s;
+  }
+  /* backdrop headstock: fills the card edge-to-edge, crown to nut,
+     fretboard bleeding off the card's bottom edge */
+  .hs-hero .headstock {
+    position: absolute; inset: 0;
+    overflow: hidden;
+    display: flex; justify-content: center; align-items: flex-start;
+  }
+  .hs-hero .headstock svg { width: 305px; height: auto; display: block; }
   #headstock .peg { cursor: pointer; }
   #headstock .peg .hit { fill: transparent; }
   #headstock .peg .btn {
@@ -309,11 +536,12 @@
   #headstock .peg .shaft { stroke-width: 2.4; stroke-linecap: round; }
   #headstock .peg text {
     font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    fill: rgba(60, 60, 67, 0.6);
+    font-size: 13px;
+    font-weight: 700;
+    fill: rgba(60, 60, 67, 0.72); /* dark labels on the glass plate */
     transition: fill 0.15s;
   }
+  #headstock.wood .peg text { fill: rgba(250, 242, 224, 0.92); } /* 3A wood variant */
   #headstock .peg.sel .btn {
     fill: var(--blue);
     stroke: rgba(255, 255, 255, 0.6);
@@ -339,7 +567,7 @@
   .row {
     display: flex;
     gap: 10px;
-    margin-top: 10px;
+    margin-top: 8px;
   }
 
   .octave-card {
@@ -408,8 +636,8 @@
     gap: 8px;
     overflow-x: auto;
     flex-shrink: 0;
-    margin-top: 8px;
-    padding: 2px 2px 8px;
+    margin-top: 6px;
+    padding: 2px 2px 4px;
     scrollbar-width: none;
     -webkit-overflow-scrolling: touch;
     cursor: grab;
@@ -460,7 +688,8 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    min-height: 64px;
+    min-height: 56px;
+    padding: 12px 0 6px; /* guarantees a gap above the capsule even when the column is full */
   }
   .mic-btn {
     appearance: none;
@@ -497,6 +726,112 @@
   }
   .mic-btn.live .dot { display: block; animation: pulse 1.2s ease-in-out infinite; }
   @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
+
+  /* requesting — passive while the OS prompt is up */
+  .mic-btn.requesting {
+    background: var(--glass-strong);
+    border: 1px solid var(--glass-edge);
+    color: var(--label-2);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 16px rgba(50,55,75,0.08);
+    opacity: 0.75;
+  }
+  .mic-btn:disabled { cursor: default; }
+  /* denied — routes to Settings, not a re-request */
+  .mic-btn.denied {
+    background: var(--glass-strong);
+    border: 1px solid rgba(255, 149, 0, 0.4);
+    color: var(--orange);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 10px 26px rgba(255,149,0,0.14);
+  }
+
+  /* ---------- mock iOS permission alert ---------- */
+  .perm-scrim {
+    position: absolute;
+    inset: 0;
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    background: rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(1px);
+    backdrop-filter: blur(1px);
+  }
+  .perm-scrim.show { display: flex; animation: scrimIn 0.2s ease; }
+  @keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
+  .perm-alert {
+    width: 270px;
+    background: rgba(248, 248, 248, 0.82);
+    -webkit-backdrop-filter: blur(30px) saturate(1.6);
+    backdrop-filter: blur(30px) saturate(1.6);
+    border-radius: 14px;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    animation: alertIn 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  @keyframes alertIn { from { transform: scale(1.12); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .perm-body { padding: 19px 16px 15px; text-align: center; }
+  .perm-title {
+    font-size: 17px;
+    font-weight: 600;
+    letter-spacing: -0.2px;
+    color: #000;
+    line-height: 1.25;
+  }
+  .perm-msg {
+    margin-top: 5px;
+    font-size: 13px;
+    font-weight: 400;
+    color: rgba(0,0,0,0.62);
+    line-height: 1.3;
+  }
+  .perm-actions {
+    display: flex;
+    border-top: 0.5px solid rgba(60,60,67,0.29);
+  }
+  .perm-btn {
+    flex: 1;
+    appearance: none;
+    background: transparent;
+    border: none;
+    font-family: inherit;
+    font-size: 17px;
+    font-weight: 400;
+    color: var(--blue);
+    padding: 11px 4px;
+    cursor: pointer;
+  }
+  .perm-btn.allow { font-weight: 600; border-left: 0.5px solid rgba(60,60,67,0.29); }
+  .perm-btn:active { background: rgba(0,0,0,0.06); }
+
+  /* dev-only reset button — liquid-glass pebble beside the phone construction */
+  .dev-reset {
+    position: fixed;
+    top: 50%;
+    right: 30px;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--label-2);
+    background: rgba(255, 255, 255, 0.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.95),
+      inset 0 -1px 0 rgba(255,255,255,0.25),
+      0 6px 18px rgba(50,55,75,0.12),
+      0 2px 6px rgba(50,55,75,0.08);
+    cursor: pointer;
+    padding: 0;
+    transition: transform 0.15s cubic-bezier(0.32,0.72,0,1), color 0.15s, box-shadow 0.15s;
+  }
+  .dev-reset:hover { color: var(--label); box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 8px 22px rgba(50,55,75,0.16); }
+  .dev-reset:active { transform: translateY(-50%) scale(0.9); }
+  .dev-reset svg { display: block; }
 
   /* home indicator */
   .home-indicator {
@@ -542,47 +877,65 @@
 
     <div class="navbar">
       <h1>Tuner</h1>
-      <span class="a4 glass">A4 = 440 Hz</span>
+      <span class="a4 glass" id="a4Pill">A4 = 440 Hz</span>
     </div>
 
-    <div class="content">
-      <div class="gauge-card glass">
-        <svg class="gauge-svg" id="gaugeSvg" viewBox="0 0 340 200"></svg>
-        <div class="readout">
+    <div class="content" id="content">
+      <div class="seg glass" id="modeSeg">
+        <span class="seg-thumb" id="segThumb"></span>
+        <button class="seg-btn selected" data-mode="auto">Auto</button>
+        <button class="seg-btn" data-mode="manual">Manual</button>
+      </div>
+
+      <div class="gauge-card glass" id="gaugeCard">
+        <div class="readout" id="readout">
           <div class="note" id="noteDisplay">A<sup id="octDisplay">4</sup></div>
-          <div class="meta" id="metaDisplay">target 440.00 Hz</div>
+          <div class="hbar">
+            <span class="hbar-flat">&#9837;</span>
+            <div class="hbar-track"></div>
+            <div class="hbar-zone"></div>
+            <div class="hbar-center"></div>
+            <div class="hbar-dot"></div>
+            <span class="hbar-sharp">&#9839;</span>
+          </div>
           <div class="cents-big" id="centsDisplay">&nbsp;</div>
+          <div class="meta" id="metaDisplay">Play a note</div>
           <div class="tune-pill" id="tunePill">IN TUNE</div>
         </div>
-      </div>
-
-      <div class="section-label" id="pickerLabel">Target Note</div>
-      <div class="note-grid glass" id="noteGrid"></div>
-      <div class="string-row glass" id="stringRow" style="display: none;"></div>
-      <div class="headstock glass" id="headstock" style="display: none;"></div>
-
-      <div class="row">
-        <div class="octave-card glass">
-          <div class="oct-label">
-            <span class="t">Octave</span>
-            <span class="v" id="octValue">4 · 440.00 Hz</span>
-          </div>
-          <div class="stepper">
-            <button id="octDown" aria-label="Octave down">&minus;</button>
-            <div class="div"></div>
-            <button id="octUp" aria-label="Octave up">+</button>
-          </div>
+        <div class="hs-hero" id="hsHero" style="display: none;">
+          <div class="headstock" id="headstock"></div>
         </div>
-        <button class="tone-btn glass" id="toneBtn" aria-label="Play reference tone">
-          <svg width="26" height="22" viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M12 3 L7 7.5 H3 V14.5 H7 L12 19 Z" fill="currentColor" stroke="none"/>
-            <path d="M16 7.5 A5 5 0 0 1 16 14.5"/>
-            <path d="M19 4.5 A9.2 9.2 0 0 1 19 17.5"/>
-          </svg>
-        </button>
       </div>
 
-      <div class="inst-row" id="instRow"></div>
+      <div class="strip glass" id="tunerStrip" style="display: none;">
+        <span class="strip-note" id="stripNote">E<sup id="stripOct">2</sup></span>
+        <div class="hbar">
+          <span class="hbar-flat">&#9837;</span>
+          <div class="hbar-track"></div>
+          <div class="hbar-zone"></div>
+          <div class="hbar-center"></div>
+          <div class="hbar-dot"></div>
+          <span class="hbar-sharp">&#9839;</span>
+        </div>
+        <span class="strip-cents" id="stripCents">&nbsp;</span>
+      </div>
+
+      <!-- chromatic + manual: target note, octave & reference slide up under the
+           tuning bar; the instrument dropdown below stays the shared tap field -->
+      <div class="inline-picker" id="inlinePicker"></div>
+
+      <button class="target-field glass" id="targetField" style="display: none;">
+        <span class="tf-icon" id="tfIcon"></span>
+        <span class="tf-text">
+          <span class="tf-inst" id="tfInst">Chromatic</span>
+          <span class="tf-note" id="tfNote">A4 · 440.00 Hz</span>
+        </span>
+        <svg class="tf-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4 6 L8 10 L12 6"/>
+        </svg>
+      </button>
+
+      <div class="auto-hint" id="autoHint">Listening for any note — just play</div>
 
       <div class="mic-area">
         <button class="mic-btn" id="micBtn">
@@ -593,8 +946,80 @@
     </div>
 
     <div class="home-indicator"></div>
+
+    <!-- target picker sheet (Manual mode) -->
+    <div class="sheet-scrim overlay" id="sheetScrim">
+      <div class="sheet" id="pickerSheet">
+        <div class="sheet-grab"></div>
+        <div class="sheet-head">
+          <span class="sheet-title">Tune To</span>
+          <button class="sheet-done" id="sheetDone">Done</button>
+        </div>
+        <div class="sheet-body">
+          <div class="inst-row" id="instRow"></div>
+          <div class="section-label" id="pickerLabel">Target Note</div>
+          <div class="note-grid glass" id="noteGrid"></div>
+          <div class="string-row glass" id="stringRow" style="display: none;"></div>
+          <div class="row">
+            <div class="octave-card glass">
+              <div class="oct-label">
+                <span class="t">Octave</span>
+                <span class="v" id="octValue">4 · 440.00 Hz</span>
+              </div>
+              <div class="stepper">
+                <button id="octDown" aria-label="Octave down">&minus;</button>
+                <div class="div"></div>
+                <button id="octUp" aria-label="Octave up">+</button>
+              </div>
+            </div>
+            <button class="tone-btn glass" id="toneBtn" aria-label="Play reference tone">
+              <svg width="26" height="22" viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 L7 7.5 H3 V14.5 H7 L12 19 Z" fill="currentColor" stroke="none"/>
+                <path d="M16 7.5 A5 5 0 0 1 16 14.5"/>
+                <path d="M19 4.5 A9.2 9.2 0 0 1 19 17.5"/>
+              </svg>
+            </button>
+          </div>
+          <div class="row">
+            <div class="octave-card glass">
+              <div class="oct-label">
+                <span class="t">Reference (A4)</span>
+                <span class="v" id="a4Value">440 Hz</span>
+              </div>
+              <div class="stepper">
+                <button id="a4Down" aria-label="Reference down">&minus;</button>
+                <div class="div"></div>
+                <button id="a4Up" aria-label="Reference up">+</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- mock iOS microphone permission alert -->
+    <div class="perm-scrim overlay" id="permScrim">
+      <div class="perm-alert">
+        <div class="perm-body">
+          <div class="perm-title">&ldquo;Tuner&rdquo; Would Like to Access the Microphone</div>
+          <div class="perm-msg">Used to detect the pitch of the notes you play.</div>
+        </div>
+        <div class="perm-actions">
+          <button class="perm-btn" id="permDeny">Don&rsquo;t Allow</button>
+          <button class="perm-btn allow" id="permAllow">Allow</button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>
+
+<!-- dev-only: reset the simulation to its first-load state -->
+<button class="dev-reset" id="devReset" aria-label="Reset simulation" title="Reset to first launch">
+  <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M14.5 4.5 A6 6 0 1 0 15.4 10.8"/>
+    <path d="M14.7 2.6 L14.9 5 L12.5 5.1"/>
+  </svg>
+</button>
 
 <script src="tuner.js"></script>
 </body>
