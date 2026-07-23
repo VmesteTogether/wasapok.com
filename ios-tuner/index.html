@@ -5,11 +5,24 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Tuner</title>
 <style>
+  /* self-hosted Inter (latin-subset variable, weights 100-900) — an
+     open-source San Francisco stand-in so non-Apple devices render the UI in
+     an SF-like face instead of falling back to Segoe UI / Roboto. Apple
+     devices still get real SF via -apple-system, which sits ahead of it in
+     the stack, so this only fills in where SF Pro isn't installed. */
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("fonts/inter-var.woff2") format("woff2");
+  }
+
   :root {
     --label: rgba(0, 0, 0, 0.88);
     --label-2: rgba(60, 60, 67, 0.6);
     --label-3: rgba(60, 60, 67, 0.3);
-    --blue: #0a84ff;
+    --blue: #007aff;
     --green: #34c759;
     --red: #ff3b30;
     --orange: #ff9500;
@@ -23,7 +36,10 @@
   html, body {
     height: 100%;
     background: linear-gradient(160deg, #eef1f6 0%, #e8ecf3 50%, #eceef4 100%);
-    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
     overflow: hidden;
   }
 
@@ -59,19 +75,22 @@
     inset: -60px;
     z-index: 0;
     pointer-events: none;
-    filter: blur(42px) saturate(1.25);
+    filter: blur(42px) saturate(1.0);
   }
   .bg .blob {
     position: absolute;
     width: 360px;
     height: 360px;
     border-radius: 50%;
-    opacity: 0.8;
+    opacity: 0.55;
   }
-  .bg .b1 { background: radial-gradient(circle, #aee1ff 0%, transparent 70%); top: 2%;  left: -18%; animation: drift1 26s ease-in-out infinite alternate; }
-  .bg .b2 { background: radial-gradient(circle, #c9f5dc 0%, transparent 70%); top: 30%; right: -22%; animation: drift2 31s ease-in-out infinite alternate; }
-  .bg .b3 { background: radial-gradient(circle, #e2d9ff 0%, transparent 70%); bottom: 8%; left: -8%; animation: drift3 37s ease-in-out infinite alternate; }
-  .bg .b4 { background: radial-gradient(circle, #ffe6d4 0%, transparent 70%); bottom: -14%; right: 4%; animation: drift1 29s ease-in-out infinite alternate-reverse; }
+  /* restrained cool wash (was a saturated blue/mint/lavender/peach rainbow):
+     desaturated system tints — three cool pools + one faint warm for depth —
+     so the glass reads as refined Apple material, not a candy gradient */
+  .bg .b1 { background: radial-gradient(circle, #cadcf0 0%, transparent 70%); top: 2%;  left: -18%; animation: drift1 26s ease-in-out infinite alternate; }
+  .bg .b2 { background: radial-gradient(circle, #d4e0ec 0%, transparent 70%); top: 30%; right: -22%; animation: drift2 31s ease-in-out infinite alternate; }
+  .bg .b3 { background: radial-gradient(circle, #dbdcea 0%, transparent 70%); bottom: 8%; left: -8%; animation: drift3 37s ease-in-out infinite alternate; }
+  .bg .b4 { background: radial-gradient(circle, #ebe3db 0%, transparent 70%); bottom: -14%; right: 4%; animation: drift1 29s ease-in-out infinite alternate-reverse; }
   @keyframes drift1 { from { transform: translate(0, 0) scale(1); }    to { transform: translate(70px, 90px) scale(1.15); } }
   @keyframes drift2 { from { transform: translate(0, 0) scale(1.1); }  to { transform: translate(-80px, -60px) scale(0.95); } }
   @keyframes drift3 { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(60px, -80px) scale(1.12); } }
@@ -431,9 +450,9 @@
   .note-btn:active { transform: scale(0.93); }
   .note-btn.sharp { color: var(--label-2); }
   .note-btn.selected {
-    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    background: linear-gradient(180deg, rgba(0, 122, 255, 0.92), rgba(0, 113, 235, 0.92));
     color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(0, 122, 255, 0.35);
   }
 
   /* string pills (instrument mode) */
@@ -466,9 +485,9 @@
   }
   .string-btn:active { transform: scale(0.93); }
   .string-btn.selected {
-    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    background: linear-gradient(180deg, rgba(0, 122, 255, 0.92), rgba(0, 113, 235, 0.92));
     color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(0, 122, 255, 0.35);
   }
 
   /* guitar hero: full-bleed headstock backdrop + floating glass HUD capsule */
@@ -569,7 +588,7 @@
   #headstock .peg.sel .btn {
     fill: var(--blue);
     stroke: rgba(255, 255, 255, 0.6);
-    filter: drop-shadow(0 0 6px rgba(10, 132, 255, 0.65));
+    filter: drop-shadow(0 0 6px rgba(0, 122, 255, 0.65));
   }
   #headstock .peg.sel text { fill: var(--blue); }
   #headstock .peg.sel.intune .btn {
@@ -580,7 +599,7 @@
   #headstock .string { stroke: #c3c8d1; fill: none; transition: stroke 0.15s; }
   #headstock .string.sel {
     stroke: var(--blue);
-    filter: drop-shadow(0 0 2.5px rgba(10, 132, 255, 0.8));
+    filter: drop-shadow(0 0 2.5px rgba(0, 122, 255, 0.8));
   }
   #headstock .string.sel.intune {
     stroke: var(--green);
@@ -607,10 +626,10 @@
   }
   .tone-btn:active { transform: scale(0.92); }
   .tone-btn.playing {
-    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    background: linear-gradient(180deg, rgba(0, 122, 255, 0.92), rgba(0, 113, 235, 0.92));
     border-color: rgba(255, 255, 255, 0.5);
     color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(0, 122, 255, 0.35);
   }
 
   /* ---------- instrument carousel (Camera-style mode picker) ---------- */
@@ -660,14 +679,19 @@
     transform: translateY(-50%);
     display: flex;
     align-items: center;
+    transition: left 0.32s cubic-bezier(0.32, 0.72, 0, 1),
+                right 0.32s cubic-bezier(0.32, 0.72, 0, 1);
   }
   /* rest just inside the old edge positions (16px -> 28px): a slight inward
-     nudge into the thumb arc, not a cluster on the mic. Capsules stay
-     edge-anchored so the accordion still opens INWARD toward the mic; 28px is
-     about as far in as they go before the open 130px capsule reaches the mic
-     (leaves ~5px clearance) */
+     nudge into the thumb arc, not a cluster on the mic */
   .wing.left { left: 28px; }
   .wing.right { right: 28px; }
+  /* opening the accordion (66px -> 130px) would otherwise drive its mic-facing
+     edge to within ~5px of the mic. So as a capsule expands, ease the whole
+     wing 12px back toward the screen edge too — the widget then grows in BOTH
+     directions and holds ~17px clearance off the mic while still blooming open */
+  .wing.left:has(.mini-cap.open) { left: 16px; }
+  .wing.right:has(.mini-cap.open) { right: 16px; }
   .mic-btn {
     appearance: none;
     position: absolute;
@@ -678,17 +702,17 @@
     border-radius: 50%;
     border: 1px solid rgba(255, 255, 255, 0.45);
     font-family: inherit;
-    background: linear-gradient(180deg, rgba(10, 132, 255, 0.95), rgba(0, 113, 235, 0.98));
+    background: linear-gradient(180deg, rgba(0, 122, 255, 0.95), rgba(0, 113, 235, 0.98));
     color: #fff;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(0,40,90,0.25), 0 10px 26px rgba(10, 132, 255, 0.42);
+    box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(0,40,90,0.25), 0 10px 26px rgba(0, 122, 255, 0.42);
     transition: background 0.3s, transform 0.12s cubic-bezier(0.32,0.72,0,1), box-shadow 0.3s, color 0.3s, filter 0.15s;
   }
   .mic-btn:active { transform: translateX(-50%) scale(0.93); filter: brightness(0.96); }
-  .mic-btn { --mic-fill: #0a84ff; } /* casing colour for the mic-slash cutout */
+  .mic-btn { --mic-fill: #007aff; } /* casing colour for the mic-slash cutout */
   .mic-btn .mic-glyph { width: 32px; height: 32px; display: block; }
   /* mic is OFF unless live: show a slash (blue idle / glass states). The cutout
      line is painted in the circle's own colour so the slash reads cleanly where
