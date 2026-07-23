@@ -268,16 +268,22 @@
 
   function peekCarousel() {
     if (peekDone) return;
-    peekDone = true;
-    try { localStorage.setItem(PEEK_KEY, "1"); } catch {}
-    const center = carCenters[state.instrument];
-    // 26px < half the tightest label spacing, so the selection never re-snaps
-    const target = Math.min(carCenters[carCenters.length - 1], center + 26);
-    if (target === center) return; // selected sits at the far end — no room
-    setTimeout(() => {
+    const run = () => {
+      if (peekDone) return;
+      // don't burn the once-ever hint behind the launch permission dialog —
+      // wait it out so a first-time user actually sees the row move (checked at
+      // fire time, since boot calls setMode before bootMic raises the sheet)
+      if (permScrim.classList.contains("show")) { setTimeout(run, 500); return; }
+      peekDone = true;
+      try { localStorage.setItem(PEEK_KEY, "1"); } catch {}
+      const center = carCenters[state.instrument];
+      // 26px < half the tightest label spacing, so the selection never re-snaps
+      const target = Math.min(carCenters[carCenters.length - 1], center + 26);
+      if (target === center) return; // selected sits at the far end — no room
       layoutCarousel(target);                        // ease out to the peek
       setTimeout(() => layoutCarousel(center), 380); // settle back to center
-    }, 440);
+    };
+    setTimeout(run, 440);
   }
 
   let stringButtons = [];
@@ -1145,7 +1151,7 @@
 
   const savedA4 = parseInt((() => { try { return localStorage.getItem(A4_KEY); } catch { return null; } })(), 10);
   setA4(Number.isFinite(savedA4) ? savedA4 : 440); // load calibration before mode reset
-  selectInstrument(0); // primes the manual panel
-  setMode("auto");     // default to hands-free auto-detect
+  selectInstrument(1); // Guitar 6 — the default tuner (App Store tuners skew guitar)
+  setMode("manual");   // launch straight onto the 6-string headstock, not auto
   bootMic();           // simulate iOS launch: prompt / auto-listen / denied
 })();
