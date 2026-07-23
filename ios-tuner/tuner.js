@@ -116,6 +116,8 @@
   const stringWheel = document.getElementById("stringWheel");
   const stripCents = document.getElementById("stripCents");
   const hbarDots = document.querySelectorAll(".hbar-dot"); // one bar per view, driven together
+  const hbarEls = document.querySelectorAll(".hbar");
+  const hbarRings = document.querySelectorAll(".hbar-ring");
 
   // ---------- mode (auto detect / manual target) ----------
 
@@ -672,16 +674,47 @@
     gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the headstock
   }
 
-  // horizontal linear tuner — dot slides flat(−50) ↔ sharp(+50), centered = in tune
+  // bubble-level tuner — a liquid-glass bubble slides flat(−50) ↔ sharp(+50);
+  // inside the in-tune band a magnetic detent pulls it home, it squash-stretches
+  // with its own speed, and locking in pings a ring + green bloom
+  let hbarPrevLeft = 50; // last bubble position (% units) for velocity → squash
+  let hbarLocked = false; // hysteretic lock state, so the ping fires once
+
+  function firePing() {
+    for (const r of hbarRings) {
+      r.classList.remove("ping");
+      void r.offsetWidth; // reflow so the keyframe restarts from 0
+      r.classList.add("ping");
+    }
+  }
+
   function setHBar(cents) {
     const idle = cents === null;
-    const c = idle ? 0 : Math.max(-50, Math.min(50, cents));
-    const left = idle ? "50%" : `${(50 + (c / 50) * 44).toFixed(1)}%`;
-    const bg = idle ? "rgba(60,60,67,0.4)" : colorFor(cents);
+    // hysteresis: latch in at ±IN_TUNE, release a few cents wider — no flicker
+    const locked = !idle &&
+      Math.abs(cents) <= IN_TUNE_CENTS + (hbarLocked ? 3 : 0);
+    if (locked && !hbarLocked) firePing();
+    hbarLocked = locked;
+
+    const clamped = idle ? 0 : Math.max(-50, Math.min(50, cents));
+    // magnetic detent: collapse the bubble toward exact center once locked
+    const c = locked ? clamped * 0.14 : clamped;
+    const left = idle ? 50 : 50 + (c / 50) * 44;
+    const bg = idle ? "rgba(60,60,67,0.42)" : colorFor(cents);
+
+    // squash-stretch from frame-to-frame speed, area-preserving for a liquid feel
+    const vel = Math.abs(left - hbarPrevLeft);
+    hbarPrevLeft = left;
+    const sx = idle ? 1 : Math.min(1.5, 1 + vel * 0.05);
+    const sy = 1 / Math.sqrt(sx);
+
     for (const dot of hbarDots) {
-      dot.style.left = left;
-      dot.style.background = bg;
+      dot.style.left = left.toFixed(1) + "%";
+      dot.style.setProperty("--dot-color", bg);
+      dot.style.transform =
+        `translate(-50%,-50%) scaleX(${sx.toFixed(3)}) scaleY(${sy.toFixed(3)})`;
     }
+    for (const h of hbarEls) h.classList.toggle("locked", locked);
   }
 
   function syncTarget() {

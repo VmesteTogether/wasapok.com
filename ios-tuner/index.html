@@ -506,7 +506,7 @@
 
   /* hero card is a pure object — deviation feedback lives in the console below */
 
-  .hbar { position: relative; height: 22px; }
+  .hbar { position: relative; height: 24px; }
   .hbar-flat, .hbar-sharp {
     position: absolute; top: 50%; transform: translateY(-50%);
     font-size: 14px; font-weight: 600; color: var(--label-3);
@@ -518,20 +518,56 @@
     position: absolute; top: 50%; left: 0; right: 0; height: 8px;
     transform: translateY(-50%); border-radius: 4px; background: rgba(60,60,67,0.16);
   }
+  /* the center target 'well' the bubble falls into — breathes softly to invite,
+     goes solid green when locked */
   .hbar-zone {
-    position: absolute; top: 50%; left: 50%; width: 10%; height: 8px;
-    transform: translate(-50%,-50%); border-radius: 4px; background: rgba(52,199,89,0.5);
+    position: absolute; top: 50%; left: 50%; width: 11%; height: 8px;
+    transform: translate(-50%,-50%); border-radius: 4px; background: var(--green);
+    opacity: 0.45;
+    animation: hbarBreathe 2.6s ease-in-out infinite;
   }
+  @keyframes hbarBreathe { 0%,100% { opacity: 0.32; } 50% { opacity: 0.6; } }
+  .hbar.locked .hbar-zone { animation: none; opacity: 0.9; }
   .hbar-center {
     position: absolute; top: 50%; left: 50%; width: 2px; height: 18px;
     transform: translate(-50%,-50%); border-radius: 1px; background: rgba(0,0,0,0.5);
+    z-index: 1;
   }
+  /* soft green bloom that radiates from center on lock */
+  .hbar-bloom {
+    position: absolute; top: 50%; left: 50%; width: 96px; height: 44px;
+    transform: translate(-50%,-50%);
+    background: radial-gradient(ellipse at center, rgba(52,199,89,0.55), transparent 70%);
+    filter: blur(6px);
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.3s ease;
+  }
+  .hbar.locked .hbar-bloom { opacity: 1; }
+  /* one-shot ring that pings outward the instant the note locks in */
+  .hbar-ring {
+    position: absolute; top: 50%; left: 50%; width: 22px; height: 22px;
+    border-radius: 50%; border: 2px solid var(--green);
+    transform: translate(-50%,-50%) scale(0.5);
+    opacity: 0; pointer-events: none; z-index: 2;
+  }
+  .hbar-ring.ping { animation: hbarPing 0.6s ease-out; }
+  @keyframes hbarPing {
+    0%   { opacity: 0.9; transform: translate(-50%,-50%) scale(0.5); }
+    100% { opacity: 0;   transform: translate(-50%,-50%) scale(2.7); }
+  }
+  /* liquid-glass bubble: specular sheen, mass, squash-stretch driven in JS */
   .hbar-dot {
-    position: absolute; top: 50%; left: 50%; width: 20px; height: 20px;
-    transform: translate(-50%,-50%); border-radius: 50%;
-    background: rgba(60,60,67,0.4);
-    box-shadow: 0 1px 3px rgba(50,55,75,0.32), inset 0 1px 0 rgba(255,255,255,0.5);
-    transition: left 0.12s ease-out, background 0.15s;
+    position: absolute; top: 50%; left: 50%; width: 22px; height: 22px;
+    border-radius: 50%; z-index: 3;
+    background:
+      radial-gradient(circle at 36% 28%, rgba(255,255,255,0.95), rgba(255,255,255,0.15) 40%, transparent 62%),
+      var(--dot-color, rgba(60,60,67,0.42));
+    box-shadow:
+      0 2px 6px rgba(50,55,75,0.38),
+      inset 0 1.5px 1.5px rgba(255,255,255,0.75),
+      inset 0 -2px 3px rgba(0,0,0,0.14);
+    transform: translate(-50%,-50%);
+    transition: left 0.09s ease-out, transform 0.22s cubic-bezier(0.22, 1.2, 0.4, 1);
   }
   /* backdrop headstock: fills the card edge-to-edge, crown to nut,
      fretboard bleeding off the card's bottom edge */
@@ -908,9 +944,11 @@
           <div class="note" id="noteDisplay">A<sup id="octDisplay">4</sup></div>
           <div class="hbar">
             <span class="hbar-flat">&#9837;</span>
+            <div class="hbar-bloom"></div>
             <div class="hbar-track"></div>
             <div class="hbar-zone"></div>
             <div class="hbar-center"></div>
+            <div class="hbar-ring"></div>
             <div class="hbar-dot"></div>
             <span class="hbar-sharp">&#9839;</span>
           </div>
@@ -927,9 +965,11 @@
         <div class="wheel" id="stringWheel"></div>
         <div class="hbar">
           <span class="hbar-flat">&#9837;</span>
+          <div class="hbar-bloom"></div>
           <div class="hbar-track"></div>
           <div class="hbar-zone"></div>
           <div class="hbar-center"></div>
+          <div class="hbar-ring"></div>
           <div class="hbar-dot"></div>
           <span class="hbar-sharp">&#9839;</span>
         </div>
