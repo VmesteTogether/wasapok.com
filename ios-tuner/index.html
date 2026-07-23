@@ -193,8 +193,14 @@
     width: calc(50% - 3px);
     height: calc(100% - 6px);
     border-radius: 13px;
-    background: var(--glass-strong);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 3px 8px rgba(50,55,75,0.14), 0 1px 2px rgba(50,55,75,0.1);
+    /* Liquid Glass lens: translucent so the track shows through, blurred +
+       vibrancy/brightness lifted, with a specular top rim — a glass lozenge
+       that slides, not an opaque white plastic pill */
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.3));
+    -webkit-backdrop-filter: blur(14px) saturate(1.8) brightness(1.08);
+    backdrop-filter: blur(14px) saturate(1.8) brightness(1.08);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.95), 0 2px 6px rgba(50,55,75,0.14), 0 1px 2px rgba(50,55,75,0.08);
     transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
   }
   .seg[data-mode="manual"] .seg-thumb { transform: translateX(100%); }
@@ -302,13 +308,18 @@
     border-radius: 15px;
     overflow: hidden;
     cursor: pointer;
-    background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.58));
-    border: 1px solid rgba(255,255,255,0.9);
+    /* Liquid Glass: translucent fill so the drifting wash refracts through it,
+       blurred + saturation/brightness lifted, bright specular top rim and a
+       faint bottom edge-lens — glass, not the old opaque white plastic pill */
+    background: linear-gradient(180deg, rgba(255,255,255,0.48), rgba(255,255,255,0.26));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    border: 1px solid rgba(255,255,255,0.65);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,1),
-      inset 0 -1px 1px rgba(50,55,75,0.05),
-      0 5px 14px rgba(50,55,75,0.14),
-      0 1px 3px rgba(50,55,75,0.08);
+      inset 0 1px 0.5px rgba(255,255,255,0.9),
+      inset 0 -1px 1px rgba(255,255,255,0.35),
+      0 4px 14px rgba(50,55,75,0.10),
+      0 1px 3px rgba(50,55,75,0.06);
     transition: width 0.32s cubic-bezier(0.32, 0.72, 0, 1);
   }
   .mini-cap.open { width: 130px; }
@@ -616,20 +627,25 @@
     justify-content: center;
     color: var(--blue);
     cursor: pointer;
-    background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.58));
-    border: 1px solid rgba(255,255,255,0.9);
+    /* Liquid Glass — same material as the mini-cap wings so the console reads
+       as one glass system */
+    background: linear-gradient(180deg, rgba(255,255,255,0.48), rgba(255,255,255,0.26));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    border: 1px solid rgba(255,255,255,0.65);
     box-shadow:
-      inset 0 1px 0 rgba(255,255,255,1),
-      0 5px 14px rgba(50,55,75,0.14),
-      0 1px 3px rgba(50,55,75,0.08);
+      inset 0 1px 0.5px rgba(255,255,255,0.9),
+      inset 0 -1px 1px rgba(255,255,255,0.35),
+      0 4px 14px rgba(50,55,75,0.10),
+      0 1px 3px rgba(50,55,75,0.06);
     transition: transform 0.12s cubic-bezier(0.32,0.72,0,1), background 0.2s, color 0.2s, box-shadow 0.2s;
   }
   .tone-btn:active { transform: scale(0.92); }
   .tone-btn.playing {
-    background: linear-gradient(180deg, rgba(0, 122, 255, 0.92), rgba(0, 113, 235, 0.92));
-    border-color: rgba(255, 255, 255, 0.5);
+    background: #007aff;
+    border-color: transparent;
     color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(0, 122, 255, 0.35);
+    box-shadow: 0 4px 12px rgba(0, 60, 140, 0.22);
   }
 
   /* ---------- instrument carousel (Camera-style mode picker) ---------- */
@@ -700,15 +716,17 @@
     transform: translateX(-50%);
     width: 64px; height: 64px;
     border-radius: 50%;
-    border: 1px solid rgba(255, 255, 255, 0.45);
+    border: none;
     font-family: inherit;
-    background: linear-gradient(180deg, rgba(0, 122, 255, 0.95), rgba(0, 113, 235, 0.98));
+    background: #007aff;
     color: #fff;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(0,40,90,0.25), 0 10px 26px rgba(0, 122, 255, 0.42);
+    /* flat + matte: solid systemBlue, no specular top highlight and no inner
+       bead shadow — just one soft, low-glow drop shadow for a gentle lift */
+    box-shadow: 0 4px 12px rgba(0, 60, 140, 0.22);
     transition: background 0.3s, transform 0.12s cubic-bezier(0.32,0.72,0,1), box-shadow 0.3s, color 0.3s, filter 0.15s;
   }
   .mic-btn:active { transform: translateX(-50%) scale(0.93); filter: brightness(0.96); }
@@ -722,14 +740,16 @@
   .mic-btn.live .mic-slash, .mic-btn.live .mic-slash-cut { display: none; }
   /* live — warms to orange (same genre as 'access needed') + sonar pulse ring */
   .mic-btn.live {
-    background: linear-gradient(180deg, rgba(255,159,10,0.98), rgba(255,133,0,1));
-    border: 1px solid rgba(255,255,255,0.5);
+    background: #ff9500;
+    border: none;
     color: #fff;
     animation: micPulse 1.8s ease-in-out infinite;
   }
+  /* matte live bead: flat orange, no gloss — keep only a soft base shadow and
+     the expanding sonar ring that signals it's actively listening */
   @keyframes micPulse {
-    0%, 100% { box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(150,70,0,0.28), 0 10px 26px rgba(255,149,0,0.42), 0 0 0 0 rgba(255,149,0,0.45); }
-    50%      { box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(150,70,0,0.28), 0 10px 26px rgba(255,149,0,0.42), 0 0 0 13px rgba(255,149,0,0); }
+    0%, 100% { box-shadow: 0 4px 12px rgba(150,70,0,0.24), 0 0 0 0 rgba(255,149,0,0.4); }
+    50%      { box-shadow: 0 4px 12px rgba(150,70,0,0.24), 0 0 0 13px rgba(255,149,0,0); }
   }
   /* requesting — passive while the OS prompt is up */
   .mic-btn.requesting {
