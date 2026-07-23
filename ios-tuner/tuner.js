@@ -138,6 +138,7 @@
       // has explicitly chosen an instrument (chip order stays untouched)
       if (!state.instrumentPicked && state.instrument === 0) selectInstrument(1);
       syncTarget();
+      peekCarousel(); // one-time swipe hint, first Manual entry only
     }
   }
   modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
@@ -196,7 +197,10 @@
       const dx = carCenters[i] - x;
       el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
       const a = Math.abs(dx);
-      el.style.opacity = (a >= 165 ? 0 : (1 - a / 165) * (i === sel ? 1 : 0.85)).toFixed(3);
+      // keep neighbours clearly legible (the container edge-mask fades the
+      // outer labels), so the row reads as a swipeable list of instruments
+      // rather than a lone centered label
+      el.style.opacity = (i === sel ? 1 : Math.max(0.28, 0.82 - a / 300)).toFixed(3);
       el.classList.toggle("sel", i === sel);
     });
   }
@@ -251,6 +255,27 @@
     const dir = Math.sign(e.deltaY + e.deltaX);
     if (dir) carouselPick(Math.max(0, Math.min(INSTRUMENTS.length - 1, state.instrument + dir)));
   }, { passive: false });
+
+  // one-time "swipe me" hint: the first time the console appears (entering
+  // Manual), nudge the scroll position sideways and let it ease back through
+  // the .ci transition, so the row of instruments visibly slides under the
+  // edge-mask like a real swipe. Fires once, ever (localStorage-gated).
+  const PEEK_KEY = "tuner-carousel-peeked";
+  let peekDone = (() => { try { return localStorage.getItem(PEEK_KEY) === "1"; } catch { return false; } })();
+
+  function peekCarousel() {
+    if (peekDone) return;
+    peekDone = true;
+    try { localStorage.setItem(PEEK_KEY, "1"); } catch {}
+    const center = carCenters[state.instrument];
+    // 26px < half the tightest label spacing, so the selection never re-snaps
+    const target = Math.min(carCenters[carCenters.length - 1], center + 26);
+    if (target === center) return; // selected sits at the far end — no room
+    setTimeout(() => {
+      layoutCarousel(target);                        // ease out to the peek
+      setTimeout(() => layoutCarousel(center), 380); // settle back to center
+    }, 440);
+  }
 
   let stringButtons = [];
 
@@ -986,7 +1011,7 @@
 
   // dev reset: wipe the stored permission and reload to the first-launch state
   document.getElementById("devReset").addEventListener("click", () => {
-    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); } catch {}
+    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); localStorage.removeItem(PEEK_KEY); } catch {}
     location.reload();
   });
 

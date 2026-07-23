@@ -656,6 +656,10 @@
     overflow: hidden;
     cursor: grab;
     touch-action: none;
+    /* fade both edges so labels bleed off-screen instead of vanishing in mid-
+       air — the "content continues, swipe me" cue from the Camera mode picker */
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 15%, #000 85%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 15%, #000 85%, transparent 100%);
   }
   .inst-carousel:active { cursor: grabbing; }
   .ci {
