@@ -91,26 +91,17 @@
   const metaDisplay = document.getElementById("metaDisplay");
   const centsDisplay = document.getElementById("centsDisplay");
   const tunePill = document.getElementById("tunePill");
-  const octValue = document.getElementById("octValue");
   const noteGrid = document.getElementById("noteGrid");
   const stringRow = document.getElementById("stringRow");
   const pickerLabel = document.getElementById("pickerLabel");
-  const instRow = document.getElementById("instRow");
   const micBtn = document.getElementById("micBtn");
   const micLabel = document.getElementById("micLabel");
   const toneBtn = document.getElementById("toneBtn");
   const gaugeCard = document.getElementById("gaugeCard");
   const autoHint = document.getElementById("autoHint");
   const modeSeg = document.getElementById("modeSeg");
-  const targetField = document.getElementById("targetField");
-  const tfInst = document.getElementById("tfInst");
-  const tfNote = document.getElementById("tfNote");
-  const tfIcon = document.getElementById("tfIcon");
-  const sheetScrim = document.getElementById("sheetScrim");
   const inlinePicker = document.getElementById("inlinePicker");
-  const sheetBody = document.querySelector(".sheet-body");
-  const octaveRow = document.getElementById("octDown").closest(".row");
-  const referenceRow = document.getElementById("a4Down").closest(".row");
+  const micArea = document.querySelector(".mic-area");
   const hsHero = document.getElementById("hsHero");
   const tunerStrip = document.getElementById("tunerStrip");
   const stringWheel = document.getElementById("stringWheel");
@@ -128,7 +119,6 @@
       b.classList.toggle("selected", b.dataset.mode === mode));
     const auto = mode === "auto";
     autoHint.style.display = auto ? "" : "none";
-    if (auto) closeSheet();
     updateHeroView();
     updateInlinePicker();
     if (toneOsc) stopTone(); // reference tone is a manual-mode affordance
@@ -153,17 +143,6 @@
   modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
     b.addEventListener("click", () => setMode(b.dataset.mode)));
 
-  // ---------- picker sheet ----------
-
-  function openSheet() { sheetScrim.classList.add("show"); }
-  function closeSheet() {
-    sheetScrim.classList.remove("show");
-    if (toneOsc) stopTone(); // don't leave a reference tone ringing behind a closed sheet
-  }
-  targetField.addEventListener("click", openSheet);
-  document.getElementById("sheetDone").addEventListener("click", closeSheet);
-  sheetScrim.addEventListener("click", (e) => { if (e.target === sheetScrim) closeSheet(); });
-
   const noteButtons = NOTES.map((name, i) => {
     const b = document.createElement("button");
     b.className = "note-btn" + (name.includes("#") ? " sharp" : "");
@@ -173,43 +152,105 @@
     return b;
   });
 
-  // instrument chips
-  const instButtons = INSTRUMENTS.map((inst, i) => {
-    const b = document.createElement("button");
-    b.className = "inst-chip glass";
-    b.innerHTML = ICONS[inst.icon] + `<span>${inst.name}</span>` +
-      (inst.count !== null ? `<span class="cnt">${inst.count}</span>` : "");
-    b.addEventListener("click", () => selectInstrument(i, true));
-    instRow.appendChild(b);
-    return b;
+  // ---------- instrument carousel (Camera-style mode picker) ----------
+  // Uppercase labels scrub horizontally above the mic; the centered one is
+  // live (blue). Tap a label, drag across, or mouse-wheel — same gesture
+  // grammar as the string wheel.
+
+  const instCarousel = document.getElementById("instCarousel");
+  let carCenters = [];
+  let carX = 0; // item-space coordinate currently sitting at the container center
+
+  const carItems = INSTRUMENTS.map((inst) => {
+    const el = document.createElement("span");
+    el.className = "ci";
+    el.textContent = (inst.count ? `${inst.name} · ${inst.count}` : inst.name).toUpperCase();
+    instCarousel.appendChild(el);
+    return el;
   });
 
-  // desktop scrolling for the chip row: mouse wheel + click-drag
-  instRow.addEventListener("wheel", (e) => {
-    e.preventDefault();
-    instRow.scrollLeft += e.deltaY + e.deltaX;
-  }, { passive: false });
-
-  let dragging = false, dragMoved = false, dragStartX = 0, dragStartScroll = 0;
-  instRow.addEventListener("pointerdown", (e) => {
-    if (e.pointerType !== "mouse") return; // touch scrolls natively
-    dragging = true;
-    dragMoved = false;
-    dragStartX = e.clientX;
-    dragStartScroll = instRow.scrollLeft;
-  });
-  instRow.addEventListener("pointermove", (e) => {
-    if (!dragging) return;
-    const dx = (e.clientX - dragStartX) / phoneScale;
-    if (!dragMoved && Math.abs(dx) > 5) {
-      dragMoved = true;
-      instRow.setPointerCapture(e.pointerId); // keeps the drag, swallows the chip click
-    }
-    if (dragMoved) instRow.scrollLeft = dragStartScroll - dx;
-  });
-  for (const ev of ["pointerup", "pointercancel"]) {
-    instRow.addEventListener(ev, () => { dragging = false; });
+  // item centers from measured label widths — variable spacing like Camera
+  {
+    const GAP = 24;
+    let acc = 0;
+    carCenters = carItems.map((el) => {
+      const c = acc + el.offsetWidth / 2;
+      acc += el.offsetWidth + GAP;
+      return c;
+    });
   }
+
+  const carNearest = (x) => {
+    let sel = 0, best = Infinity;
+    carCenters.forEach((c, i) => {
+      const d = Math.abs(c - x);
+      if (d < best) { best = d; sel = i; }
+    });
+    return sel;
+  };
+
+  function layoutCarousel(x) {
+    carX = x;
+    const sel = carNearest(x);
+    carItems.forEach((el, i) => {
+      const dx = carCenters[i] - x;
+      el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
+      const a = Math.abs(dx);
+      el.style.opacity = (a >= 165 ? 0 : (1 - a / 165) * (i === sel ? 1 : 0.85)).toFixed(3);
+      el.classList.toggle("sel", i === sel);
+    });
+  }
+  function carouselTo(i) { layoutCarousel(carCenters[i]); }
+
+  // re-center without the full instrument rebuild when nothing changed
+  function carouselPick(i) {
+    if (i === state.instrument) carouselTo(i);
+    else selectInstrument(i, true);
+  }
+
+  let carDragging = false, carMoved = false, carStartX = 0, carStart = 0;
+  instCarousel.addEventListener("pointerdown", (e) => {
+    carDragging = true;
+    carMoved = false;
+    carStartX = e.clientX;
+    carStart = carX;
+    instCarousel.setPointerCapture(e.pointerId);
+  });
+  instCarousel.addEventListener("pointermove", (e) => {
+    if (!carDragging) return;
+    const dx = (e.clientX - carStartX) / phoneScale;
+    if (!carMoved && Math.abs(dx) > 5) {
+      carMoved = true;
+      instCarousel.classList.add("dragging");
+    }
+    if (carMoved) {
+      const min = carCenters[0], max = carCenters[carCenters.length - 1];
+      layoutCarousel(Math.max(min, Math.min(max, carStart - dx)));
+    }
+  });
+  instCarousel.addEventListener("pointerup", (e) => {
+    if (!carDragging) return;
+    carDragging = false;
+    instCarousel.classList.remove("dragging");
+    if (carMoved) {
+      carouselPick(carNearest(carX)); // snap to nearest label
+    } else {
+      // tap: pick the label nearest the tap point
+      const rect = instCarousel.getBoundingClientRect();
+      carouselPick(carNearest(carX + (e.clientX - rect.left - rect.width / 2) / phoneScale));
+    }
+  });
+  instCarousel.addEventListener("pointercancel", () => {
+    if (!carDragging) return;
+    carDragging = false;
+    instCarousel.classList.remove("dragging");
+    if (carMoved) carouselPick(carNearest(carX));
+  });
+  instCarousel.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    const dir = Math.sign(e.deltaY + e.deltaX);
+    if (dir) carouselPick(Math.max(0, Math.min(INSTRUMENTS.length - 1, state.instrument + dir)));
+  }, { passive: false });
 
   let stringButtons = [];
 
@@ -594,14 +635,7 @@
     if (byUser) state.instrumentPicked = true;
     state.instrument = i;
     const inst = INSTRUMENTS[i];
-    instButtons.forEach((b, j) => b.classList.toggle("selected", j === i));
-    // center the chip by scrolling the row only — scrollIntoView also scrolls
-    // ancestor containers, which shoved the whole app sideways
-    const chip = instButtons[i];
-    instRow.scrollTo({
-      left: chip.offsetLeft - instRow.offsetLeft - (instRow.clientWidth - chip.offsetWidth) / 2,
-      behavior: "smooth",
-    });
+    carouselTo(i);
     const isGuitar = !!inst.strings && inst.icon === "guitar";
     noteGrid.style.display = inst.strings ? "none" : "";
     stringRow.style.display = inst.strings && !isGuitar ? "" : "none";
@@ -645,24 +679,20 @@
     syncTarget();
   }
 
-  // chromatic + manual: the note grid, octave and reference ride on the main
-  // screen, slid up under the tuning bar. The instrument dropdown stays the
-  // shared tap-to-open field (parked below), so only these nodes migrate — the
-  // chip row stays in the sheet that field opens. appendChild moves the live
-  // nodes (ids/handlers intact); appending in-order preserves DOM order, and
-  // in the sheet they re-seat right after the untouched chip row.
-  const PICKER_NODES = [pickerLabel, noteGrid, stringRow, octaveRow, referenceRow];
-  function pickerInline(inline) {
-    const dest = inline ? inlinePicker : sheetBody;
-    for (const n of PICKER_NODES) dest.appendChild(n);
-  }
-
+  // Manual surfaces: chromatic shows the note grid inline, violin-class shows
+  // its string pills inline (guitar picks on the headstock). The footer console
+  // (carousel + wings) shows in Manual; Auto hides it by visibility so the mic
+  // never shifts. Right wing swaps contextually: octave (chromatic) ↔ tone
+  // (instruments) — the flip-camera position.
   function updateInlinePicker() {
     const inst = INSTRUMENTS[state.instrument];
-    const inline = state.mode === "manual" && !inst.strings; // chromatic only
-    pickerInline(inline);
-    inlinePicker.style.display = inline ? "block" : "none";
-    targetField.style.display = state.mode === "manual" ? "" : "none";
+    const manual = state.mode === "manual";
+    const isGuitar = !!inst.strings && inst.icon === "guitar";
+    inlinePicker.style.display = manual && !isGuitar ? "block" : "none";
+    micArea.classList.toggle("auto", !manual);
+    miniOct.style.display = !inst.strings ? "" : "none";
+    toneBtn.style.display = inst.strings ? "" : "none";
+    if (inst.strings) miniOct.classList.remove("open");
   }
 
   // guitar in Manual mode makes the headstock the hero (replaces the gauge dial)
@@ -732,14 +762,9 @@
     const wi = wheelItems.findIndex((w) =>
       w.noteIndex === state.noteIndex && w.octave === state.octave);
     if (wi >= 0) layoutWheel(wi); // scroll the drum to the target (animated)
-    octValue.textContent = `${state.octave} · ${f.toFixed(2)} Hz`;
-    // keep the Manual-mode target field in sync
-    const inst = INSTRUMENTS[state.instrument];
-    tfInst.textContent = inst.count ? `${inst.name} · ${inst.count}-string` : inst.name;
-    tfNote.textContent = `${NOTES[state.noteIndex].replace("#", "♯")}${state.octave} · ${f.toFixed(2)} Hz`;
-    tfIcon.innerHTML = ICONS[inst.icon];
-    document.getElementById("octDown").disabled = state.octave <= OCT_MIN;
-    document.getElementById("octUp").disabled = state.octave >= OCT_MAX;
+    miniOctVal.textContent = state.octave;
+    document.getElementById("miniOctDown").disabled = state.octave <= OCT_MIN;
+    document.getElementById("miniOctUp").disabled = state.octave >= OCT_MAX;
     if (!state.listening) {
       metaDisplay.textContent = `target ${f.toFixed(2)} Hz`;
       centsDisplay.innerHTML = "&nbsp;";
@@ -751,30 +776,49 @@
     if (toneOsc) toneOsc.frequency.setTargetAtTime(f, audioCtx.currentTime, 0.02);
   }
 
-  document.getElementById("octDown").addEventListener("click", () => {
-    if (state.octave > OCT_MIN) { state.octave--; syncTarget(); }
-  });
-  document.getElementById("octUp").addEventListener("click", () => {
-    if (state.octave < OCT_MAX) { state.octave++; syncTarget(); }
-  });
-
   // ---------- A4 reference calibration ----------
 
   const A4_KEY = "tuner-a4";
-  const a4Value = document.getElementById("a4Value");
   const a4Pill = document.getElementById("a4Pill");
 
   function setA4(v) {
     A4 = Math.max(A4_MIN, Math.min(A4_MAX, Math.round(v)));
     try { localStorage.setItem(A4_KEY, A4); } catch {}
-    a4Value.textContent = `${A4} Hz`;
     a4Pill.textContent = `A4 = ${A4} Hz`;
-    document.getElementById("a4Down").disabled = A4 <= A4_MIN;
-    document.getElementById("a4Up").disabled = A4 >= A4_MAX;
+    miniRefVal.textContent = `${A4} Hz`;
+    document.getElementById("miniRefDown").disabled = A4 <= A4_MIN;
+    document.getElementById("miniRefUp").disabled = A4 >= A4_MAX;
     syncTarget(); // every target + cents reading is derived from A4 — recompute live
   }
-  document.getElementById("a4Down").addEventListener("click", () => setA4(A4 - 1));
-  document.getElementById("a4Up").addEventListener("click", () => setA4(A4 + 1));
+
+  // ---------- wing capsules (A4 left, octave right) ----------
+  // Compact accordions flanking the mic; tap toggles the − / + steppers out.
+
+  const miniOct = document.getElementById("miniOct");
+  const miniRef = document.getElementById("miniRef");
+  const miniOctVal = document.getElementById("miniOctVal");
+  const miniRefVal = document.getElementById("miniRefVal");
+
+  miniOct.addEventListener("click", () => miniOct.classList.toggle("open"));
+  miniRef.addEventListener("click", () => miniRef.classList.toggle("open"));
+
+  // steppers act without collapsing the capsule (stop the toggle click)
+  document.getElementById("miniOctDown").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (state.octave > OCT_MIN) { state.octave--; syncTarget(); }
+  });
+  document.getElementById("miniOctUp").addEventListener("click", (e) => {
+    e.stopPropagation();
+    if (state.octave < OCT_MAX) { state.octave++; syncTarget(); }
+  });
+  document.getElementById("miniRefDown").addEventListener("click", (e) => {
+    e.stopPropagation();
+    setA4(A4 - 1);
+  });
+  document.getElementById("miniRefUp").addEventListener("click", (e) => {
+    e.stopPropagation();
+    setA4(A4 + 1);
+  });
 
   // ---------- reference tone ----------
 
@@ -952,19 +996,23 @@
     state.btn = s;
     micBtn.classList.remove("live", "requesting", "denied");
     micBtn.disabled = false;
-    const dot = micBtn.querySelector(".dot");
+    // on/off is icon-only (orange mic ↔ slashed blue mic); only denied keeps text
     if (s === "listening") {
       micBtn.classList.add("live");
-      micLabel.textContent = "Listening — Tap to Stop";
+      micLabel.textContent = "";
+      micBtn.setAttribute("aria-label", "Stop listening");
     } else if (s === "paused") {
-      micLabel.textContent = "Resume";
+      micLabel.textContent = "";
+      micBtn.setAttribute("aria-label", "Start listening");
     } else if (s === "requesting") {
       micBtn.classList.add("requesting");
       micBtn.disabled = true;
-      micLabel.textContent = "Starting…";
+      micLabel.textContent = "";
+      micBtn.setAttribute("aria-label", "Starting");
     } else if (s === "denied") {
       micBtn.classList.add("denied");
       micLabel.textContent = "Microphone Access Needed";
+      micBtn.setAttribute("aria-label", "Microphone access needed");
     }
   }
 
