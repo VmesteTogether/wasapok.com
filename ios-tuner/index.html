@@ -661,8 +661,13 @@
     display: flex;
     align-items: center;
   }
-  .wing.left { left: 16px; }
-  .wing.right { right: 16px; }
+  /* rest just inside the old edge positions (16px -> 28px): a slight inward
+     nudge into the thumb arc, not a cluster on the mic. Capsules stay
+     edge-anchored so the accordion still opens INWARD toward the mic; 28px is
+     about as far in as they go before the open 130px capsule reaches the mic
+     (leaves ~5px clearance) */
+  .wing.left { left: 28px; }
+  .wing.right { right: 28px; }
   .mic-btn {
     appearance: none;
     position: absolute;
