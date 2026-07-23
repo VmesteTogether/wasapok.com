@@ -76,8 +76,10 @@
   @keyframes drift2 { from { transform: translate(0, 0) scale(1.1); }  to { transform: translate(-80px, -60px) scale(0.95); } }
   @keyframes drift3 { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(60px, -80px) scale(1.12); } }
 
-  /* everything above the wash */
-  .phone > *:not(.bg):not(.overlay) { position: relative; z-index: 1; }
+  /* everything above the wash (island excluded — it must stay absolute, or
+     this rule's higher specificity drags it into the flex flow and it eats
+     36px of column height) */
+  .phone > *:not(.bg):not(.overlay):not(.island) { position: relative; z-index: 1; }
 
   /* liquid glass material */
   .glass {
@@ -125,7 +127,7 @@
   /* nav title */
   .navbar {
     flex: 0 0 auto;
-    padding: 6px 24px 2px;
+    padding: 4px 24px 0;
     display: flex;
     align-items: center;
     justify-content: space-between;
@@ -159,7 +161,7 @@
     display: flex;
     padding: 3px;
     border-radius: 16px;
-    margin: 2px 0 12px;
+    margin: 2px 0 8px;
     background: rgba(120, 120, 128, 0.14);
     -webkit-backdrop-filter: blur(20px) saturate(1.6);
     backdrop-filter: blur(20px) saturate(1.6);
@@ -205,31 +207,17 @@
     transition: opacity 0.25s;
   }
 
-  /* target field (Manual mode) — tap to open the picker sheet */
-  .target-field {
-    appearance: none;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    width: 100%;
-    margin-top: 14px;
-    padding: 13px 16px;
-    border-radius: 20px;
-    cursor: pointer;
-    font-family: inherit;
-    text-align: left;
-    color: var(--label);
-    transition: transform 0.1s;
-  }
-
   /* tuner readout (guitar hero) — floating centered column: note / bar / cents,
      no capsule; the axis of the headstock carries straight down through it */
   .strip {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    margin-top: 10px;
+    gap: 6px;
+    /* auto top+bottom margins center the wheel/bar/cents unit in the free
+       space below the fixed 354px headstock card, instead of packing it high
+       against the card and dumping the slack into a void above the mic */
+    margin: auto 0;
     padding: 0 8px;
   }
   /* string wheel — horizontal picker drum: center note big, neighbors shrink
@@ -252,9 +240,14 @@
     will-change: transform, opacity;
     transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.32s, color 0.2s;
   }
+  /* octave hangs off the letter's right shoulder as an absolute superscript, so
+     it adds no width — the item box is just the letter and translate(-50%)
+     centers the LETTER on the axis, not the letter+number pair */
   .wh-item sup {
+    position: absolute;
+    left: 100%; top: 2px;
     font-size: 22px; font-weight: 600; color: var(--label-2);
-    vertical-align: 18px; margin-left: 2px;
+    margin-left: 1px;
     transition: opacity 0.32s, color 0.2s;
   }
   /* while dragging the wheel tracks the finger — no easing */
@@ -267,96 +260,75 @@
     font-size: 14px; font-weight: 600;
     color: var(--label-2);
     font-variant-numeric: tabular-nums;
-    min-height: 18px; text-align: center;
+    min-height: 16px; text-align: center;
     transition: color 0.15s;
   }
-  .target-field:active { transform: scale(0.985); }
-  .tf-icon { flex: 0 0 auto; color: var(--label-2); display: flex; }
-  .tf-icon svg { display: block; }
-  .tf-text { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
-  .tf-inst {
-    font-size: 17px; font-weight: 600; color: var(--label);
-    letter-spacing: -0.2px;
-  }
-  .tf-note {
-    font-size: 13px; font-weight: 500; color: var(--label-2);
-    font-variant-numeric: tabular-nums;
-  }
-  .tf-chev { flex: 0 0 auto; color: var(--label-3); }
-
-  /* ---------- picker sheet ---------- */
-  .sheet-scrim {
-    position: absolute;
-    inset: 0;
-    z-index: 90;
-    display: none;
-    background: rgba(0, 0, 0, 0.28);
-    -webkit-backdrop-filter: blur(1px);
-    backdrop-filter: blur(1px);
-  }
-  .sheet-scrim.show { display: block; animation: scrimIn 0.2s ease; }
-  .sheet-scrim.show .sheet { transform: translateY(0); }
-  .sheet {
-    position: absolute;
-    left: 0; right: 0; bottom: 0;
-    display: flex;
-    flex-direction: column;
-    max-height: 80%;
-    padding: 0 20px 26px;
-    background: rgba(244, 245, 249, 0.8);
-    -webkit-backdrop-filter: blur(34px) saturate(1.7);
-    backdrop-filter: blur(34px) saturate(1.7);
-    border-radius: 22px 22px 0 0;
-    border-top: 1px solid rgba(255, 255, 255, 0.7);
-    box-shadow: 0 -12px 44px rgba(50, 55, 75, 0.22);
-    transform: translateY(100%);
-    transition: transform 0.36s cubic-bezier(0.32, 0.72, 0, 1);
-  }
-  .sheet-grab {
-    flex: 0 0 auto;
-    width: 36px; height: 5px;
-    border-radius: 3px;
-    background: rgba(60, 60, 67, 0.3);
-    margin: 7px auto 2px;
-  }
-  .sheet-head {
-    flex: 0 0 auto;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 4px 2px 8px;
-  }
-  .sheet-title {
-    font-size: 20px; font-weight: 700;
-    letter-spacing: -0.3px; color: var(--label);
-  }
-  .sheet-done {
-    appearance: none; border: none; background: transparent;
-    font-family: inherit; font-size: 17px; font-weight: 600;
-    color: var(--blue); cursor: pointer; padding: 4px 2px;
-  }
-  .sheet-body {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    -webkit-overflow-scrolling: touch;
-  }
-  .sheet-body .inst-row { margin-top: 0; }
-  .sheet-body .section-label { margin-top: 14px; }
-
-  /* inline picker (chromatic + manual): picker sections relocated onto the main
-     screen — tightened vertical rhythm so the whole column still clears the mic */
+  /* inline picker (Manual): chromatic's note grid / violin-class string pills
+     live directly on the main page — no modal sheet */
   .inline-picker { display: none; }
-  .inline-picker .section-label { margin: 8px 6px 4px; }
+  .inline-picker .section-label { margin: 5px 6px 3px; }
   .inline-picker .note-grid { padding: 6px; }
   .inline-picker .note-btn { padding: 8px 0; }
-  .inline-picker .row { margin-top: 6px; }
-  .inline-picker .octave-card { padding: 6px 8px; }
-  .inline-picker + .target-field { margin-top: 8px; }
+
+  /* wing capsules — compact raised-glass A4 / octave accordions flanking the
+     mic (photos-pip / flip-camera positions). Collapsed: tiny label + live
+     value. Tap: fixed-width expansion toward the mic, − / + sliding out;
+     wings are absolutely anchored so the mic never moves */
+  .mini-cap {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 66px;
+    height: 42px;
+    border-radius: 15px;
+    overflow: hidden;
+    cursor: pointer;
+    background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.58));
+    border: 1px solid rgba(255,255,255,0.9);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,1),
+      inset 0 -1px 1px rgba(50,55,75,0.05),
+      0 5px 14px rgba(50,55,75,0.14),
+      0 1px 3px rgba(50,55,75,0.08);
+    transition: width 0.32s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  .mini-cap.open { width: 130px; }
+  .mc-body {
+    flex: 0 0 auto;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+  }
+  .mc-label {
+    font-size: 9px; font-weight: 700;
+    text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--label-2);
+  }
+  .mc-value {
+    font-size: 13px; font-weight: 600;
+    color: var(--label);
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+  }
+  .mc-step {
+    appearance: none; border: none; background: transparent;
+    width: 0; height: 32px; padding: 0;
+    opacity: 0;
+    font-family: inherit; font-size: 18px; font-weight: 500;
+    color: var(--label);
+    border-radius: 11px;
+    cursor: pointer;
+    transition: width 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.18s, background 0.15s;
+  }
+  .mini-cap.open .mc-step { width: 30px; opacity: 1; }
+  .mc-step:active { background: rgba(0, 0, 0, 0.06); }
+  .mc-step:disabled { color: var(--label-3); }
 
   /* gauge card */
   .gauge-card {
     border-radius: 28px;
-    padding: 16px 12px 4px;
+    padding: 12px 12px 2px;
     position: relative;
     transition: background 0.3s, box-shadow 0.3s;
   }
@@ -371,11 +343,11 @@
 
   .readout {
     text-align: center;
-    padding: 14px 8px 12px;
+    padding: 8px 8px 6px;
     position: relative;
     z-index: 2;
   }
-  .readout .hbar { margin: 20px 34px 4px; }
+  .readout .hbar { margin: 12px 34px 2px; }
   .readout .note {
     font-size: 64px;
     font-weight: 700;
@@ -502,7 +474,7 @@
   /* guitar hero: full-bleed headstock backdrop + floating glass HUD capsule */
   .gauge-card.hero-hs { overflow: hidden; padding: 0; }
   .gauge-card.hero-hs .readout { display: none; }
-  .hs-hero { position: relative; height: 380px; }
+  .hs-hero { position: relative; height: 354px; }
 
   /* hero card is a pure object — deviation feedback lives in the console below */
 
@@ -576,7 +548,7 @@
     overflow: hidden;
     display: flex; justify-content: center; align-items: flex-start;
   }
-  .hs-hero .headstock svg { width: 262px; height: auto; display: block; }
+  .hs-hero .headstock svg { width: 258px; height: auto; display: block; }
   #headstock .peg { cursor: pointer; }
   #headstock .peg .hit { fill: transparent; }
   #headstock .peg .btn {
@@ -615,186 +587,152 @@
     filter: drop-shadow(0 0 3px rgba(52, 199, 89, 0.9));
   }
 
-  /* octave stepper + tone row */
-  .row {
-    display: flex;
-    gap: 10px;
-    margin-top: 8px;
-  }
-
-  .octave-card {
-    flex: 1;
-    border-radius: 24px;
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 8px 8px;
-  }
-  .oct-label {
-    display: flex;
-    flex-direction: column;
-    padding-left: 10px;
-  }
-  .oct-label .t { font-size: 15px; font-weight: 600; color: var(--label); }
-  .oct-label .v { font-size: 13px; color: var(--label-2); font-variant-numeric: tabular-nums; }
-  .stepper {
-    display: flex;
-    background: rgba(255, 255, 255, 0.55);
-    border: 1px solid rgba(255, 255, 255, 0.8);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 2px 6px rgba(50, 55, 75, 0.08);
-    border-radius: 14px;
-    overflow: hidden;
-  }
-  .stepper button {
-    appearance: none;
-    border: none;
-    background: transparent;
-    color: var(--label);
-    width: 47px;
-    height: 38px;
-    font-size: 22px;
-    font-weight: 500;
-    cursor: pointer;
-    font-family: inherit;
-    transition: background 0.15s;
-    line-height: 1;
-  }
-  .stepper button:active { background: rgba(0, 0, 0, 0.06); }
-  .stepper button:disabled { color: var(--label-3); }
-  .stepper .div { width: 1px; background: rgba(60, 60, 67, 0.18); margin: 8px 0; }
-
+  /* reference-tone wing (instruments) — the flip-camera position */
   .tone-btn {
-    flex: 0 0 auto;
     appearance: none;
-    color: var(--blue);
-    border-radius: 24px;
-    width: 62px;
+    width: 44px; height: 44px;
+    border-radius: 50%;
     display: flex;
     align-items: center;
     justify-content: center;
+    color: var(--blue);
     cursor: pointer;
-    transition: transform 0.1s, color 0.15s;
+    background: linear-gradient(180deg, rgba(255,255,255,0.82), rgba(255,255,255,0.58));
+    border: 1px solid rgba(255,255,255,0.9);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,1),
+      0 5px 14px rgba(50,55,75,0.14),
+      0 1px 3px rgba(50,55,75,0.08);
+    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1), background 0.2s, color 0.2s, box-shadow 0.2s;
   }
-  .tone-btn:active { transform: scale(0.95); }
+  .tone-btn:active { transform: scale(0.92); }
   .tone-btn.playing {
     background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
+    border-color: rgba(255, 255, 255, 0.5);
     color: #fff;
     box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
   }
 
-  /* ---------- instrument row ---------- */
-  .inst-row {
-    display: flex;
-    gap: 8px;
-    overflow-x: auto;
-    flex-shrink: 0;
-    margin-top: 6px;
-    padding: 2px 2px 4px;
-    scrollbar-width: none;
-    -webkit-overflow-scrolling: touch;
+  /* ---------- instrument carousel (Camera-style mode picker) ---------- */
+  .inst-carousel {
+    position: relative;
+    height: 26px;
+    margin: 0 12px 6px;
+    overflow: hidden;
     cursor: grab;
+    touch-action: none;
   }
-  .inst-row:active { cursor: grabbing; }
-  .inst-row::-webkit-scrollbar { display: none; }
-  .inst-chip {
-    flex: 0 0 auto;
-    appearance: none;
-    display: flex;
-    align-items: center;
-    gap: 7px;
-    padding: 9px 14px;
-    border-radius: 22px;
-    cursor: pointer;
-    color: var(--label);
-    font-family: inherit;
-    font-size: 14px;
-    font-weight: 600;
-    transition: transform 0.1s, color 0.15s;
-  }
-  .inst-chip:active { transform: scale(0.95); }
-  .inst-chip svg { display: block; flex: 0 0 auto; }
-  .inst-chip .cnt {
-    font-size: 11px;
+  .inst-carousel:active { cursor: grabbing; }
+  .ci {
+    position: absolute;
+    left: 50%; top: 50%;
+    font-size: 12px;
     font-weight: 700;
+    letter-spacing: 0.6px;
     color: var(--label-2);
-    background: rgba(60, 60, 67, 0.1);
-    padding: 1px 7px;
-    border-radius: 9px;
+    white-space: nowrap;
+    user-select: none;
+    -webkit-user-select: none;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.32s, color 0.2s;
   }
-  .inst-chip.selected {
-    -webkit-backdrop-filter: none;
-    backdrop-filter: none;
-    background: linear-gradient(180deg, #0a84ff, #0071eb);
-    border-color: rgba(255, 255, 255, 0.4);
-    color: #fff;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.45), 0 6px 16px rgba(10, 132, 255, 0.35);
-  }
-  .inst-chip.selected .cnt {
-    color: #fff;
-    background: rgba(255, 255, 255, 0.25);
-  }
+  .inst-carousel.dragging .ci { transition: color 0.2s; }
+  .ci.sel { color: var(--blue); }
 
-  /* ---------- mic button ---------- */
+  /* ---------- mic button (circular) ---------- */
+  /* blue "tap to listen" bead that warms to orange while live; a caption below
+     carries the stateful text the round button can't (permission, stop hint) */
+  /* fixed footer — Camera-style console: instrument carousel above the mic
+     'shutter', A4 wing left, octave/tone wing right. Fixed height in every
+     mode so the mic never shifts; Auto hides the console pieces but keeps
+     their space (visibility, not display) */
   .mic-area {
-    flex: 1;
+    position: relative;
+    flex: 0 0 auto;
+    height: 112px;
+    padding-top: 4px;
+  }
+  .mic-area.auto .inst-carousel,
+  .mic-area.auto .wing { visibility: hidden; }
+  .mic-row { position: relative; height: 72px; }
+  .wing {
+    position: absolute;
+    top: 50%;
+    transform: translateY(-50%);
     display: flex;
     align-items: center;
-    justify-content: center;
-    min-height: 56px;
-    padding: 12px 0 6px; /* guarantees a gap above the capsule even when the column is full */
   }
+  .wing.left { left: 16px; }
+  .wing.right { right: 16px; }
   .mic-btn {
     appearance: none;
-    border: 1px solid rgba(255, 255, 255, 0.4);
+    position: absolute;
+    left: 50%;
+    top: 2px;
+    transform: translateX(-50%);
+    width: 64px; height: 64px;
+    border-radius: 50%;
+    border: 1px solid rgba(255, 255, 255, 0.45);
     font-family: inherit;
-    background: linear-gradient(180deg, rgba(10, 132, 255, 0.92), rgba(0, 113, 235, 0.92));
-    -webkit-backdrop-filter: blur(20px) saturate(1.8);
-    backdrop-filter: blur(20px) saturate(1.8);
+    background: linear-gradient(180deg, rgba(10, 132, 255, 0.95), rgba(0, 113, 235, 0.98));
     color: #fff;
-    font-size: 17px;
-    font-weight: 600;
-    padding: 15px 0;
-    width: 100%;
-    border-radius: 26px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.5), 0 10px 26px rgba(10, 132, 255, 0.38);
-    transition: background 0.2s, transform 0.1s, box-shadow 0.2s, color 0.2s;
+    box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(0,40,90,0.25), 0 10px 26px rgba(10, 132, 255, 0.42);
+    transition: background 0.3s, transform 0.12s cubic-bezier(0.32,0.72,0,1), box-shadow 0.3s, color 0.3s, filter 0.15s;
   }
-  .mic-btn:active { transform: scale(0.98); }
+  .mic-btn:active { transform: translateX(-50%) scale(0.93); filter: brightness(0.96); }
+  .mic-btn { --mic-fill: #0a84ff; } /* casing colour for the mic-slash cutout */
+  .mic-btn .mic-glyph { width: 32px; height: 32px; display: block; }
+  /* mic is OFF unless live: show a slash (blue idle / glass states). The cutout
+     line is painted in the circle's own colour so the slash reads cleanly where
+     it crosses the white mic body — the SF Symbol mic.slash trick */
+  .mic-slash-cut { stroke: var(--mic-fill); stroke-width: 4.5; }
+  .mic-slash { stroke: currentColor; stroke-width: 2; }
+  .mic-btn.live .mic-slash, .mic-btn.live .mic-slash-cut { display: none; }
+  /* live — warms to orange (same genre as 'access needed') + sonar pulse ring */
   .mic-btn.live {
-    background: var(--glass-strong);
-    border: 1px solid var(--glass-edge);
-    color: var(--red);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 10px 26px rgba(50, 55, 75, 0.12);
+    background: linear-gradient(180deg, rgba(255,159,10,0.98), rgba(255,133,0,1));
+    border: 1px solid rgba(255,255,255,0.5);
+    color: #fff;
+    animation: micPulse 1.8s ease-in-out infinite;
   }
-  .mic-btn .dot {
-    width: 8px; height: 8px; border-radius: 50%;
-    background: currentColor;
-    display: none;
+  @keyframes micPulse {
+    0%, 100% { box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(150,70,0,0.28), 0 10px 26px rgba(255,149,0,0.42), 0 0 0 0 rgba(255,149,0,0.45); }
+    50%      { box-shadow: inset 0 1.5px 0 rgba(255,255,255,0.6), inset 0 -3px 6px rgba(150,70,0,0.28), 0 10px 26px rgba(255,149,0,0.42), 0 0 0 13px rgba(255,149,0,0); }
   }
-  .mic-btn.live .dot { display: block; animation: pulse 1.2s ease-in-out infinite; }
-  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: 0.25; } }
-
   /* requesting — passive while the OS prompt is up */
   .mic-btn.requesting {
-    background: var(--glass-strong);
-    border: 1px solid var(--glass-edge);
+    background: linear-gradient(180deg, rgba(255,255,255,0.85), rgba(255,255,255,0.6));
+    border: 1px solid rgba(255,255,255,0.9);
     color: var(--label-2);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 6px 16px rgba(50,55,75,0.08);
-    opacity: 0.75;
+    box-shadow: inset 0 1.5px 0 rgba(255,255,255,1), 0 6px 16px rgba(50,55,75,0.12);
+    opacity: 0.85;
   }
+  .mic-btn.requesting, .mic-btn.denied { --mic-fill: #f6f7fa; } /* glass casing */
   .mic-btn:disabled { cursor: default; }
-  /* denied — routes to Settings, not a re-request */
+  /* denied — glass bead with a slashed mic; routes to Settings, not a re-request */
   .mic-btn.denied {
-    background: var(--glass-strong);
-    border: 1px solid rgba(255, 149, 0, 0.4);
+    background: linear-gradient(180deg, rgba(255,255,255,0.9), rgba(255,255,255,0.66));
+    border: 1px solid rgba(255, 149, 0, 0.55);
     color: var(--orange);
-    box-shadow: inset 0 1px 0 rgba(255,255,255,0.9), 0 10px 26px rgba(255,149,0,0.14);
+    box-shadow:
+      inset 0 1.5px 0 rgba(255,255,255,1),
+      0 8px 20px rgba(255,149,0,0.2),
+      0 1px 3px rgba(50,55,75,0.08);
   }
+  /* caption pinned under the console — only denied shows text (routes to
+     Settings), so its color is simply orange; on/off states are icon-only */
+  .mic-caption {
+    position: absolute;
+    left: 0; right: 0; bottom: 0;
+    font-size: 13px; font-weight: 600;
+    color: var(--orange);
+    text-align: center;
+    letter-spacing: -0.1px;
+  }
+  .mic-caption:empty { display: none; }
 
   /* ---------- mock iOS permission alert ---------- */
   .perm-scrim {
@@ -976,82 +914,65 @@
         <span class="strip-cents" id="stripCents">&nbsp;</span>
       </div>
 
-      <!-- chromatic + manual: target note, octave & reference slide up under the
-           tuning bar; the instrument dropdown below stays the shared tap field -->
-      <div class="inline-picker" id="inlinePicker"></div>
-
-      <button class="target-field glass" id="targetField" style="display: none;">
-        <span class="tf-icon" id="tfIcon"></span>
-        <span class="tf-text">
-          <span class="tf-inst" id="tfInst">Chromatic</span>
-          <span class="tf-note" id="tfNote">A4 · 440.00 Hz</span>
-        </span>
-        <svg class="tf-chev" width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <path d="M4 6 L8 10 L12 6"/>
-        </svg>
-      </button>
+      <!-- manual pickers, inline: chromatic gets the note grid; violin-class
+           instruments get their string pills (guitar picks on the headstock) -->
+      <div class="inline-picker" id="inlinePicker">
+        <div class="section-label" id="pickerLabel">Target Note</div>
+        <div class="note-grid glass" id="noteGrid"></div>
+        <div class="string-row glass" id="stringRow" style="display: none;"></div>
+      </div>
 
       <div class="auto-hint" id="autoHint">Listening for any note — just play</div>
+    </div>
 
-      <div class="mic-area">
-        <button class="mic-btn" id="micBtn">
-          <span class="dot"></span>
-          <span id="micLabel">Start Tuning</span>
+    <!-- mic footer — Camera-style console: instrument carousel above the mic
+         'shutter', A4 reference wing left, octave/tone wing right. Fixed
+         height so the mic holds the same spot across every tuner -->
+    <div class="mic-area">
+      <div class="inst-carousel" id="instCarousel"></div>
+      <div class="mic-row">
+        <div class="wing left">
+          <div class="mini-cap" id="miniRef" role="button" aria-label="Reference pitch">
+            <button class="mc-step" id="miniRefDown" aria-label="Reference down">&minus;</button>
+            <div class="mc-body">
+              <span class="mc-label">A4</span>
+              <span class="mc-value" id="miniRefVal">440 Hz</span>
+            </div>
+            <button class="mc-step" id="miniRefUp" aria-label="Reference up">+</button>
+          </div>
+        </div>
+        <button class="mic-btn" id="micBtn" aria-label="Start tuning">
+          <svg class="mic-glyph" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="currentColor" stroke="none"/>
+            <path d="M6 11 a6 6 0 0 0 12 0"/>
+            <line x1="12" y1="17" x2="12" y2="20.5"/>
+            <line x1="8.5" y1="21" x2="15.5" y2="21"/>
+            <line class="mic-slash-cut" x1="4.5" y1="3.5" x2="19.5" y2="20.5"/>
+            <line class="mic-slash" x1="4.5" y1="3.5" x2="19.5" y2="20.5"/>
+          </svg>
         </button>
+        <div class="wing right">
+          <div class="mini-cap" id="miniOct" role="button" aria-label="Octave">
+            <button class="mc-step" id="miniOctDown" aria-label="Octave down">&minus;</button>
+            <div class="mc-body">
+              <span class="mc-label">Octave</span>
+              <span class="mc-value" id="miniOctVal">4</span>
+            </div>
+            <button class="mc-step" id="miniOctUp" aria-label="Octave up">+</button>
+          </div>
+          <button class="tone-btn" id="toneBtn" aria-label="Play reference tone" style="display: none;">
+            <svg width="22" height="19" viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M12 3 L7 7.5 H3 V14.5 H7 L12 19 Z" fill="currentColor" stroke="none"/>
+              <path d="M16 7.5 A5 5 0 0 1 16 14.5"/>
+              <path d="M19 4.5 A9.2 9.2 0 0 1 19 17.5"/>
+            </svg>
+          </button>
+        </div>
       </div>
+      <span class="mic-caption" id="micLabel"></span>
     </div>
 
     <div class="home-indicator"></div>
-
-    <!-- target picker sheet (Manual mode) -->
-    <div class="sheet-scrim overlay" id="sheetScrim">
-      <div class="sheet" id="pickerSheet">
-        <div class="sheet-grab"></div>
-        <div class="sheet-head">
-          <span class="sheet-title">Tune To</span>
-          <button class="sheet-done" id="sheetDone">Done</button>
-        </div>
-        <div class="sheet-body">
-          <div class="inst-row" id="instRow"></div>
-          <div class="section-label" id="pickerLabel">Target Note</div>
-          <div class="note-grid glass" id="noteGrid"></div>
-          <div class="string-row glass" id="stringRow" style="display: none;"></div>
-          <div class="row">
-            <div class="octave-card glass">
-              <div class="oct-label">
-                <span class="t">Octave</span>
-                <span class="v" id="octValue">4 · 440.00 Hz</span>
-              </div>
-              <div class="stepper">
-                <button id="octDown" aria-label="Octave down">&minus;</button>
-                <div class="div"></div>
-                <button id="octUp" aria-label="Octave up">+</button>
-              </div>
-            </div>
-            <button class="tone-btn glass" id="toneBtn" aria-label="Play reference tone">
-              <svg width="26" height="22" viewBox="0 0 26 22" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M12 3 L7 7.5 H3 V14.5 H7 L12 19 Z" fill="currentColor" stroke="none"/>
-                <path d="M16 7.5 A5 5 0 0 1 16 14.5"/>
-                <path d="M19 4.5 A9.2 9.2 0 0 1 19 17.5"/>
-              </svg>
-            </button>
-          </div>
-          <div class="row">
-            <div class="octave-card glass">
-              <div class="oct-label">
-                <span class="t">Reference (A4)</span>
-                <span class="v" id="a4Value">440 Hz</span>
-              </div>
-              <div class="stepper">
-                <button id="a4Down" aria-label="Reference down">&minus;</button>
-                <div class="div"></div>
-                <button id="a4Up" aria-label="Reference up">+</button>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <!-- mock iOS microphone permission alert -->
     <div class="perm-scrim overlay" id="permScrim">
