@@ -94,6 +94,7 @@
   const noteGrid = document.getElementById("noteGrid");
   const stringRow = document.getElementById("stringRow");
   const pickerLabel = document.getElementById("pickerLabel");
+  const pickerLabelText = document.getElementById("pickerLabelText");
   const micBtn = document.getElementById("micBtn");
   const micLabel = document.getElementById("micLabel");
   const toneBtn = document.getElementById("toneBtn");
@@ -102,6 +103,7 @@
   const modeSeg = document.getElementById("modeSeg");
   const inlinePicker = document.getElementById("inlinePicker");
   const micArea = document.querySelector(".mic-area");
+  const rightWing = document.querySelector(".wing.right");
   const hsHero = document.getElementById("hsHero");
   const tunerStrip = document.getElementById("tunerStrip");
   const stringWheel = document.getElementById("stringWheel");
@@ -109,6 +111,7 @@
   const hbarDots = document.querySelectorAll(".hbar-dot"); // one bar per view, driven together
   const hbarEls = document.querySelectorAll(".hbar");
   const hbarRings = document.querySelectorAll(".hbar-ring");
+  const hbarFills = document.querySelectorAll(".hbar-fill"); // center-out VU fill
 
   // ---------- mode (auto detect / manual target) ----------
 
@@ -667,7 +670,7 @@
     pickerLabel.style.display = isGuitar ? "none" : ""; // guitar picks pegs on the hero, not in the sheet
     if (!isGuitar) pegEls = [];
     if (!inst.strings) {
-      pickerLabel.textContent = "Target Note";
+      pickerLabelText.textContent = "Target Note";
       stringButtons = [];
     } else if (isGuitar) {
       stringButtons = [];
@@ -677,7 +680,7 @@
       state.noteIndex = low.noteIndex;
       state.octave = low.octave;
     } else {
-      pickerLabel.textContent = `${inst.name} Strings`;
+      pickerLabelText.textContent = `${inst.name} Strings`;
       stringRow.innerHTML = "";
       stringButtons = inst.strings.map((s) => {
         const { noteIndex, octave } = parseNote(s);
@@ -716,7 +719,10 @@
     inlinePicker.style.display = manual && !isGuitar ? "block" : "none";
     micArea.classList.toggle("auto", !manual);
     miniOct.style.display = !inst.strings ? "" : "none";
-    toneBtn.style.display = inst.strings ? "" : "none";
+    // reference-tone speaker: instruments keep it in the right wing; chromatic's
+    // wing holds the octave stepper, so its speaker trails the Target Note label
+    (inst.strings ? rightWing : pickerLabel).appendChild(toneBtn);
+    toneBtn.style.display = "";
     if (inst.strings) miniOct.classList.remove("open");
   }
 
@@ -768,6 +774,18 @@
       dot.style.setProperty("--dot-color", bg);
       dot.style.transform =
         `translate(-50%,-50%) scaleX(${sx.toFixed(3)}) scaleY(${sy.toFixed(3)})`;
+    }
+    // heat spectrum: reveal the fixed green->yellow->red gradient from the green
+    // center out to the bubble via clip-path, so it recesses to green as the
+    // note tunes in. Locked reveals the full green plateau (a satisfying nub).
+    for (const f of hbarFills) {
+      let clip;
+      if (idle) clip = "inset(0 50% 0 50% round 5px)";                       // hidden
+      else if (locked) clip = "inset(0 45.6% 0 45.6% round 5px)";            // green band lit
+      else if (left >= 50) clip = `inset(0 ${(100 - left).toFixed(1)}% 0 50% round 5px)`; // sharp
+      else clip = `inset(0 50% 0 ${left.toFixed(1)}% round 5px)`;            // flat
+      f.style.clipPath = clip;
+      f.style.webkitClipPath = clip;
     }
     for (const h of hbarEls) h.classList.toggle("locked", locked);
   }

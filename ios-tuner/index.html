@@ -26,6 +26,7 @@
     --green: #34c759;
     --red: #ff3b30;
     --orange: #ff9500;
+    --yellow: #ffcc00;
     --glass: rgba(255, 255, 255, 0.52);
     --glass-strong: rgba(255, 255, 255, 0.68);
     --glass-edge: rgba(255, 255, 255, 0.75);
@@ -291,9 +292,17 @@
   /* inline picker (Manual): chromatic's note grid / violin-class string pills
      live directly on the main page — no modal sheet */
   .inline-picker { display: none; }
-  .inline-picker .section-label { margin: 5px 6px 3px; }
+  /* headroom so "Target Note" isn't squished against the tuner card above it
+     (the content column has ample empty space below the grid to absorb it) */
+  .inline-picker .section-label { margin: 16px 6px 3px; }
   .inline-picker .note-grid { padding: 6px; }
   .inline-picker .note-btn { padding: 8px 0; }
+  /* Target Note header is a row: label left, reference-tone speaker trailing
+     right — chromatic's speaker lives here because its right wing holds the
+     octave stepper (instruments keep their speaker in the wing) */
+  .picker-head { display: flex; align-items: center; justify-content: space-between; }
+  .picker-head .tone-btn { width: 28px; height: 28px; }
+  .picker-head .tone-btn svg { width: 17px; height: auto; }
 
   /* wing capsules — compact raised-glass A4 / octave accordions flanking the
      mic (photos-pip / flip-camera positions). Collapsed: tiny label + live
@@ -511,14 +520,39 @@
   .hbar { position: relative; height: 24px; }
   .hbar-flat, .hbar-sharp {
     position: absolute; top: 50%; transform: translateY(-50%);
-    font-size: 14px; font-weight: 600; color: var(--label-3);
+    font-size: 15px; font-weight: 700; color: var(--label-2);
     line-height: 1;
   }
   .hbar-flat { left: -18px; }
   .hbar-sharp { right: -18px; }
   .hbar-track {
-    position: absolute; top: 50%; left: 0; right: 0; height: 8px;
-    transform: translateY(-50%); border-radius: 4px; background: rgba(60,60,67,0.16);
+    position: absolute; top: 50%; left: 0; right: 0; height: 9px;
+    transform: translateY(-50%); border-radius: 5px; background: rgba(60,60,67,0.14);
+    box-shadow:
+      inset 0 1px 2px rgba(50,55,75,0.30),   /* recessed groove depth */
+      inset 0 -1px 0 rgba(255,255,255,0.6);   /* glassy bottom lip */
+  }
+  /* reactive heat spectrum: a fixed green->yellow->red gradient, mirrored
+     around the green center; stops map to bar position (50% = 0 cents, edges =
+     +/-50 cents): green plateau through +/-5 (in-tune), yellow at +/-20, red at
+     the extremes. setHBar reveals only center->bubble via clip-path, so the
+     spectrum expands out through yellow/red when off and recesses back to a
+     green nub as the note is tuned in */
+  .hbar-fill {
+    position: absolute; top: 50%; left: 0; right: 0; height: 9px;
+    transform: translateY(-50%); border-radius: 5px;
+    background: linear-gradient(90deg,
+      var(--red)    6%,
+      var(--yellow) 32.4%,
+      var(--green)  45.6%,
+      var(--green)  54.4%,
+      var(--yellow) 67.6%,
+      var(--red)    94%);
+    opacity: 0.62;
+    pointer-events: none;
+    -webkit-clip-path: inset(0 50% 0 50% round 5px);
+    clip-path: inset(0 50% 0 50% round 5px); /* hidden until setHBar reveals it */
+    transition: clip-path 0.09s ease-out, -webkit-clip-path 0.09s ease-out, opacity 0.2s;
   }
   /* the center target 'well' the bubble falls into — breathes softly to invite,
      goes solid green when locked */
@@ -937,6 +971,7 @@
             <span class="hbar-flat">&#9837;</span>
             <div class="hbar-bloom"></div>
             <div class="hbar-track"></div>
+            <div class="hbar-fill"></div>
             <div class="hbar-zone"></div>
             <div class="hbar-center"></div>
             <div class="hbar-ring"></div>
@@ -958,6 +993,7 @@
           <span class="hbar-flat">&#9837;</span>
           <div class="hbar-bloom"></div>
           <div class="hbar-track"></div>
+          <div class="hbar-fill"></div>
           <div class="hbar-zone"></div>
           <div class="hbar-center"></div>
           <div class="hbar-ring"></div>
@@ -970,7 +1006,7 @@
       <!-- manual pickers, inline: chromatic gets the note grid; violin-class
            instruments get their string pills (guitar picks on the headstock) -->
       <div class="inline-picker" id="inlinePicker">
-        <div class="section-label" id="pickerLabel">Target Note</div>
+        <div class="section-label picker-head" id="pickerLabel"><span id="pickerLabelText">Target Note</span></div>
         <div class="note-grid glass" id="noteGrid"></div>
         <div class="string-row glass" id="stringRow" style="display: none;"></div>
       </div>
