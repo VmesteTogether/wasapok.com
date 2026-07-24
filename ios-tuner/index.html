@@ -791,11 +791,13 @@
                micPulse 1.8s ease-in-out infinite;
   }
   .mic-btn.live:active { transform: translateX(-50%) scale(0.90); }
-  /* recessed material: constant top-inner shadow (pressed below the surface) +
-     a faint bottom rim light, plus the sonar ring pulsing outward */
+  /* recessed material (A) + energized glow (B): constant top-inner shadow
+     (pressed below the surface) + faint bottom rim light, PLUS a warm halo that
+     breathes — swelling and brightening in sync with the outward sonar ring —
+     so the button reads as clicked-and-held AND alive/recording */
   @keyframes micPulse {
-    0%, 100% { box-shadow: inset 0 3px 5px rgba(115,48,0,0.5), inset 0 -1px 1.5px rgba(255,255,255,0.22), 0 0 0 0 rgba(255,149,0,0.4); }
-    50%      { box-shadow: inset 0 3px 5px rgba(115,48,0,0.5), inset 0 -1px 1.5px rgba(255,255,255,0.22), 0 0 0 13px rgba(255,149,0,0); }
+    0%, 100% { box-shadow: inset 0 3px 5px rgba(115,48,0,0.5), inset 0 -1px 1.5px rgba(255,255,255,0.22), 0 0 15px 1px rgba(255,149,0,0.45), 0 0 0 0 rgba(255,149,0,0.45); }
+    50%      { box-shadow: inset 0 3px 5px rgba(115,48,0,0.5), inset 0 -1px 1.5px rgba(255,255,255,0.22), 0 0 24px 4px rgba(255,149,0,0.62), 0 0 0 13px rgba(255,149,0,0); }
   }
   /* one-shot engage dip: punch in, then settle to the held recess */
   @keyframes micDip {
@@ -923,6 +925,108 @@
   .dev-reset:hover { color: var(--label); box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 8px 22px rgba(50,55,75,0.16); }
   .dev-reset:active { transform: translateY(-50%) scale(0.9); }
   .dev-reset svg { display: block; }
+
+  /* ===== dev-only: grounding-option compare toggle =====================
+     Pebble buttons (1 soft seat / 2 glass tray / 3 unified panel) stacked
+     under the reset; each applies a body.opt-N class. Temporary — remove the
+     toggle + the three treatments once an option is chosen. */
+  .opt-toggle {
+    position: fixed;
+    top: calc(50% + 40px);
+    right: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 200;
+  }
+  .opt-toggle button {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    color: var(--label-2);
+    font-family: inherit;
+    font-size: 15px; font-weight: 700;
+    background: rgba(255, 255, 255, 0.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 18px rgba(50,55,75,0.12);
+    cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.32,0.72,0,1), color 0.15s, background 0.15s;
+  }
+  .opt-toggle button.active {
+    background: var(--blue);
+    color: #fff;
+    border-color: rgba(255,255,255,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 6px 16px rgba(0,122,255,0.35);
+  }
+  .opt-toggle button:active { transform: scale(0.9); }
+
+  /* Option 0 — original baseline: the note wheel + tuner bar exactly as they
+     were before this pass — thin flat grey track (no groove), faint ♭/♯, no
+     heat spectrum — at the original top-packed position, no grounding. A
+     "before" reference to judge the rest against. */
+  body.opt-0 #tunerStrip { margin: 12px 0 0; }
+  body.opt-0 .hbar-track {
+    height: 8px; border-radius: 4px;
+    background: rgba(60,60,67,0.16); box-shadow: none;
+  }
+  body.opt-0 .hbar-flat, body.opt-0 .hbar-sharp {
+    font-size: 14px; font-weight: 600; color: var(--label-3);
+  }
+  body.opt-0 .hbar-fill { display: none; }
+
+  /* Option 1 — soft "seat": a subtle radial shadow-cushion behind the strip so
+     it isn't floating in bare space (lightest touch) */
+  body.opt-1 #tunerStrip {
+    padding: 14px 12px;
+    border-radius: 26px;
+    background: radial-gradient(115% 92% at 50% 46%, rgba(58,62,82,0.13), rgba(58,62,82,0.05) 55%, transparent 78%);
+  }
+  /* Option 2 — Liquid Glass tray: the readout gets its own glass panel (parity
+     with the headstock card) + a soft shadow to lift it */
+  body.opt-2 #tunerStrip {
+    padding: 14px 16px;
+    border-radius: 24px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.28));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.04);
+    backdrop-filter: blur(20px) saturate(1.8) brightness(1.04);
+    border: 1px solid rgba(255,255,255,0.6);
+    box-shadow:
+      inset 0 1px 0.5px rgba(255,255,255,0.9),
+      0 8px 24px rgba(50,55,75,0.14),
+      0 2px 6px rgba(50,55,75,0.08);
+  }
+  /* Option 3 — unified panel: the readout docks under the headstock as one
+     continuous glass console (headstock drops its bottom radius, strip its top) */
+  body.opt-3 #gaugeCard.hero-hs,
+  body.opt-4 #gaugeCard.hero-hs {
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    border-bottom: none;
+    /* drop the glass card's bottom inner-highlight (inset 0 -1px 0 ...) — that
+       1px line is the faint seam — so it flows straight into the strip; keep the
+       top sheen + soft lift */
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95),
+      0 10px 30px rgba(50,55,75,0.10), 0 2px 8px rgba(50,55,75,0.06);
+  }
+  body.opt-3 #tunerStrip,
+  body.opt-4 #tunerStrip {
+    margin: 0 0 auto;   /* dock directly under the headstock; free space drops below */
+    padding: 12px 16px 14px;
+    border-radius: 0 0 24px 24px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.28));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.04);
+    backdrop-filter: blur(20px) saturate(1.8) brightness(1.04);
+    border: 1px solid rgba(255,255,255,0.6);
+    border-top: none;
+    box-shadow: 0 10px 26px rgba(50,55,75,0.14), 0 2px 6px rgba(50,55,75,0.08);
+  }
+  /* Option 4 = Option 3, but the fretboard dissolves into the glass at the very
+     bottom (soft mask fade) instead of the hard clip line */
+  body.opt-4 #headstock {
+    -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+  }
 
   /* home indicator */
   .home-indicator {
@@ -1101,6 +1205,33 @@
   </svg>
 </button>
 
+<!-- dev-only: grounding-option compare toggle (1 soft seat / 2 glass tray / 3 unified) -->
+<div class="opt-toggle" id="optToggle">
+  <button type="button" data-opt="0" aria-label="Original UI (no add-ons)">0</button>
+  <button type="button" data-opt="1" aria-label="Grounding option 1">1</button>
+  <button type="button" data-opt="2" aria-label="Grounding option 2">2</button>
+  <button type="button" data-opt="3" aria-label="Grounding option 3">3</button>
+  <button type="button" data-opt="4" aria-label="Grounding option 4">4</button>
+</div>
+
 <script src="tuner.js"></script>
+<script>
+  // dev-only: switch the strip grounding option; persisted so it survives the
+  // dev-reset reload. Remove alongside .opt-toggle / body.opt-* once chosen.
+  (() => {
+    const KEY = "tuner-ground-opt";
+    const btns = [...document.querySelectorAll("#optToggle button")];
+    const apply = (opt) => {
+      document.body.classList.remove("opt-0", "opt-1", "opt-2", "opt-3", "opt-4");
+      document.body.classList.add("opt-" + opt);
+      btns.forEach((b) => b.classList.toggle("active", b.dataset.opt === opt));
+      try { localStorage.setItem(KEY, opt); } catch {}
+    };
+    btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.opt)));
+    let saved = "1";
+    try { saved = localStorage.getItem(KEY) || "1"; } catch {}
+    apply(saved);
+  })();
+</script>
 </body>
 </html>
