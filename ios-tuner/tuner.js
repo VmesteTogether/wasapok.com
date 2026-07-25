@@ -415,7 +415,7 @@
       <circle cx="${cx}" cy="202" r="1.2" fill="${P.screw}"/>
       <circle cx="${cx}" cy="257" r="1.2" fill="${P.screw}"/>`;
 
-    let s = `<svg viewBox="0 0 ${cx * 2} 350" xmlns="http://www.w3.org/2000/svg">
+    let s = `<svg viewBox="0 0 ${cx * 2} 420" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="glassPlate" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="rgba(255,255,255,0.8)"/>
@@ -446,8 +446,12 @@
 
     // fretboard: straight-sided — a real neck's widening is imperceptible
     // over a few frets, so any visible taper reads as an error
-    s += `<rect x="${cx - 32}" y="268" width="64" height="82" fill="${P.board}"/>`;
-    for (const fy of [292, 312]) {
+    s += `<rect x="${cx - 32}" y="268" width="64" height="150" fill="${P.board}"/>`;
+    // frets compress as they descend; extras past the short view are clipped in
+    // the base layout and revealed by the extended (Option 4) neck
+    const frets = [];
+    for (let fy = 292, gap = 20; fy < 416; fy += gap, gap = Math.max(11, gap - 1.6)) frets.push(fy);
+    for (const fy of frets) {
       s += `<line x1="${cx - 32}" y1="${fy}" x2="${cx + 32}" y2="${fy}" stroke="${P.fretShadow}" stroke-width="2"/>`;
       s += `<line x1="${cx - 32}" y1="${fy - 0.7}" x2="${cx + 32}" y2="${fy - 0.7}" stroke="url(#pegMetal)" stroke-width="1.1"/>`;
     }
@@ -479,7 +483,7 @@
     pegs.forEach((p, i) => {
       const w = (1.9 - (1.9 - 0.9) * (i / (n - 1))).toFixed(2);
       s += `<line class="string str-${i}" x1="${p.nutX}" y1="262" x2="${p.postX}" y2="${p.y}" stroke-width="${w}"/>`;
-      s += `<line class="string str-${i}" x1="${p.nutX}" y1="271" x2="${p.nutX}" y2="350" stroke-width="${w}"/>`;
+      s += `<line class="string str-${i}" x1="${p.nutX}" y1="271" x2="${p.nutX}" y2="418" stroke-width="${w}"/>`;
     });
 
     // nut with string slots

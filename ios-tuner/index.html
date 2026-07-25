@@ -1021,11 +1021,15 @@
     border-top: none;
     box-shadow: 0 10px 26px rgba(50,55,75,0.14), 0 2px 6px rgba(50,55,75,0.08);
   }
-  /* Option 4 = Option 3, but the fretboard dissolves into the glass at the very
-     bottom (soft mask fade) instead of the hard clip line */
+  /* Option 4 = Option 3, but the neck GROWS down into the freed space: a taller
+     card reveals more fretboard (extra frets are drawn in the SVG, clipped away
+     in the other options), the tuner bar drops with it, and the board dissolves
+     into the glass at its new lower bottom via a fixed-height mask fade — so it
+     stays a "bottom edge" fade no matter how tall the card gets */
+  body.opt-4 #hsHero { height: 386px; }
   body.opt-4 #headstock {
-    -webkit-mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
-    mask-image: linear-gradient(to bottom, #000 80%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
+    mask-image: linear-gradient(to bottom, #000 calc(100% - 34px), transparent 100%);
   }
 
   /* home indicator */
