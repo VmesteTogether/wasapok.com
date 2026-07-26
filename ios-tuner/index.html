@@ -749,19 +749,23 @@
     40%  { transform: translate(-50%,-50%) scale(1.55); }
     100% { transform: translate(-50%,-50%) scale(1); }
   }
-  /* Option 1 (fixed / tool): fixed-width capsule + circular indicator slot —
-     chevron inside for variant families, empty ring for Chromatic */
-  body.caropt-1 .car-ind {
+  /* circular indicator slot at the capsule's right — chevron inside for variant
+     families, hidden entirely for Chromatic */
+  .car-ind {
     width: 18px; height: 18px;
     border-radius: 50%;
     background: rgba(120,120,128,0.14);
     border: 1px solid rgba(255,255,255,0.55);
     box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.7);
   }
-  /* Option 2 (breathing / fluid): JS sizes the capsule to hug the label; a bare
-     chevron rides just past the text (Chromatic shows no indicator — see above) */
 
-  /* dev-only: capsule A/B toggle (1 fixed / 2 breathing) — pebble buttons */
+  /* dev-only: compressing option pulls the edge-fade in so the bunched outer
+     labels show more (current/uniform keeps the wider 10% fade) */
+  body.carcomp .inst-carousel {
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
+  }
+  /* dev-only: A/B toggle — 1 = current (uniform), 1c = compressing + less fade */
   .opt-toggle {
     position: fixed;
     top: calc(50% + 40px);
@@ -776,7 +780,7 @@
     border-radius: 50%;
     color: var(--label-2);
     font-family: inherit;
-    font-size: 15px; font-weight: 700;
+    font-size: 14px; font-weight: 700;
     background: rgba(255, 255, 255, 0.5);
     -webkit-backdrop-filter: blur(20px) saturate(1.8);
     backdrop-filter: blur(20px) saturate(1.8);
@@ -1236,32 +1240,29 @@
   </svg>
 </button>
 
-<!-- dev-only: capsule test — 1/2 = fixed/breathing (flat), 1a/2a = + subtle drum -->
+<!-- dev-only: carousel A/B — 1 = current (uniform), 1c = compressing + less fade -->
 <div class="opt-toggle" id="optToggle">
-  <button type="button" data-caropt="1" aria-label="Fixed (flat)">1</button>
-  <button type="button" data-caropt="1a" aria-label="Fixed + subtle drum">1a</button>
-  <button type="button" data-caropt="2" aria-label="Breathing (flat)">2</button>
-  <button type="button" data-caropt="2a" aria-label="Breathing + subtle drum">2a</button>
+  <button type="button" data-carcomp="0" aria-label="Current (uniform)">1</button>
+  <button type="button" data-carcomp="1" aria-label="Compressing + less fade">1c</button>
 </div>
 
 <script src="tuner.js"></script>
 <script>
-  // dev-only: switch the selection-capsule style. "1" fixed + circle-slot,
-  // "2" breathing + snug chevron. Persisted; remove with .opt-toggle + the
-  // body.caropt-* rules once the width is chosen.
+  // dev-only: toggle the compressing carousel layout (vs the current uniform one).
+  // Persisted; remove with .opt-toggle + body.carcomp once a version is chosen.
   (() => {
-    const KEY = "tuner-caropt";
+    const KEY = "tuner-carcomp";
     const btns = [...document.querySelectorAll("#optToggle button")];
-    const apply = (opt) => {
-      document.body.classList.remove("caropt-1", "caropt-2");
-      document.body.classList.add("caropt-" + opt[0]); // "1a"/"2a" reuse caropt-1/2
-      btns.forEach((b) => b.classList.toggle("active", b.dataset.caropt === opt));
-      try { localStorage.setItem(KEY, opt); } catch {}
-      if (window.__carSetOption) window.__carSetOption(opt); // swap geometry + re-layout
+    const apply = (v) => {
+      const on = v === "1";
+      document.body.classList.toggle("carcomp", on);
+      btns.forEach((b) => b.classList.toggle("active", b.dataset.carcomp === v));
+      try { localStorage.setItem(KEY, v); } catch {}
+      if (window.__carSetComp) window.__carSetComp(on);
     };
-    btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.caropt)));
-    let saved = "1";
-    try { saved = localStorage.getItem(KEY) || "1"; } catch {}
+    btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.carcomp)));
+    let saved = "0";
+    try { saved = localStorage.getItem(KEY) || "0"; } catch {}
     apply(saved);
   })();
 </script>

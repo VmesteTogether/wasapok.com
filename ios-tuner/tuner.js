@@ -192,26 +192,25 @@
     return el;
   });
 
-  // item centers — two geometries swapped by option: FLUID (variable width + gap,
-  // Camera-style, for the breathing capsule) and FIXED (uniform pitch, only JUST
-  // wide enough that the fixed capsule clears its neighbours — so the immediate
-  // neighbours still show and it keeps reading as a swipeable row). Capsule width
-  // + pitch derive from the longest label, so nothing is wider than it needs.
-  let carCentersFluid, carCentersFixed, FIXED_CAP_W;
-  {
-    const GAP = 24;
+  // capsule width + item pitch derive from the longest label. Measured up front,
+  // then re-measured once the web font loads: the fallback font's metrics differ,
+  // so the first pass can be too narrow — which clipped MANDOLIN and crowded
+  // CHROMATIC against the capsule edges.
+  let FIXED_CAP_W;
+  function measureCarousel() {
     const longest = Math.max(...carItems.map((el) => el.offsetWidth));
-    FIXED_CAP_W = Math.round(longest + 22);   // fits the longest word + padding
-    const PITCH = Math.round(longest + 18);    // tightest pitch that still clears it
-    let acc = 0;
-    carCentersFluid = carItems.map((el) => {
-      const c = acc + el.offsetWidth / 2;
-      acc += el.offsetWidth + GAP;
-      return c;
-    });
-    carCentersFixed = carItems.map((el, i) => i * PITCH);
+    FIXED_CAP_W = Math.round(longest + 30);   // longest word + ~15px breathing room each side
+    const PITCH = Math.round(longest + 24);    // pitch that clears the capsule
+    carCenters = carItems.map((el, i) => i * PITCH);
   }
-  carCenters = carCentersFixed; // default option 1 (fixed); the toggle swaps it
+  measureCarousel();
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(() => {
+      measureCarousel();
+      carSel = -1; // force the capsule to resize to the corrected width
+      layoutCarousel(carCenters[familyOf(state.instrument)]);
+    });
+  }
 
   const carNearest = (x) => {
     let sel = 0, best = Infinity;
@@ -235,54 +234,50 @@
   // selection capsule (fixed glass window) + variant indicator at its right
   const carCapsule = document.getElementById("carCapsule");
   const carInd = document.getElementById("carInd");
-  const CAR_CAP_PAD = 28; // breathing capsule = centered label width + this
   let carSel = -1;
-  let carDrum = false; // subtle cylindrical curve — the "a" options
-  const DRUM_R = 220;  // radius: smaller = more dramatic curve
+  let carComp = false;     // "compressing" option: bunch the outer labels inward
+  const CAR_COMP_R = 170;       // compression radius — smaller = tighter bunching
+  const CAR_COMP_MIN_SCALE = 0.7; // gentle foreshorten floor (1 = no shrink); lower to clear overlaps
 
   function updateCarCapsule(sel) {
     const fam = FAMILIES[sel];
     if (!fam) return;
     carInd.classList.toggle("no-options", !fam.hasOptions);
-    // fluid (option 2): capsule hugs the centered label. fixed (option 1): the
-    // derived FIXED_CAP_W. Indicator rides the capsule's right edge either way.
-    const fluid = document.body.classList.contains("caropt-2");
-    const w = fluid ? carItems[sel].offsetWidth + CAR_CAP_PAD : FIXED_CAP_W;
-    carCapsule.style.width = w + "px";
-    carInd.style.left = `calc(50% + ${(w / 2 - (fluid ? 0 : 11)).toFixed(1)}px)`;
+    carCapsule.style.width = FIXED_CAP_W + "px";
+    carInd.style.left = `calc(50% + ${(FIXED_CAP_W / 2 - 11).toFixed(1)}px)`;
   }
-  // the option toggle sets geometry (fixed<->fluid, from opt[0]) + drum ("a")
-  window.__carSetOption = (opt) => {
-    carCenters = opt[0] === "2" ? carCentersFluid : carCentersFixed;
-    carDrum = opt.endsWith("a");
-    carSel = -1;
-    layoutCarousel(carCenters[familyOf(state.instrument)]);
-  };
-
   function layoutCarousel(x) {
     carX = x;
     const sel = carNearest(x);
     carItems.forEach((el, i) => {
       const dx = carCenters[i] - x;
       const a = Math.abs(dx);
-      if (carDrum) {
-        // gentle cylinder: labels compress (sin) + foreshorten (cos) off-center
-        const th = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, dx / DRUM_R));
-        const scale = Math.max(0, Math.cos(th));
-        el.style.transform =
-          `translate(calc(-50% + ${(DRUM_R * Math.sin(th)).toFixed(1)}px), -50%) scale(${scale.toFixed(3)})`;
-        el.style.opacity = (i === sel ? 1 : Math.max(0, scale)).toFixed(3);
-      } else {
-        el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
-        // neighbours stay legible (the edge-mask fades the outer labels)
-        el.style.opacity = (i === sel ? 1 : Math.max(0.28, 0.82 - a / 300)).toFixed(3);
+      // compressing option bunches outer labels toward center (sin, clamped so
+      // they never fold back) — reads more like a turning wheel. No scale.
+      let px = dx, scale = 1, op = i === sel ? 1 : Math.max(0.28, 0.82 - a / 300);
+      if (carComp) {
+        const th = Math.min(Math.PI / 2, a / CAR_COMP_R);
+        px = Math.sign(dx) * CAR_COMP_R * Math.sin(th);
+        // gentle foreshorten (floored) so wide labels (CHROMATIC/MANDOLIN) shrink
+        // just enough to not slide under their neighbours as they compress
+        scale = CAR_COMP_MIN_SCALE + (1 - CAR_COMP_MIN_SCALE) * Math.cos(th);
+        // fade to 0 toward the clamp so piled-up far labels don't accrue a grey mass
+        if (i !== sel) op = Math.max(0, Math.cos(th));
       }
+      el.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), -50%) scale(${scale.toFixed(3)})`;
+      el.style.opacity = op.toFixed(3);
       el.style.color = carColor(a);
       el.classList.toggle("sel", i === sel);
     });
     if (sel !== carSel) { carSel = sel; updateCarCapsule(sel); } // resize only on change
   }
   function carouselTo(i) { layoutCarousel(carCenters[i]); }
+  // dev toggle: switch the compressing layout on/off and re-lay-out
+  window.__carSetComp = (on) => {
+    carComp = on;
+    carSel = -1;
+    layoutCarousel(carCenters[familyOf(state.instrument)]);
+  };
 
   // i is a FAMILY index. Re-picking the current family just recenters; a new
   // family switches to its default variant (the hold-menu refines this later).
