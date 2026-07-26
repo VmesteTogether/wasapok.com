@@ -53,6 +53,25 @@
     { name: "Banjo", count: 5, strings: ["G4", "D3", "G3", "B3", "D4"], icon: "banjo" },
   ];
 
+  // ---------- instrument families (carousel groups) ----------
+  // The carousel shows ONE entry per family; string-count / tuning variants live
+  // behind it (surfaced later via a hold-menu). Selecting a family uses its
+  // default (first) variant. Chromatic is the only variant-less family.
+  const FAMILIES = [];
+  {
+    const byName = new Map();
+    INSTRUMENTS.forEach((inst, i) => {
+      let fam = byName.get(inst.name);
+      if (!fam) {
+        fam = { name: inst.name, icon: inst.icon, variants: [], hasOptions: inst.name !== "Chromatic" };
+        byName.set(inst.name, fam);
+        FAMILIES.push(fam);
+      }
+      fam.variants.push(i);
+    });
+  }
+  const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
+
   function parseNote(s) {
     const m = s.match(/^([A-G]#?)(\d)$/);
     return { noteIndex: NOTES.indexOf(m[1]), octave: +m[2] };
@@ -165,24 +184,34 @@
   let carCenters = [];
   let carX = 0; // item-space coordinate currently sitting at the container center
 
-  const carItems = INSTRUMENTS.map((inst) => {
+  const carItems = FAMILIES.map((fam) => {
     const el = document.createElement("span");
     el.className = "ci";
-    el.textContent = (inst.count ? `${inst.name} · ${inst.count}` : inst.name).toUpperCase();
+    el.textContent = fam.name.toUpperCase();
     instCarousel.appendChild(el);
     return el;
   });
 
-  // item centers from measured label widths — variable spacing like Camera
+  // item centers — two geometries swapped by option: FLUID (variable width + gap,
+  // Camera-style, for the breathing capsule) and FIXED (uniform pitch, only JUST
+  // wide enough that the fixed capsule clears its neighbours — so the immediate
+  // neighbours still show and it keeps reading as a swipeable row). Capsule width
+  // + pitch derive from the longest label, so nothing is wider than it needs.
+  let carCentersFluid, carCentersFixed, FIXED_CAP_W;
   {
     const GAP = 24;
+    const longest = Math.max(...carItems.map((el) => el.offsetWidth));
+    FIXED_CAP_W = Math.round(longest + 22);   // fits the longest word + padding
+    const PITCH = Math.round(longest + 18);    // tightest pitch that still clears it
     let acc = 0;
-    carCenters = carItems.map((el) => {
+    carCentersFluid = carItems.map((el) => {
       const c = acc + el.offsetWidth / 2;
       acc += el.offsetWidth + GAP;
       return c;
     });
+    carCentersFixed = carItems.map((el, i) => i * PITCH);
   }
+  carCenters = carCentersFixed; // default option 1 (fixed); the toggle swaps it
 
   const carNearest = (x) => {
     let sel = 0, best = Infinity;
@@ -193,35 +222,85 @@
     return sel;
   };
 
+  // grey far from center, warming to systemBlue as a label slides into the
+  // capsule window — interpolated by distance so only the most-centered label
+  // reaches full blue (no ambiguity when two straddle a wide fixed capsule)
+  const CAR_GREY = [99, 99, 106], CAR_BLUE = [0, 122, 255], CAR_BLUE_RANGE = 68;
+  function carColor(a) {
+    const t = Math.max(0, 1 - a / CAR_BLUE_RANGE);
+    const c = CAR_GREY.map((v, k) => Math.round(v + (CAR_BLUE[k] - v) * t));
+    return `rgb(${c[0]},${c[1]},${c[2]})`;
+  }
+
+  // selection capsule (fixed glass window) + variant indicator at its right
+  const carCapsule = document.getElementById("carCapsule");
+  const carInd = document.getElementById("carInd");
+  const CAR_CAP_PAD = 28; // breathing capsule = centered label width + this
+  let carSel = -1;
+
+  function updateCarCapsule(sel) {
+    const fam = FAMILIES[sel];
+    if (!fam) return;
+    carInd.classList.toggle("no-options", !fam.hasOptions);
+    // fluid (option 2): capsule hugs the centered label. fixed (option 1): the
+    // derived FIXED_CAP_W. Indicator rides the capsule's right edge either way.
+    const fluid = document.body.classList.contains("caropt-2");
+    const w = fluid ? carItems[sel].offsetWidth + CAR_CAP_PAD : FIXED_CAP_W;
+    carCapsule.style.width = w + "px";
+    carInd.style.left = `calc(50% + ${(w / 2 - (fluid ? 0 : 11)).toFixed(1)}px)`;
+  }
+  // the option toggle swaps geometry (fixed <-> fluid) and re-lays out
+  window.__carSetOption = (opt) => {
+    carCenters = opt === "2" ? carCentersFluid : carCentersFixed;
+    carSel = -1;
+    layoutCarousel(carCenters[familyOf(state.instrument)]);
+  };
+
   function layoutCarousel(x) {
     carX = x;
     const sel = carNearest(x);
     carItems.forEach((el, i) => {
       const dx = carCenters[i] - x;
-      el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
       const a = Math.abs(dx);
-      // keep neighbours clearly legible (the container edge-mask fades the
-      // outer labels), so the row reads as a swipeable list of instruments
-      // rather than a lone centered label
+      el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
+      // neighbours stay legible (the edge-mask fades the outer labels)
       el.style.opacity = (i === sel ? 1 : Math.max(0.28, 0.82 - a / 300)).toFixed(3);
+      el.style.color = carColor(a);
       el.classList.toggle("sel", i === sel);
     });
+    if (sel !== carSel) { carSel = sel; updateCarCapsule(sel); } // resize only on change
   }
   function carouselTo(i) { layoutCarousel(carCenters[i]); }
 
-  // re-center without the full instrument rebuild when nothing changed
+  // i is a FAMILY index. Re-picking the current family just recenters; a new
+  // family switches to its default variant (the hold-menu refines this later).
   function carouselPick(i) {
-    if (i === state.instrument) carouselTo(i);
-    else selectInstrument(i, true);
+    if (familyOf(state.instrument) === i) carouselTo(i);
+    else selectInstrument(FAMILIES[i].variants[0], true);
   }
 
-  let carDragging = false, carMoved = false, carStartX = 0, carStart = 0;
+  // stub for the tuning/variant menu (built next); flash the indicator so the
+  // tap/hold gesture is visibly registered for now
+  function openVariantMenu(fi) {
+    if (!FAMILIES[fi] || !FAMILIES[fi].hasOptions) return;
+    carInd.classList.remove("poke");
+    void carInd.offsetWidth; // restart the flash
+    carInd.classList.add("poke");
+  }
+
+  let carDragging = false, carMoved = false, carStartX = 0, carStart = 0, carHoldTimer = null, carHeldOpened = false;
   instCarousel.addEventListener("pointerdown", (e) => {
     carDragging = true;
     carMoved = false;
     carStartX = e.clientX;
     carStart = carX;
     instCarousel.setPointerCapture(e.pointerId);
+    // hold (no scrub) opens the current family's tuning menu
+    carHeldOpened = false;
+    clearTimeout(carHoldTimer);
+    carHoldTimer = setTimeout(() => {
+      if (!carMoved) { carHeldOpened = true; openVariantMenu(familyOf(state.instrument)); }
+    }, 480);
   });
   instCarousel.addEventListener("pointermove", (e) => {
     if (!carDragging) return;
@@ -229,6 +308,7 @@
     if (!carMoved && Math.abs(dx) > 5) {
       carMoved = true;
       instCarousel.classList.add("dragging");
+      clearTimeout(carHoldTimer);
     }
     if (carMoved) {
       const min = carCenters[0], max = carCenters[carCenters.length - 1];
@@ -238,25 +318,31 @@
   instCarousel.addEventListener("pointerup", (e) => {
     if (!carDragging) return;
     carDragging = false;
+    clearTimeout(carHoldTimer);
     instCarousel.classList.remove("dragging");
+    if (carHeldOpened) return; // the hold already opened the menu
     if (carMoved) {
       carouselPick(carNearest(carX)); // snap to nearest label
     } else {
-      // tap: pick the label nearest the tap point
+      // tap: a neighbour selects it; tapping the already-selected family opens
+      // its tuning menu
       const rect = instCarousel.getBoundingClientRect();
-      carouselPick(carNearest(carX + (e.clientX - rect.left - rect.width / 2) / phoneScale));
+      const fi = carNearest(carX + (e.clientX - rect.left - rect.width / 2) / phoneScale);
+      if (fi === familyOf(state.instrument) && FAMILIES[fi].hasOptions) openVariantMenu(fi);
+      else carouselPick(fi);
     }
   });
   instCarousel.addEventListener("pointercancel", () => {
     if (!carDragging) return;
     carDragging = false;
+    clearTimeout(carHoldTimer);
     instCarousel.classList.remove("dragging");
     if (carMoved) carouselPick(carNearest(carX));
   });
   instCarousel.addEventListener("wheel", (e) => {
     e.preventDefault();
     const dir = Math.sign(e.deltaY + e.deltaX);
-    if (dir) carouselPick(Math.max(0, Math.min(INSTRUMENTS.length - 1, state.instrument + dir)));
+    if (dir) carouselPick(Math.max(0, Math.min(FAMILIES.length - 1, familyOf(state.instrument) + dir)));
   }, { passive: false });
 
   // one-time "swipe me" hint: the first time the console appears (entering
@@ -276,7 +362,7 @@
       if (permScrim.classList.contains("show")) { setTimeout(run, 500); return; }
       peekDone = true;
       try { localStorage.setItem(PEEK_KEY, "1"); } catch {}
-      const center = carCenters[state.instrument];
+      const center = carCenters[familyOf(state.instrument)];
       // 26px < half the tightest label spacing, so the selection never re-snaps
       const target = Math.min(carCenters[carCenters.length - 1], center + 26);
       if (target === center) return; // selected sits at the far end — no room
@@ -673,7 +759,7 @@
     if (byUser) state.instrumentPicked = true;
     state.instrument = i;
     const inst = INSTRUMENTS[i];
-    carouselTo(i);
+    carouselTo(familyOf(i));
     const isGuitar = !!inst.strings && inst.icon === "guitar";
     noteGrid.style.display = inst.strings ? "none" : "";
     stringRow.style.display = inst.strings && !isGuitar ? "" : "none";

@@ -692,8 +692,8 @@
     touch-action: none;
     /* fade both edges so labels bleed off-screen instead of vanishing in mid-
        air — the "content continues, swipe me" cue from the Camera mode picker */
-    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 15%, #000 85%, transparent 100%);
-    mask-image: linear-gradient(to right, transparent 0, #000 15%, #000 85%, transparent 100%);
+    -webkit-mask-image: linear-gradient(to right, transparent 0, #000 10%, #000 90%, transparent 100%);
+    mask-image: linear-gradient(to right, transparent 0, #000 10%, #000 90%, transparent 100%);
   }
   .inst-carousel:active { cursor: grabbing; }
   .ci {
@@ -708,8 +708,90 @@
     -webkit-user-select: none;
     transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.32s, color 0.2s;
   }
-  .inst-carousel.dragging .ci { transition: color 0.2s; }
+  .inst-carousel.dragging .ci { transition: none; } /* colour tracks the finger */
   .ci.sel { color: var(--blue); }
+
+  /* --- selection capsule + variant indicator --------------------------- */
+  /* a glass "window" fixed at center that the labels scrub through; the centered
+     label sits crisp on top (capsule is behind the .ci items) */
+  .car-capsule {
+    position: absolute;
+    top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    height: 22px;
+    border-radius: 11px;
+    z-index: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.44), rgba(255,255,255,0.24));
+    -webkit-backdrop-filter: blur(12px) saturate(1.6);
+    backdrop-filter: blur(12px) saturate(1.6);
+    border: 1px solid rgba(255,255,255,0.55);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.85), 0 2px 6px rgba(50,55,75,0.10);
+    transition: width 0.28s cubic-bezier(0.32,0.72,0,1);
+    pointer-events: none;
+  }
+  .inst-carousel .ci { z-index: 1; }
+  /* up-chevron: "there's a tuning menu here". Rides the capsule's right edge —
+     fixed far-right in option 1, snug to the label in option 2 (JS sets left) */
+  .car-ind {
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    z-index: 2;
+    color: var(--blue);
+    display: flex; align-items: center; justify-content: center;
+    pointer-events: none;
+    transition: left 0.28s cubic-bezier(0.32,0.72,0,1);
+  }
+  .car-ind svg { display: block; transition: opacity 0.2s; }
+  .car-ind.no-options { display: none; } /* Chromatic: no indicator (no circle, no chevron) */
+  .car-ind.poke { animation: carPoke 0.32s ease; }
+  @keyframes carPoke {
+    40%  { transform: translate(-50%,-50%) scale(1.55); }
+    100% { transform: translate(-50%,-50%) scale(1); }
+  }
+  /* Option 1 (fixed / tool): fixed-width capsule + circular indicator slot —
+     chevron inside for variant families, empty ring for Chromatic */
+  body.caropt-1 .car-ind {
+    width: 18px; height: 18px;
+    border-radius: 50%;
+    background: rgba(120,120,128,0.14);
+    border: 1px solid rgba(255,255,255,0.55);
+    box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.7);
+  }
+  /* Option 2 (breathing / fluid): JS sizes the capsule to hug the label; a bare
+     chevron rides just past the text (Chromatic shows no indicator — see above) */
+
+  /* dev-only: capsule A/B toggle (1 fixed / 2 breathing) — pebble buttons */
+  .opt-toggle {
+    position: fixed;
+    top: calc(50% + 40px);
+    right: 30px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    z-index: 200;
+  }
+  .opt-toggle button {
+    width: 40px; height: 40px;
+    border-radius: 50%;
+    color: var(--label-2);
+    font-family: inherit;
+    font-size: 15px; font-weight: 700;
+    background: rgba(255, 255, 255, 0.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 18px rgba(50,55,75,0.12);
+    cursor: pointer;
+    transition: transform 0.15s cubic-bezier(0.32,0.72,0,1), color 0.15s, background 0.15s;
+  }
+  .opt-toggle button.active {
+    background: var(--blue);
+    color: #fff;
+    border-color: rgba(255,255,255,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 6px 16px rgba(0,122,255,0.35);
+  }
+  .opt-toggle button:active { transform: scale(0.9); }
 
   /* ---------- mic button (circular) ---------- */
   /* blue "tap to listen" bead that warms to orange while live; a caption below
@@ -1080,7 +1162,12 @@
          'shutter', A4 reference wing left, octave/tone wing right. Fixed
          height so the mic holds the same spot across every tuner -->
     <div class="mic-area">
-      <div class="inst-carousel" id="instCarousel"></div>
+      <div class="inst-carousel" id="instCarousel">
+        <div class="car-capsule" id="carCapsule"></div>
+        <div class="car-ind" id="carInd" aria-hidden="true">
+          <svg viewBox="0 0 12 8" width="11" height="8" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M1.5 6 L6 1.5 L10.5 6"/></svg>
+        </div>
+      </div>
       <div class="mic-row">
         <div class="wing left">
           <div class="mini-cap" id="miniRef" role="button" aria-label="Reference pitch">
@@ -1149,6 +1236,32 @@
   </svg>
 </button>
 
+<!-- dev-only: capsule width test — 1 = fixed (tool), 2 = breathing (fluid) -->
+<div class="opt-toggle" id="optToggle">
+  <button type="button" data-caropt="1" aria-label="Capsule: fixed (tool)">1</button>
+  <button type="button" data-caropt="2" aria-label="Capsule: breathing (fluid)">2</button>
+</div>
+
 <script src="tuner.js"></script>
+<script>
+  // dev-only: switch the selection-capsule style. "1" fixed + circle-slot,
+  // "2" breathing + snug chevron. Persisted; remove with .opt-toggle + the
+  // body.caropt-* rules once the width is chosen.
+  (() => {
+    const KEY = "tuner-caropt";
+    const btns = [...document.querySelectorAll("#optToggle button")];
+    const apply = (opt) => {
+      document.body.classList.remove("caropt-1", "caropt-2");
+      document.body.classList.add("caropt-" + opt);
+      btns.forEach((b) => b.classList.toggle("active", b.dataset.caropt === opt));
+      try { localStorage.setItem(KEY, opt); } catch {}
+      if (window.__carSetOption) window.__carSetOption(opt); // swap geometry + re-layout
+    };
+    btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.caropt)));
+    let saved = "1";
+    try { saved = localStorage.getItem(KEY) || "1"; } catch {}
+    apply(saved);
+  })();
+</script>
 </body>
 </html>
