@@ -237,6 +237,8 @@
   const carInd = document.getElementById("carInd");
   const CAR_CAP_PAD = 28; // breathing capsule = centered label width + this
   let carSel = -1;
+  let carDrum = false; // subtle cylindrical curve — the "a" options
+  const DRUM_R = 220;  // radius: smaller = more dramatic curve
 
   function updateCarCapsule(sel) {
     const fam = FAMILIES[sel];
@@ -249,9 +251,10 @@
     carCapsule.style.width = w + "px";
     carInd.style.left = `calc(50% + ${(w / 2 - (fluid ? 0 : 11)).toFixed(1)}px)`;
   }
-  // the option toggle swaps geometry (fixed <-> fluid) and re-lays out
+  // the option toggle sets geometry (fixed<->fluid, from opt[0]) + drum ("a")
   window.__carSetOption = (opt) => {
-    carCenters = opt === "2" ? carCentersFluid : carCentersFixed;
+    carCenters = opt[0] === "2" ? carCentersFluid : carCentersFixed;
+    carDrum = opt.endsWith("a");
     carSel = -1;
     layoutCarousel(carCenters[familyOf(state.instrument)]);
   };
@@ -262,9 +265,18 @@
     carItems.forEach((el, i) => {
       const dx = carCenters[i] - x;
       const a = Math.abs(dx);
-      el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
-      // neighbours stay legible (the edge-mask fades the outer labels)
-      el.style.opacity = (i === sel ? 1 : Math.max(0.28, 0.82 - a / 300)).toFixed(3);
+      if (carDrum) {
+        // gentle cylinder: labels compress (sin) + foreshorten (cos) off-center
+        const th = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, dx / DRUM_R));
+        const scale = Math.max(0, Math.cos(th));
+        el.style.transform =
+          `translate(calc(-50% + ${(DRUM_R * Math.sin(th)).toFixed(1)}px), -50%) scale(${scale.toFixed(3)})`;
+        el.style.opacity = (i === sel ? 1 : Math.max(0, scale)).toFixed(3);
+      } else {
+        el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%)`;
+        // neighbours stay legible (the edge-mask fades the outer labels)
+        el.style.opacity = (i === sel ? 1 : Math.max(0.28, 0.82 - a / 300)).toFixed(3);
+      }
       el.style.color = carColor(a);
       el.classList.toggle("sel", i === sel);
     });

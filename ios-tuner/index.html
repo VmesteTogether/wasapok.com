@@ -1236,10 +1236,12 @@
   </svg>
 </button>
 
-<!-- dev-only: capsule width test — 1 = fixed (tool), 2 = breathing (fluid) -->
+<!-- dev-only: capsule test — 1/2 = fixed/breathing (flat), 1a/2a = + subtle drum -->
 <div class="opt-toggle" id="optToggle">
-  <button type="button" data-caropt="1" aria-label="Capsule: fixed (tool)">1</button>
-  <button type="button" data-caropt="2" aria-label="Capsule: breathing (fluid)">2</button>
+  <button type="button" data-caropt="1" aria-label="Fixed (flat)">1</button>
+  <button type="button" data-caropt="1a" aria-label="Fixed + subtle drum">1a</button>
+  <button type="button" data-caropt="2" aria-label="Breathing (flat)">2</button>
+  <button type="button" data-caropt="2a" aria-label="Breathing + subtle drum">2a</button>
 </div>
 
 <script src="tuner.js"></script>
@@ -1252,7 +1254,7 @@
     const btns = [...document.querySelectorAll("#optToggle button")];
     const apply = (opt) => {
       document.body.classList.remove("caropt-1", "caropt-2");
-      document.body.classList.add("caropt-" + opt);
+      document.body.classList.add("caropt-" + opt[0]); // "1a"/"2a" reuse caropt-1/2
       btns.forEach((b) => b.classList.toggle("active", b.dataset.caropt === opt));
       try { localStorage.setItem(KEY, opt); } catch {}
       if (window.__carSetOption) window.__carSetOption(opt); // swap geometry + re-layout
