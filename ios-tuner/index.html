@@ -1012,6 +1012,68 @@
   .dev-reset:active { transform: translateY(-50%) scale(0.9); }
   .dev-reset svg { display: block; }
 
+  /* fill-screen toggle — blows the phone construction up to fill the viewport at
+     its exact 390x844 (iPhone 14/15) aspect ratio and drops the desktop bezel,
+     so the prototype reads as the real app running full-screen on a phone. The
+     preview frame is for desktop; this is the "just be the app" view for mobile.
+     Companion JS scales #phoneWrap by min(vw/390, vh/844) so every iOS placement
+     (island, status bar, home indicator) scales as one locked unit. */
+  .fit-toggle {
+    position: fixed;
+    top: calc(50% - 96px);   /* top of the right-hand dev rail (above reset) */
+    right: 30px;
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--label-2);
+    background: rgba(255, 255, 255, 0.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8);
+    backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.95),
+      inset 0 -1px 0 rgba(255,255,255,0.25),
+      0 6px 18px rgba(50,55,75,0.12),
+      0 2px 6px rgba(50,55,75,0.08);
+    cursor: pointer;
+    padding: 0;
+    z-index: 300;
+    transition: transform 0.15s cubic-bezier(0.32,0.72,0,1), color 0.15s, box-shadow 0.15s, opacity 0.2s;
+  }
+  .fit-toggle:hover { color: var(--label); box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 8px 22px rgba(50,55,75,0.16); }
+  .fit-toggle:active { transform: scale(0.9); }
+  .fit-toggle svg { display: block; }
+  .fit-toggle .ic-compress { display: none; }
+
+  /* ---- fill-screen ON ---- */
+  body.fs { background: #000; }              /* black behind any letterbox */
+  body.fs .phone {
+    border-radius: 0;                        /* edge-to-edge screen */
+    border: none;
+    box-shadow: none;                        /* drop the aluminium frame */
+  }
+  body.fs .dev-reset, body.fs .opt-toggle { display: none; }  /* hide the dev rail */
+  /* pin the construction to the viewport's top-left; the JS translate+scale
+     centers it deterministically (flex centering + a scale transform drifted) */
+  body.fs #phoneWrap { position: fixed; top: 0; left: 0; }
+  /* the toggle becomes an unobtrusive corner exit — bottom-right sits over the
+     empty home-indicator gutter, clear of the status bar + dynamic island */
+  body.fs .fit-toggle {
+    top: auto;
+    bottom: 16px;
+    right: 16px;
+    width: 36px;
+    height: 36px;
+    opacity: 0.5;
+  }
+  body.fs .fit-toggle:hover,
+  body.fs .fit-toggle:active { opacity: 1; }
+  body.fs .fit-toggle .ic-expand { display: none; }
+  body.fs .fit-toggle .ic-compress { display: block; }
+
   /* prominent tuner bar (locked in): a chunkier groove, a bigger bubble, bolder
      ♭/♯, and more air isolating it from the wheel + cents — overrides the base
      bar, applies in every mode */
@@ -1232,6 +1294,18 @@
   </div>
 </div>
 
+<!-- fill-screen toggle — expand the prototype to fill the viewport at the exact
+     iPhone aspect ratio (the mobile "just be the app" view); becomes a corner
+     exit once open. Icons: frame-corners out (expand) / in (compress). -->
+<button class="fit-toggle" id="fitToggle" aria-label="Fill the screen" title="Fill the screen — simulate the app full-screen">
+  <svg class="ic-expand" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 6 V2 H6 M16 6 V2 H12 M2 12 V16 H6 M16 12 V16 H12"/>
+  </svg>
+  <svg class="ic-compress" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M2 6 H6 V2 M16 6 H12 V2 M2 12 H6 V16 M16 12 H12 V16"/>
+  </svg>
+</button>
+
 <!-- dev-only: reset the simulation to its first-load state -->
 <button class="dev-reset" id="devReset" aria-label="Reset simulation" title="Reset to first launch">
   <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
@@ -1264,6 +1338,52 @@
     let saved = "0";
     try { saved = localStorage.getItem(KEY) || "0"; } catch {}
     apply(saved);
+  })();
+
+  // fill-screen: scale the whole phone construction to fill the viewport at its
+  // exact 390x844 aspect ratio (min(vw/390, vh/844) — never overflows, stays
+  // centered so any letterbox is even). Body.fs (in CSS) strips the desktop
+  // bezel; this just drives the scale + tries native fullscreen on tap.
+  (() => {
+    const AR_W = 390, AR_H = 844, KEY = "tuner-fillscreen";
+    const wrap = document.getElementById("phoneWrap");
+    const btn = document.getElementById("fitToggle");
+
+    const fit = () => {
+      if (!document.body.classList.contains("fs")) { wrap.style.transform = ""; return; }
+      const vv = window.visualViewport;
+      const vw = vv ? vv.width : window.innerWidth;
+      const vh = vv ? vv.height : window.innerHeight;
+      const s = Math.min(vw / AR_W, vh / AR_H);
+      // translate (in px, from the layout box's top-left at 0,0) so the scaled
+      // box lands dead-centre — any leftover margin is even letterbox
+      wrap.style.transform = "translate(" + (vw - AR_W) / 2 + "px, " + (vh - AR_H) / 2 + "px) scale(" + s + ")";
+    };
+
+    const setFS = (on, { native = false, persist = true } = {}) => {
+      document.body.classList.toggle("fs", on);
+      btn.setAttribute("aria-label", on ? "Exit full screen" : "Fill the screen");
+      fit();
+      if (persist) { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} }
+      // best-effort real fullscreen (hides browser chrome where supported —
+      // Android Chrome etc.; iOS Safari ignores it, the scale still fills)
+      if (native) {
+        try {
+          const el = document.documentElement;
+          if (on && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+          else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+        } catch {}
+      }
+    };
+
+    btn.addEventListener("click", () => setFS(!document.body.classList.contains("fs"), { native: true }));
+    addEventListener("resize", fit);
+    addEventListener("orientationchange", fit);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
+
+    let saved = "0";
+    try { saved = localStorage.getItem(KEY) || "0"; } catch {}
+    if (saved === "1") setFS(true, { persist: false });
   })();
 </script>
 </body>
