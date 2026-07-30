@@ -51,6 +51,10 @@
     { name: "Cello", count: 4, strings: ["C2", "G2", "D3", "A3"], icon: "cello" },
     { name: "Mandolin", count: 4, strings: ["G3", "D4", "A4", "E5"], icon: "mandolin" },
     { name: "Banjo", count: 5, strings: ["G4", "D3", "G3", "B3", "D4"], icon: "banjo" },
+    // custom-tuning slot — the "+" on the wheel. Defaults to a guitar shape/tuning;
+    // later the shape (and string count) becomes swipeable and each note in the
+    // string wheel long-press-editable. Appended so existing indices don't shift.
+    { name: "Custom", count: 6, strings: ["E2", "A2", "D3", "G3", "B3", "E4"], icon: "guitar", custom: true },
   ];
 
   // ---------- instrument families (carousel groups) ----------
@@ -69,6 +73,18 @@
       }
       fam.variants.push(i);
     });
+  }
+  // seat the Custom family (the "+" entry) between Chromatic and Guitar — a light
+  // glyph on the left instead of the long "CHROMATIC" word, and a natural home
+  // next to Chromatic for the freeform/utility modes. No variant chevron.
+  {
+    const ci = FAMILIES.findIndex((f) => f.name === "Custom");
+    if (ci > 1) {
+      const [cf] = FAMILIES.splice(ci, 1);
+      cf.hasOptions = false;
+      cf.custom = true;
+      FAMILIES.splice(1, 0, cf);
+    }
   }
   const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
 
@@ -187,7 +203,8 @@
   const carItems = FAMILIES.map((fam) => {
     const el = document.createElement("span");
     el.className = "ci";
-    el.textContent = fam.name.toUpperCase();
+    if (fam.custom) { el.classList.add("ci-add"); el.textContent = "+"; } // the "+" action chip
+    else el.textContent = fam.name.toUpperCase();
     instCarousel.appendChild(el);
     return el;
   });
@@ -235,9 +252,12 @@
   const carCapsule = document.getElementById("carCapsule");
   const carInd = document.getElementById("carInd");
   let carSel = -1;
-  let carComp = false;     // "compressing" option: bunch the outer labels inward
+  let carMode = "off";     // carousel option: "off" | "flat" (pre-drum compress) | "drum" (3D)
   const CAR_COMP_R = 170;       // compression radius — smaller = tighter bunching
   const CAR_COMP_MIN_SCALE = 0.7; // gentle foreshorten floor (1 = no shrink); lower to clear overlaps
+  const CAR_ARC = 20;           // px the outer labels dip below center — the visible curve
+  const CAR_ROT_GAIN = 0.9;     // how hard edge labels turn away in 3D (0 = flat, 1 = full drum angle)
+  const CAR_DEPTH = 80;         // px the outer labels recede into the screen (perspective bite)
 
   function updateCarCapsule(sel) {
     const fam = FAMILIES[sel];
@@ -252,19 +272,34 @@
     carItems.forEach((el, i) => {
       const dx = carCenters[i] - x;
       const a = Math.abs(dx);
-      // compressing option bunches outer labels toward center (sin, clamped so
-      // they never fold back) — reads more like a turning wheel. No scale.
-      let px = dx, scale = 1, op = i === sel ? 1 : Math.max(0.28, 0.82 - a / 300);
-      if (carComp) {
+      // both compressing options bunch the outer labels toward center (sin,
+      // clamped so they never fold back) + gently foreshorten. "drum" (1c)
+      // additionally curves them DOWN at the edges (1-cos arc), recedes them
+      // (translateZ), and turns them away in real 3D (rotateY under the
+      // container's perspective). "flat" (1ca) is the pre-drum compress —
+      // bunch + foreshorten only, no 3D.
+      let px = dx, py = 0, pz = 0, rotY = 0, scale = 1;
+      let op = i === sel ? 1 : Math.max(0.28, 0.82 - a / 300);
+      if (carMode !== "off") {
         const th = Math.min(Math.PI / 2, a / CAR_COMP_R);
-        px = Math.sign(dx) * CAR_COMP_R * Math.sin(th);
+        const sgn = Math.sign(dx);
+        px = sgn * CAR_COMP_R * Math.sin(th);
         // gentle foreshorten (floored) so wide labels (CHROMATIC/MANDOLIN) shrink
         // just enough to not slide under their neighbours as they compress
         scale = CAR_COMP_MIN_SCALE + (1 - CAR_COMP_MIN_SCALE) * Math.cos(th);
         // fade to 0 toward the clamp so piled-up far labels don't accrue a grey mass
         if (i !== sel) op = Math.max(0, Math.cos(th));
+        if (carMode === "drum") {
+          py = CAR_ARC * (1 - Math.cos(th));                 // dip below the centre line
+          pz = -CAR_DEPTH * (1 - Math.cos(th));              // recede into the screen at the rim
+          rotY = sgn * (th * 180 / Math.PI) * CAR_ROT_GAIN;  // convex: each label's outer edge recedes
+        }
       }
-      el.style.transform = `translate(calc(-50% + ${px.toFixed(1)}px), -50%) scale(${scale.toFixed(3)})`;
+      // -50%,-50% centres the label; the drum offset/depth/rotation/scale then
+      // act about that centre (translateZ + rotateY need the container's
+      // perspective to render as real 3D)
+      el.style.transform =
+        `translate(-50%, -50%) translate3d(${px.toFixed(1)}px, ${py.toFixed(1)}px, ${pz.toFixed(1)}px) rotateY(${rotY.toFixed(1)}deg) scale(${scale.toFixed(3)})`;
       el.style.opacity = op.toFixed(3);
       el.style.color = carColor(a);
       el.classList.toggle("sel", i === sel);
@@ -272,9 +307,9 @@
     if (sel !== carSel) { carSel = sel; updateCarCapsule(sel); } // resize only on change
   }
   function carouselTo(i) { layoutCarousel(carCenters[i]); }
-  // dev toggle: switch the compressing layout on/off and re-lay-out
-  window.__carSetComp = (on) => {
-    carComp = on;
+  // dev toggle: switch the carousel layout ("off" | "flat" | "drum") and re-lay-out
+  window.__carSetComp = (mode) => {
+    carMode = mode || "off";
     carSel = -1;
     layoutCarousel(carCenters[familyOf(state.instrument)]);
   };
@@ -386,67 +421,125 @@
   const headstock = document.getElementById("headstock");
   let pegEls = []; // { g, line, noteIndex, octave }
 
+  // guitar + bass both make the headstock the Manual-mode hero (the pegs ARE the
+  // string picker); other strings fall back to inline pills in the sheet.
+  const usesHeadstock = (inst) =>
+    !!inst.strings && (inst.icon === "guitar" || inst.icon === "bass");
+
   function buildHeadstock(inst) {
     const cx = 110;
     const n = inst.strings.length;
-    const leftCount = Math.ceil(n / 2);
-    const rightCount = n - leftCount;
+    const bass = inst.icon === "bass";
 
-    // evenly spaced string slots across the nut (low → high, left → right)
-    const nutHalf = 26;
-    const slotX = (i) => +(cx - nutHalf + nutHalf * 2 * (i / (n - 1))).toFixed(1);
+    // ---- peg positions + plate silhouette. Guitar is a Gibson open-book
+    // (split 3/3); bass is a Fender-style in-line — all tuners down the left,
+    // posts staggered from the tip (lowest string, farthest) to the nut, drawn
+    // from the reference mockup. Each peg carries its own plate-edge anchor
+    // (edgeX) and note-label placement so the render tail below is shared. ----
+    let pegs, plate;
 
-    // tuner rows per side (top → bottom), centered on the plate midline
-    const rows = (count) => Array.from({ length: count },
-      (_, k) => +(129.5 + (k - (count - 1) / 2) * (count === 3 ? 52.5 : 41)).toFixed(1));
-    const leftRows = rows(leftCount);
-    const rightRows = rows(rightCount);
+    if (bass) {
+      const nutHalf = 18; // narrower string spread — a bass shows fewer strings on a thinner neck
+      const slotX = (i) => +(cx + nutHalf - nutHalf * 2 * (i / (n - 1))).toFixed(1);
+      // posts sit on ONE straight diagonal (Fender in-line). The tuner-side plate
+      // edge runs PARALLEL to this line 16px out; each key is laid out
+      // horizontally then rotated to the line's normal (rot) so the whole
+      // assembly rests on a parallel diagonal, tilted toward the headstock.
+      const postX = (i) => +(cx + 10 - (36 / (n - 1)) * i).toFixed(1);
+      const postY = (i) => +(88 + (142 / (n - 1)) * i).toFixed(1);
+      const rot = +(Math.atan2(postX(0) - postX(n - 1), postY(n - 1) - postY(0)) * 180 / Math.PI).toFixed(2);
+      // right-handed stringing (like the guitar): the path index runs tip→nut
+      // (i=0 farthest post, right side; i=n-1 nearest the nut, left side), so
+      // assign notes in REVERSE — the LOW string (thick E) lands on the near-nut
+      // LEFT path and they thicken leftward. The thickness reversal lives in the
+      // string-width formula below.
+      pegs = inst.strings.map((_str, i) => {
+        const { noteIndex, octave } = parseNote(inst.strings[n - 1 - i]);
+        const px = postX(i), y = postY(i);
+        return {
+          noteIndex, octave, side: -1, rot,
+          nutX: slotX(i), postX: px, btnX: +(px - 42).toFixed(1), y, edgeX: +(px - 16).toFixed(1),
+          name: NOTES[noteIndex].replace("#", "♯"),
+          labelX: +(px + 13).toFixed(1), labelY: +(y + 3.8).toFixed(1), labelAnchor: "start",
+        };
+      });
 
-    // Gibson convention: bass strings climb the left side (lowest string on the
-    // tuner nearest the nut), trebles mirror on the right — D/G at the horns
-    const pegs = inst.strings.map((s, i) => {
-      const { noteIndex, octave } = parseNote(s);
-      const left = i < leftCount;
-      return {
-        noteIndex, octave,
-        side: left ? -1 : 1,
-        nutX: slotX(i),
-        postX: left ? cx - 29 : cx + 29,
-        btnX: left ? cx - 88 : cx + 88,
-        y: left ? leftRows[leftCount - 1 - i] : rightRows[i - leftCount],
-        name: NOTES[noteIndex].replace("#", "♯"),
-      };
-    });
+      // elongated Fender paddle: the tuner-side (left) edge is a STRAIGHT
+      // diagonal running parallel to the post line; the bass-side (right) edge
+      // is the signature profile — a mild upper bout easing into a concave
+      // "wave" waist, then a FULLER lower bout, then a scoop into the neck —
+      // under a soft-rounded asymmetric crown
+      plate = `M ${cx - 23} 264
+        C ${cx - 34} 258 ${cx - 45} 248 ${cx - 45} 234
+        L ${cx - 4} 72
+        C ${cx} 55 ${cx + 10} 41 ${cx + 24} 37
+        C ${cx + 39} 33 ${cx + 51} 44 ${cx + 56} 62
+        C ${cx + 60} 78 ${cx + 58} 97 ${cx + 54} 116
+        C ${cx + 50} 134 ${cx + 41} 145 ${cx + 41} 158
+        C ${cx + 41} 176 ${cx + 61} 191 ${cx + 66} 209
+        C ${cx + 69} 227 ${cx + 56} 250 ${cx + 39} 258
+        C ${cx + 33} 261 ${cx + 28} 263 ${cx + 23} 264 Z`;
+    } else {
+      const leftCount = Math.ceil(n / 2);
+      const rightCount = n - leftCount;
 
-    // plate half-width at a given y — lands the tuner stems on the edge
-    // (biased slightly narrow so stems tuck under the plate, never float)
-    const halfW = (y) => 66 - Math.max(0, y - 60) * 0.115;
+      // evenly spaced string slots across the nut (low → high, left → right)
+      const nutHalf = 26;
+      const slotX = (i) => +(cx - nutHalf + nutHalf * 2 * (i / (n - 1))).toFixed(1);
 
-    // open-book silhouette: sharp twin peaks, crisp V-dip, hard outer corners;
-    // each side tapers and flows tangent-smooth into a concave scoop that
-    // flares to an outward-pointing wing tip (slightly rounded), then a second
-    // concave scoop curls back into the narrow neck — per the reference mockup
-    const plate = `M ${cx - 33} 264
-      C ${cx - 35} 255 ${cx - 41} 247 ${cx - 57} 243.5
-      C ${cx - 59} 243 ${cx - 59} 241 ${cx - 57.5} 239.5
-      C ${cx - 52} 234 ${cx - 48.2} 227 ${cx - 49} 218
-      C ${cx - 51} 195 ${cx - 62} 115 ${cx - 66} 60
-      C ${cx - 67} 46 ${cx - 67} 34 ${cx - 64} 24
-      C ${cx - 58} 19 ${cx - 44} 14 ${cx - 36} 10
-      C ${cx - 28} 14 ${cx - 13} 20 ${cx} 26
-      C ${cx + 13} 20 ${cx + 28} 14 ${cx + 36} 10
-      C ${cx + 44} 14 ${cx + 58} 19 ${cx + 64} 24
-      C ${cx + 67} 34 ${cx + 67} 46 ${cx + 66} 60
-      C ${cx + 62} 115 ${cx + 51} 195 ${cx + 49} 218
-      C ${cx + 48.2} 227 ${cx + 52} 234 ${cx + 57.5} 239.5
-      C ${cx + 59} 241 ${cx + 59} 243 ${cx + 57} 243.5
-      C ${cx + 41} 247 ${cx + 35} 255 ${cx + 33} 264 Z`;
+      // tuner rows per side (top → bottom), centered on the plate midline
+      const rows = (count) => Array.from({ length: count },
+        (_, k) => +(129.5 + (k - (count - 1) / 2) * (count === 3 ? 52.5 : 41)).toFixed(1));
+      const leftRows = rows(leftCount);
+      const rightRows = rows(rightCount);
+      // plate half-width at a given y — lands the tuner stems on the edge
+      // (biased slightly narrow so stems tuck under the plate, never float)
+      const halfW = (y) => 66 - Math.max(0, y - 60) * 0.115;
+
+      // Gibson convention: bass strings climb the left side (lowest string on the
+      // tuner nearest the nut), trebles mirror on the right — D/G at the horns
+      pegs = inst.strings.map((str, i) => {
+        const { noteIndex, octave } = parseNote(str);
+        const left = i < leftCount;
+        const side = left ? -1 : 1;
+        const postX = left ? cx - 29 : cx + 29;
+        const y = left ? leftRows[leftCount - 1 - i] : rightRows[i - leftCount];
+        return {
+          noteIndex, octave, side,
+          nutX: slotX(i), postX, btnX: left ? cx - 88 : cx + 88, y,
+          edgeX: +(cx + side * halfW(y)).toFixed(1),
+          name: NOTES[noteIndex].replace("#", "♯"),
+          labelX: postX, labelY: +(y - 12).toFixed(1), labelAnchor: "middle",
+        };
+      });
+
+      // open-book silhouette: sharp twin peaks, crisp V-dip, hard outer corners;
+      // each side tapers and flows tangent-smooth into a concave scoop that
+      // flares to an outward-pointing wing tip (slightly rounded), then a second
+      // concave scoop curls back into the narrow neck — per the reference mockup
+      plate = `M ${cx - 33} 264
+        C ${cx - 35} 255 ${cx - 41} 247 ${cx - 57} 243.5
+        C ${cx - 59} 243 ${cx - 59} 241 ${cx - 57.5} 239.5
+        C ${cx - 52} 234 ${cx - 48.2} 227 ${cx - 49} 218
+        C ${cx - 51} 195 ${cx - 62} 115 ${cx - 66} 60
+        C ${cx - 67} 46 ${cx - 67} 34 ${cx - 64} 24
+        C ${cx - 58} 19 ${cx - 44} 14 ${cx - 36} 10
+        C ${cx - 28} 14 ${cx - 13} 20 ${cx} 26
+        C ${cx + 13} 20 ${cx + 28} 14 ${cx + 36} 10
+        C ${cx + 44} 14 ${cx + 58} 19 ${cx + 64} 24
+        C ${cx + 67} 34 ${cx + 67} 46 ${cx + 66} 60
+        C ${cx + 62} 115 ${cx + 51} 195 ${cx + 49} 218
+        C ${cx + 48.2} 227 ${cx + 52} 234 ${cx + 57.5} 239.5
+        C ${cx + 59} 241 ${cx + 59} 243 ${cx + 57} 243.5
+        C ${cx + 41} 247 ${cx + 35} 255 ${cx + 33} 264 Z`;
+    }
 
     // finish palette — "glass" renders the plate in the app's own Liquid
     // Glass material (color reserved for interactive state); "wood" is the
     // warm representational 3A variant, kept one switch away (HS_STYLE)
     const glass = HS_STYLE === "glass";
     headstock.classList.toggle("wood", !glass);
+    headstock.classList.toggle("bass", bass); // bass renders a touch larger (see CSS) — its headstock IS bigger
     const P = glass ? {
       plate: "url(#glassPlate)",
       edge: "rgba(60,60,67,0.42)",
@@ -483,8 +576,12 @@
       stemShadow: "rgba(40,25,10,0.32)",
     };
 
-    // split-diamond inlay (outlined, layered) + bell truss-rod cover, per wireframe
-    const inlay = `
+    // ornament: guitar wears the split-diamond inlay + bell truss-rod cover;
+    // bass stays clean like the reference — a round string retainer over the top
+    // strings and a truss-rod nut at the neck joint (no logo invented)
+    const inlay = bass ? `
+      <circle cx="${cx}" cy="251" r="4.8" fill="none" stroke="${P.inlayStroke}" stroke-width="1.1"/>
+      <circle cx="${cx}" cy="251" r="1.8" fill="${P.inlayMid}"/>` : `
       <path d="M ${cx} 78 L ${cx + 13} 113 L ${cx} 148 L ${cx - 13} 113 Z"
         fill="${P.inlayFill}" stroke="${P.inlayStroke}" stroke-width="0.8"/>
       <path d="M ${cx} 90 L ${cx + 8} 113 L ${cx} 136 L ${cx - 8} 113 Z"
@@ -508,7 +605,10 @@
       <circle cx="${cx}" cy="202" r="1.2" fill="${P.screw}"/>
       <circle cx="${cx}" cy="257" r="1.2" fill="${P.screw}"/>`;
 
-    let s = `<svg viewBox="0 0 ${cx * 2} 420" xmlns="http://www.w3.org/2000/svg">
+    // bass crown sits lower in the artwork (y~33) than the guitar's (y~10); shift
+    // the bass viewBox down 23 so its crown top-aligns in the capsule like the
+    // guitar's (no dead space up top) and the freed room lets it render larger
+    let s = `<svg viewBox="0 ${bass ? 23 : 0} ${cx * 2} 420" xmlns="http://www.w3.org/2000/svg">
       <defs>
         <linearGradient id="glassPlate" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0" stop-color="rgba(255,255,255,0.8)"/>
@@ -538,15 +638,17 @@
       </defs>`;
 
     // fretboard: straight-sided — a real neck's widening is imperceptible
-    // over a few frets, so any visible taper reads as an error
-    s += `<rect x="${cx - 32}" y="268" width="64" height="150" fill="${P.board}"/>`;
+    // over a few frets, so any visible taper reads as an error. The bass neck is
+    // narrower than the guitar's (fewer strings) — the app's relative-size cue.
+    const neckHalf = bass ? 22 : 32;
+    s += `<rect x="${cx - neckHalf}" y="268" width="${neckHalf * 2}" height="150" fill="${P.board}"/>`;
     // frets compress as they descend; extras past the short view are clipped in
     // the base layout and revealed by the extended (Option 4) neck
     const frets = [];
     for (let fy = 292, gap = 20; fy < 416; fy += gap, gap = Math.max(11, gap - 1.6)) frets.push(fy);
     for (const fy of frets) {
-      s += `<line x1="${cx - 32}" y1="${fy}" x2="${cx + 32}" y2="${fy}" stroke="${P.fretShadow}" stroke-width="2"/>`;
-      s += `<line x1="${cx - 32}" y1="${fy - 0.7}" x2="${cx + 32}" y2="${fy - 0.7}" stroke="url(#pegMetal)" stroke-width="1.1"/>`;
+      s += `<line x1="${cx - neckHalf}" y1="${fy}" x2="${cx + neckHalf}" y2="${fy}" stroke="${P.fretShadow}" stroke-width="2"/>`;
+      s += `<line x1="${cx - neckHalf}" y1="${fy - 0.7}" x2="${cx + neckHalf}" y2="${fy - 0.7}" stroke="url(#pegMetal)" stroke-width="1.1"/>`;
     }
 
     // plate: soft shadow, finish fill, inner frost rim (glass) or straight
@@ -574,13 +676,14 @@
 
     // strings: nut slot → post over the plate, then straight down the board
     pegs.forEach((p, i) => {
-      const w = (1.9 - (1.9 - 0.9) * (i / (n - 1))).toFixed(2);
+      // bass thickens toward the near-nut path (i=n-1 = low E); guitar toward i=0
+      const w = (bass ? 1.4 + 1.7 * (i / (n - 1)) : 1.9 - 1.0 * (i / (n - 1))).toFixed(2);
       s += `<line class="string str-${i}" x1="${p.nutX}" y1="262" x2="${p.postX}" y2="${p.y}" stroke-width="${w}"/>`;
       s += `<line class="string str-${i}" x1="${p.nutX}" y1="271" x2="${p.nutX}" y2="418" stroke-width="${w}"/>`;
     });
 
     // nut with string slots
-    s += `<rect x="${cx - 32}" y="264" width="64" height="7" rx="1.5" fill="${P.nutFill}" stroke="${P.nutStroke}" stroke-width="0.7"/>`;
+    s += `<rect x="${cx - neckHalf}" y="264" width="${neckHalf * 2}" height="7" rx="1.5" fill="${P.nutFill}" stroke="${P.nutStroke}" stroke-width="0.7"/>`;
     pegs.forEach((p) => {
       s += `<line x1="${p.nutX}" y1="264.6" x2="${p.nutX}" y2="269.4" stroke="${P.slot}" stroke-width="1" stroke-linecap="round"/>`;
     });
@@ -599,20 +702,44 @@
         Q ${o(-10.5)} ${y + 9} ${o(-10)} ${y + 5} Z`;
     };
 
-    // machine heads: stem from the plate edge, keystone button, washer + post
+    // bass tuner — classic Fender "paddle": a beefy rounded lobe drawn with its
+    // LONG axis VERTICAL (bulb up, tapering to a rounded point down). The peg's
+    // rot then tilts this whole key so its long axis runs PARALLEL to the
+    // diagonal edge — the lobes read like beads strung along the headstock's
+    // side, each with its stem leaving the inner side toward the post.
+    const bassKey = (bx, y) => `M ${bx} ${y - 19}
+      C ${bx + 13.5} ${y - 19} ${bx + 14.5} ${y - 6} ${bx + 12.5} ${y + 2}
+      C ${bx + 10.5} ${y + 11} ${bx + 6} ${y + 17} ${bx} ${y + 18}
+      C ${bx - 6} ${y + 17} ${bx - 10.5} ${y + 11} ${bx - 12.5} ${y + 2}
+      C ${bx - 14.5} ${y - 6} ${bx - 13.5} ${y - 19} ${bx} ${y - 19} Z`;
+
+    // machine heads: stem from the plate edge, key button, washer + post. The
+    // stem+key are drawn horizontally/upright then (bass) rotated about the post
+    // by rot so the paddle's long axis runs PARALLEL to the diagonal edge; the
+    // post washers + labels stay upright. Guitar has no rot → drawn flat.
+    // beefier hardware on bass: bigger washer/post + thicker stem, and the
+    // Fender paddle key instead of the guitar's Kluson keystone.
+    const pwr = bass ? 9.6 : 6.8, ppr = bass ? 5.2 : 3.6, phr = bass ? 2.3 : 1.5;
+    const shaftW = bass ? 3.6 : 2.6, shadowW = bass ? 5 : 4;
     pegs.forEach((p, i) => {
-      const edgeX = (cx + p.side * halfW(p.y)).toFixed(1);
       const stemX = (p.btnX - p.side * 9).toFixed(1);
+      const ro = p.rot ? `<g transform="rotate(${p.rot} ${p.postX} ${p.y})">` : "";
+      const rc = p.rot ? `</g>` : "";
+      const btn = bass ? bassKey(p.btnX, p.y) : keystone(p.btnX, p.y, p.side);
+      // seam ridge: vertical down the bass paddle's long axis; horizontal on the guitar key
+      const seam = bass
+        ? { x1: p.btnX, y1: p.y - 14, x2: p.btnX, y2: p.y + 13 }
+        : { x1: p.btnX - p.side * 8, y1: p.y, x2: p.btnX + p.side * 12, y2: p.y };
       s += `<g class="peg" data-i="${i}">
         <rect class="hit" x="${p.side < 0 ? 4 : cx * 2 - 90}" y="${p.y - 16}" width="86" height="32"/>
-        <line x1="${edgeX}" y1="${p.y}" x2="${stemX}" y2="${p.y}" stroke="${P.stemShadow}" stroke-width="4"/>
-        <line class="shaft" x1="${edgeX}" y1="${p.y}" x2="${stemX}" y2="${p.y}" stroke="url(#pegMetal)" stroke-width="2.6"/>
-        <path class="btn" d="${keystone(p.btnX, p.y, p.side)}" fill="url(#pegMetal)"/>
-        <line x1="${(p.btnX - p.side * 8).toFixed(1)}" y1="${p.y}" x2="${(p.btnX + p.side * 12).toFixed(1)}" y2="${p.y}" stroke="rgba(60,66,76,0.3)" stroke-width="0.8"/>
-        <circle cx="${p.postX}" cy="${p.y}" r="6.8" fill="none" stroke="url(#pegMetal)" stroke-width="2.4"/>
-        <circle class="post" cx="${p.postX}" cy="${p.y}" r="3.6" fill="url(#pegMetal)"/>
-        <circle cx="${p.postX}" cy="${p.y}" r="1.5" fill="rgba(55,60,70,0.9)"/>
-        <text x="${p.postX}" y="${p.y - 12}" text-anchor="middle">${p.name}<tspan dy="2" font-size="9">${p.octave}</tspan></text>
+        ${ro}<line x1="${p.edgeX}" y1="${p.y}" x2="${stemX}" y2="${p.y}" stroke="${P.stemShadow}" stroke-width="${shadowW}"/>
+        <line class="shaft" x1="${p.edgeX}" y1="${p.y}" x2="${stemX}" y2="${p.y}" stroke="url(#pegMetal)" stroke-width="${shaftW}"/>
+        <path class="btn" d="${btn}" fill="url(#pegMetal)"/>
+        <line x1="${(+seam.x1).toFixed(1)}" y1="${seam.y1}" x2="${(+seam.x2).toFixed(1)}" y2="${seam.y2}" stroke="rgba(60,66,76,0.3)" stroke-width="0.8"/>${rc}
+        <circle cx="${p.postX}" cy="${p.y}" r="${pwr}" fill="none" stroke="url(#pegMetal)" stroke-width="2.4"/>
+        <circle class="post" cx="${p.postX}" cy="${p.y}" r="${ppr}" fill="url(#pegMetal)"/>
+        <circle cx="${p.postX}" cy="${p.y}" r="${phr}" fill="rgba(55,60,70,0.9)"/>
+        <text x="${p.labelX}" y="${p.labelY}" text-anchor="${p.labelAnchor}">${p.name}<tspan dy="${bass ? 1.7 : 2}" font-size="${bass ? 7.5 : 9}">${p.octave}</tspan></text>
       </g>`;
     });
 
@@ -767,15 +894,15 @@
     state.instrument = i;
     const inst = INSTRUMENTS[i];
     carouselTo(familyOf(i));
-    const isGuitar = !!inst.strings && inst.icon === "guitar";
+    const hs = usesHeadstock(inst);
     noteGrid.style.display = inst.strings ? "none" : "";
-    stringRow.style.display = inst.strings && !isGuitar ? "" : "none";
-    pickerLabel.style.display = isGuitar ? "none" : ""; // guitar picks pegs on the hero, not in the sheet
-    if (!isGuitar) pegEls = [];
+    stringRow.style.display = inst.strings && !hs ? "" : "none";
+    pickerLabel.style.display = hs ? "none" : ""; // headstock picks pegs on the hero, not in the sheet
+    if (!hs) pegEls = [];
     if (!inst.strings) {
       pickerLabelText.textContent = "Target Note";
       stringButtons = [];
-    } else if (isGuitar) {
+    } else if (hs) {
       stringButtons = [];
       buildHeadstock(inst);
       buildWheel(inst);
@@ -818,8 +945,8 @@
   function updateInlinePicker() {
     const inst = INSTRUMENTS[state.instrument];
     const manual = state.mode === "manual";
-    const isGuitar = !!inst.strings && inst.icon === "guitar";
-    inlinePicker.style.display = manual && !isGuitar ? "block" : "none";
+    const hs = usesHeadstock(inst);
+    inlinePicker.style.display = manual && !hs ? "block" : "none";
     micArea.classList.toggle("auto", !manual);
     miniOct.style.display = !inst.strings ? "" : "none";
     // reference-tone speaker: instruments keep it in the right wing; chromatic's
@@ -829,10 +956,10 @@
     if (inst.strings) miniOct.classList.remove("open");
   }
 
-  // guitar in Manual mode makes the headstock the hero (replaces the gauge dial)
+  // guitar + bass in Manual mode make the headstock the hero (replaces the dial)
   function updateHeroView() {
     const inst = INSTRUMENTS[state.instrument];
-    const hero = state.mode === "manual" && !!inst.strings && inst.icon === "guitar";
+    const hero = state.mode === "manual" && usesHeadstock(inst);
     hsHero.style.display = hero ? "" : "none";
     tunerStrip.style.display = hero ? "" : "none";
     gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the headstock
@@ -925,12 +1052,10 @@
   // ---------- A4 reference calibration ----------
 
   const A4_KEY = "tuner-a4";
-  const a4Pill = document.getElementById("a4Pill");
 
   function setA4(v) {
     A4 = Math.max(A4_MIN, Math.min(A4_MAX, Math.round(v)));
     try { localStorage.setItem(A4_KEY, A4); } catch {}
-    a4Pill.textContent = `A4 = ${A4} Hz`;
     miniRefVal.textContent = `${A4} Hz`;
     document.getElementById("miniRefDown").disabled = A4 <= A4_MIN;
     document.getElementById("miniRefUp").disabled = A4 >= A4_MAX;

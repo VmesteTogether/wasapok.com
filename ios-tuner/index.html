@@ -158,13 +158,6 @@
     letter-spacing: 0.37px;
     color: var(--label);
   }
-  .navbar .a4 {
-    font-size: 13px;
-    font-weight: 600;
-    color: var(--label-2);
-    padding: 6px 12px;
-    border-radius: 20px;
-  }
 
   /* ---------- content ---------- */
   .content {
@@ -613,6 +606,10 @@
     display: flex; justify-content: center; align-items: flex-start;
   }
   .hs-hero .headstock svg { width: 258px; height: auto; display: block; }
+  /* bass headstocks are physically bigger than a guitar's — render the whole
+     SVG a touch larger so the size difference reads (the neck is already drawn
+     thinner in JS, so it still comes out narrower than the guitar's). */
+  .hs-hero .headstock.bass svg { width: 310px; }
   #headstock .peg { cursor: pointer; }
   #headstock .peg .hit { fill: transparent; }
   #headstock .peg .btn {
@@ -630,6 +627,10 @@
     transition: fill 0.15s;
   }
   #headstock.wood .peg text { fill: rgba(250, 242, 224, 0.92); } /* 3A wood variant */
+  /* the bass SVG renders ~1.2x larger than the guitar's, which would blow up its
+     note labels too — counter-scale them (13*258/310) so the notes read at the
+     SAME on-screen size as the guitar's, for cross-instrument continuity */
+  #headstock.bass .peg text { font-size: 10.8px; }
   #headstock .peg.sel .btn {
     fill: var(--blue);
     stroke: rgba(255, 255, 255, 0.6);
@@ -710,6 +711,18 @@
   }
   .inst-carousel.dragging .ci { transition: none; } /* colour tracks the finger */
   .ci.sel { color: var(--blue); }
+  /* the "+" custom-instrument entry: a subtle circular chip (border rides the
+     current colour, so it greys/blues with distance like the labels) — reads as
+     an action, not an instrument word, and stays light on the left edge */
+  .ci.ci-add {
+    font-size: 15px;
+    letter-spacing: 0;
+    width: 19px; height: 19px;
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%;
+    border: 1.3px solid currentColor;
+    box-sizing: border-box;
+  }
 
   /* --- selection capsule + variant indicator --------------------------- */
   /* a glass "window" fixed at center that the labels scrub through; the centered
@@ -759,13 +772,22 @@
     box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.7);
   }
 
-  /* dev-only: compressing option pulls the edge-fade in so the bunched outer
-     labels show more (current/uniform keeps the wider 10% fade) */
-  body.carcomp .inst-carousel {
+  /* dev-only: both compressing options pull the edge-fade in so the bunched
+     outer labels show more (current/uniform keeps the wider 10% fade). 1ca is
+     the flat pre-drum compress (bunch + foreshorten only). 1c adds a perspective
+     context so JS can seat the labels on a shallow horizontal drum — rotating
+     them away (rotateY) and arcing them down, iOS-Camera-mode-dial style.
+     Option 1 stays flat + uniform (its labels carry no compress transform). */
+  body.carcomp .inst-carousel,
+  body.carcomp-flat .inst-carousel {
     -webkit-mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
     mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
   }
-  /* dev-only: A/B toggle — 1 = current (uniform), 1c = compressing + less fade */
+  body.carcomp .inst-carousel {   /* 1c only: the 3D drum needs a perspective camera */
+    perspective: 260px;
+    perspective-origin: 50% 42%;
+  }
+  /* dev-only: A/B/C toggle — 1 = uniform, 1c = compressing 3D drum, 1ca = flat */
   .opt-toggle {
     position: fixed;
     top: calc(50% + 40px);
@@ -1164,7 +1186,6 @@
 
     <div class="navbar">
       <h1>Tuner</h1>
-      <span class="a4 glass" id="a4Pill">A4 = 440 Hz</span>
     </div>
 
     <div class="content" id="content">
@@ -1314,29 +1335,34 @@
   </svg>
 </button>
 
-<!-- dev-only: carousel A/B — 1 = current (uniform), 1c = compressing + less fade -->
+<!-- dev-only: carousel A/B/C — 1 = current (uniform), 1c = compressing 3D drum,
+     1ca = compressing (pre-drum flat, no perspective) -->
 <div class="opt-toggle" id="optToggle">
-  <button type="button" data-carcomp="0" aria-label="Current (uniform)">1</button>
-  <button type="button" data-carcomp="1" aria-label="Compressing + less fade">1c</button>
+  <button type="button" data-caropt="0" aria-label="Current (uniform)">1</button>
+  <button type="button" data-caropt="1c" aria-label="Compressing 3D drum">1c</button>
+  <button type="button" data-caropt="1ca" aria-label="Compressing flat (pre-drum)">1ca</button>
 </div>
 
 <script src="tuner.js"></script>
 <script>
-  // dev-only: toggle the compressing carousel layout (vs the current uniform one).
-  // Persisted; remove with .opt-toggle + body.carcomp once a version is chosen.
+  // dev-only: pick the carousel layout — "0" uniform, "1c" 3D drum, "1ca" flat
+  // (pre-drum compress). Persisted; remove with .opt-toggle + body.carcomp*
+  // once a version is chosen.
   (() => {
     const KEY = "tuner-carcomp";
     const btns = [...document.querySelectorAll("#optToggle button")];
     const apply = (v) => {
-      const on = v === "1";
-      document.body.classList.toggle("carcomp", on);
-      btns.forEach((b) => b.classList.toggle("active", b.dataset.carcomp === v));
+      document.body.classList.toggle("carcomp", v === "1c");        // 3D drum
+      document.body.classList.toggle("carcomp-flat", v === "1ca");  // pre-drum flat compress
+      btns.forEach((b) => b.classList.toggle("active", b.dataset.caropt === v));
       try { localStorage.setItem(KEY, v); } catch {}
-      if (window.__carSetComp) window.__carSetComp(on);
+      if (window.__carSetComp)
+        window.__carSetComp(v === "1c" ? "drum" : v === "1ca" ? "flat" : "off");
     };
-    btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.carcomp)));
+    btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.caropt)));
     let saved = "0";
     try { saved = localStorage.getItem(KEY) || "0"; } catch {}
+    if (saved === "1") saved = "1c"; // migrate the legacy two-value key
     apply(saved);
   })();
 
