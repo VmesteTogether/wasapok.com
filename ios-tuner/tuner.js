@@ -203,7 +203,7 @@
   const carItems = FAMILIES.map((fam) => {
     const el = document.createElement("span");
     el.className = "ci";
-    if (fam.custom) { el.classList.add("ci-add"); el.textContent = "+"; } // the "+" action chip
+    if (fam.custom) { el.classList.add("ci-add"); el.setAttribute("aria-label", "Custom instrument"); } // "+" drawn geometrically in CSS
     else el.textContent = fam.name.toUpperCase();
     instCarousel.appendChild(el);
     return el;

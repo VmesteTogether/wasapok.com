@@ -715,14 +715,23 @@
      current colour, so it greys/blues with distance like the labels) — reads as
      an action, not an instrument word, and stays light on the left edge */
   .ci.ci-add {
-    font-size: 15px;
-    letter-spacing: 0;
     width: 19px; height: 19px;
-    display: flex; align-items: center; justify-content: center;
     border-radius: 50%;
     border: 1.3px solid currentColor;
     box-sizing: border-box;
   }
+  /* the plus is two pixel-centered bars, NOT a font "+" — a text glyph sits off
+     its baseline and reads as drooping/glitchy on mobile. Bars ride currentColor
+     so they grey/blue with distance like the chip's border. */
+  .ci.ci-add::before, .ci.ci-add::after {
+    content: "";
+    position: absolute;
+    top: 50%; left: 50%;
+    background: currentColor;
+    border-radius: 0.8px;
+  }
+  .ci.ci-add::before { width: 9px; height: 1.6px; transform: translate(-50%, -50%); }
+  .ci.ci-add::after  { width: 1.6px; height: 9px; transform: translate(-50%, -50%); }
 
   /* --- selection capsule + variant indicator --------------------------- */
   /* a glass "window" fixed at center that the labels scrub through; the centered
