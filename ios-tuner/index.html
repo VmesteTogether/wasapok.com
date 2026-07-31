@@ -865,22 +865,15 @@
     box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.7);
   }
 
-  /* dev-only: both compressing options pull the edge-fade in so the bunched
-     outer labels show more (current/uniform keeps the wider 10% fade). 1ca is
-     the flat pre-drum compress (bunch + foreshorten only). 1c adds a perspective
-     context so JS can seat the labels on a shallow horizontal drum — rotating
-     them away (rotateY) and arcing them down, iOS-Camera-mode-dial style.
-     Option 1 stays flat + uniform (its labels carry no compress transform). */
-  body.carcomp .inst-carousel,
+  /* dev-only: the compressing option (1ca) pulls the edge-fade in so the bunched
+     outer labels show more (current/uniform keeps the wider 10% fade). 1ca is the
+     flat pre-drum compress (bunch + foreshorten only). Option 1 stays flat +
+     uniform (its labels carry no compress transform). */
   body.carcomp-flat .inst-carousel {
     -webkit-mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
     mask-image: linear-gradient(to right, transparent 0, #000 5%, #000 95%, transparent 100%);
   }
-  body.carcomp .inst-carousel {   /* 1c only: the 3D drum needs a perspective camera */
-    perspective: 260px;
-    perspective-origin: 50% 42%;
-  }
-  /* dev-only: A/B/C toggle — 1 = uniform, 1c = compressing 3D drum, 1ca = flat */
+  /* dev-only: A/B toggle — 1 = uniform, 1ca = flat compress */
   .opt-toggle {
     position: fixed;
     top: calc(50% + 40px);
@@ -1197,7 +1190,13 @@
     border: none;
     box-shadow: none;                        /* drop the aluminium frame */
   }
-  body.fs .dev-reset { display: none; }  /* hide reset; keep 1/1c/1ca reachable even in fill-screen */
+  body.fs .dev-reset { display: none; }  /* hide reset; keep 1/1ca reachable even in fill-screen */
+  /* in fill-screen, drop the options rail to a compact bottom-left pair — clear of
+     the centre carousel it controls and the bottom-right exit control */
+  body.fs .opt-toggle {
+    top: auto; bottom: 16px; left: 16px; right: auto;
+    flex-direction: row;
+  }
   /* pin the construction to the viewport's top-left; the JS translate+scale
      centers it deterministically (flex centering + a scale transform drifted) */
   body.fs #phoneWrap { position: fixed; top: 0; left: 0; }
@@ -1471,34 +1470,31 @@
   </svg>
 </button>
 
-<!-- dev-only: carousel A/B/C — 1 = current (uniform), 1c = compressing 3D drum,
+<!-- dev-only: carousel A/B — 1 = current (uniform),
      1ca = compressing (pre-drum flat, no perspective) -->
 <div class="opt-toggle" id="optToggle">
   <button type="button" data-caropt="0" aria-label="Current (uniform)">1</button>
-  <button type="button" data-caropt="1c" aria-label="Compressing 3D drum">1c</button>
   <button type="button" data-caropt="1ca" aria-label="Compressing flat (pre-drum)">1ca</button>
 </div>
 
 <script src="tuner.js"></script>
 <script>
-  // dev-only: pick the carousel layout — "0" uniform, "1c" 3D drum, "1ca" flat
-  // (pre-drum compress). Persisted; remove with .opt-toggle + body.carcomp*
-  // once a version is chosen.
+  // dev-only: pick the carousel layout — "0" uniform, "1ca" flat (pre-drum
+  // compress). Persisted; remove with .opt-toggle + body.carcomp-flat once chosen.
   (() => {
     const KEY = "tuner-carcomp";
     const btns = [...document.querySelectorAll("#optToggle button")];
     const apply = (v) => {
-      document.body.classList.toggle("carcomp", v === "1c");        // 3D drum
       document.body.classList.toggle("carcomp-flat", v === "1ca");  // pre-drum flat compress
       btns.forEach((b) => b.classList.toggle("active", b.dataset.caropt === v));
       try { localStorage.setItem(KEY, v); } catch {}
       if (window.__carSetComp)
-        window.__carSetComp(v === "1c" ? "drum" : v === "1ca" ? "flat" : "off");
+        window.__carSetComp(v === "1ca" ? "flat" : "off");
     };
     btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.caropt)));
     let saved = "0";
     try { saved = localStorage.getItem(KEY) || "0"; } catch {}
-    if (saved === "1") saved = "1c"; // migrate the legacy two-value key
+    if (saved === "1" || saved === "1c") saved = "0"; // legacy drum option (1c) removed
     apply(saved);
   })();
 
@@ -1543,14 +1539,21 @@
     addEventListener("orientationchange", fit);
     if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
 
-    // Deliberately NO auto fill-screen on Home Screen launch: fill mode letterboxes
-    // when the viewport isn't exactly 390x844, and it used to hide the dev options
-    // rail (1 / 1c / 1ca). Land in the normal interactive view so options are always
-    // reachable; the corner control still toggles the clean full-screen preview when
-    // wanted (and the options rail now stays reachable there too).
-    let saved = "0";
-    try { saved = localStorage.getItem(KEY) || "0"; } catch {}
-    if (saved === "1") setFS(true, { persist: false });
+    // On a Home Screen launch (standalone) fill the device screen. iPhone 16 Pro is
+    // 402x874pt vs the 390x844 design (near-identical aspect), so the fit-scale maps
+    // it edge-to-edge with only a ~2px, app-toned top/bottom margin. The options rail
+    // (1 / 1ca) now stays reachable in fill-screen, so this no longer traps you — tap
+    // the corner control to drop to the framed view. In a normal browser tab we stay
+    // framed and just restore the last manual choice.
+    const standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (standalone) {
+      setFS(true, { persist: false });
+    } else {
+      let saved = "0";
+      try { saved = localStorage.getItem(KEY) || "0"; } catch {}
+      if (saved === "1") setFS(true, { persist: false });
+    }
   })();
 </script>
 </body>
