@@ -86,11 +86,36 @@
       FAMILIES.splice(1, 0, cf);
     }
   }
-  // only families with more than one variant get the "^" underbelly menu (Guitar,
-  // Bass). Single-variant families (uke/violin/etc.) show no chevron for now —
-  // the coming "Other" family will re-group them and regain one.
-  FAMILIES.forEach((f) => { f.hasOptions = f.variants.length > 1; });
+  // fold every non-headstock string family (uke/violin/viola/cello/mandolin/banjo)
+  // into ONE "Other" slot — its underbelly lists the members and the slot
+  // self-labels to the last one picked. Only Chromatic / + / Guitar / Bass stay
+  // as their own slots.
+  {
+    const KEEP = new Set(["Chromatic", "Custom", "Guitar", "Bass"]);
+    const others = FAMILIES.filter((f) => !KEEP.has(f.name));
+    if (others.length) {
+      const other = { name: "Other", other: true, icon: others[0].icon,
+        variants: others.flatMap((f) => f.variants) };
+      for (let k = FAMILIES.length - 1; k >= 0; k--) if (!KEEP.has(FAMILIES[k].name)) FAMILIES.splice(k, 1);
+      FAMILIES.push(other);
+    }
+  }
+  // only families with more than one variant get the "^" underbelly menu; .cur is
+  // the family's current/default variant (what re-selecting it returns to)
+  FAMILIES.forEach((f) => { f.hasOptions = f.variants.length > 1; f.cur = f.variants[0]; });
   const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
+
+  // persistence: the last-picked "Other" member (drives the slot's self-label) and
+  // the last instrument overall (reload straight back into it)
+  const OTHER_KEY = "tuner-other", INST_KEY = "tuner-instrument";
+  let otherPicked = false;
+  {
+    const of = FAMILIES.findIndex((f) => f.other);
+    try {
+      const o = parseInt(localStorage.getItem(OTHER_KEY), 10);
+      if (of >= 0 && FAMILIES[of].variants.includes(o)) { FAMILIES[of].cur = o; otherPicked = true; }
+    } catch {}
+  }
 
   function parseNote(s) {
     const m = s.match(/^([A-G]#?)(\d)$/);
@@ -214,6 +239,17 @@
     return el;
   });
 
+  // the "Other" slot self-labels: "OTHER" until a member is picked, then that
+  // member's name (persisted, so it survives reloads)
+  const otherFam = FAMILIES.findIndex((f) => f.other);
+  function updateOtherLabel() {
+    if (otherFam < 0) return;
+    carItems[otherFam].textContent = otherPicked
+      ? INSTRUMENTS[FAMILIES[otherFam].cur].name.toUpperCase()
+      : "OTHER";
+  }
+  updateOtherLabel();
+
   // capsule width + item pitch derive from the longest label. Measured up front,
   // then re-measured once the web font loads: the fallback font's metrics differ,
   // so the first pass can be too narrow — which clipped MANDOLIN and crowded
@@ -324,7 +360,7 @@
   function carouselPick(i) {
     closeVariantMenu(); // switching family dismisses any open variant menu
     if (familyOf(state.instrument) === i) carouselTo(i);
-    else selectInstrument(FAMILIES[i].variants[0], true);
+    else selectInstrument(FAMILIES[i].cur, true);
   }
 
   // ---------- variant "underbelly" menu ----------
@@ -364,7 +400,7 @@
       const el = document.createElement("span");
       el.className = "mi";
       const inst = INSTRUMENTS[instIdx];
-      el.textContent = fam.custom ? inst.name.toUpperCase() : `${inst.count}-STRING`;
+      el.textContent = (fam.custom || fam.other) ? inst.name.toUpperCase() : `${inst.count}-STRING`;
       ubCarousel.appendChild(el);
       return { el, instIdx };
     });
@@ -1076,6 +1112,14 @@
   function selectInstrument(i, byUser) {
     if (byUser) state.instrumentPicked = true;
     state.instrument = i;
+    const selFam = FAMILIES[familyOf(i)];
+    if (selFam) selFam.cur = i;
+    try { localStorage.setItem(INST_KEY, String(i)); } catch {}
+    if (selFam && selFam.other) {           // an Other member → self-label + remember
+      otherPicked = true;
+      try { localStorage.setItem(OTHER_KEY, String(i)); } catch {}
+      updateOtherLabel();
+    }
     const inst = INSTRUMENTS[i];
     carouselTo(familyOf(i));
     const hs = usesHeadstock(inst);
@@ -1595,7 +1639,12 @@
 
   const savedA4 = parseInt((() => { try { return localStorage.getItem(A4_KEY); } catch { return null; } })(), 10);
   setA4(Number.isFinite(savedA4) ? savedA4 : 440); // load calibration before mode reset
-  selectInstrument(1); // Guitar 6 — the default tuner (App Store tuners skew guitar)
+  // reload straight back into the last instrument (default Guitar 6 on first run)
+  {
+    let start = 1;
+    try { const s = parseInt(localStorage.getItem(INST_KEY), 10); if (Number.isInteger(s) && INSTRUMENTS[s]) start = s; } catch {}
+    selectInstrument(start);
+  }
   setMode("manual");   // launch straight onto the 6-string headstock, not auto
   bootMic();           // simulate iOS launch: prompt / auto-listen / denied
 })();
