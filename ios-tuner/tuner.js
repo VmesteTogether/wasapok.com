@@ -876,26 +876,6 @@
       genericHero.appendChild(el);
       return { el, noteIndex: p.noteIndex, octave: p.octave };
     });
-    // reverberation overlay: a standing sine-wave centred over the selected
-    // string, revealed + oscillated by CSS (.gstr-wave) while listening
-    const wave = document.createElement("div");
-    wave.className = "gstr-wave";
-    wave.innerHTML =
-      `<svg viewBox="0 0 44 460"><path d="${sineWavePath(44, 460, 9, 2.5)}" fill="none" stroke="rgba(236,243,250,0.92)" stroke-width="3.4" stroke-linecap="round"/></svg>`;
-    genericHero.appendChild(wave);
-  }
-
-  // vertical sine polyline for the reverberation overlay (amp px each side of
-  // centre, `periods` full waves down the height)
-  function sineWavePath(w, h, amp, periods) {
-    const cx = w / 2, steps = 64;
-    let d = "";
-    for (let i = 0; i <= steps; i++) {
-      const y = (h * i / steps).toFixed(1);
-      const x = (cx + amp * Math.sin(periods * 2 * Math.PI * i / steps)).toFixed(1);
-      d += (i === 0 ? "M" : "L") + x + "," + y;
-    }
-    return d;
   }
 
   function wheelSelect(i) {
@@ -1420,7 +1400,6 @@
 
   function setButtonState(s) {
     state.btn = s;
-    document.body.classList.toggle("listening", s === "listening"); // gates the string glint gallop
     micBtn.classList.remove("live", "requesting", "denied");
     micBtn.disabled = false;
     // on/off is icon-only (orange mic ↔ slashed blue mic); only denied keeps text
