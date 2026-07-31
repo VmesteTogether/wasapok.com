@@ -965,6 +965,12 @@
   /* hero eases + dims a hair to "make room" while the underbelly is open */
   body.ub-open .gauge-card { opacity: 0.82; filter: brightness(0.94) saturate(0.95); }
 
+  /* "Other" selected but no member chosen yet: blank the headstock/hero + the
+     tuner readout, leaving an empty card until a member is picked */
+  body.other-empty #hsHero,
+  body.other-empty #tunerStrip,
+  body.other-empty .readout { visibility: hidden; }
+
   /* dev-only: the compressing option (1ca) pulls the edge-fade in so the bunched
      outer labels show more (current/uniform keeps the wider 10% fade). 1ca is the
      flat pre-drum compress (bunch + foreshorten only). Option 1 stays flat +

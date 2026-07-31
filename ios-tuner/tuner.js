@@ -105,17 +105,8 @@
   FAMILIES.forEach((f) => { f.hasOptions = f.variants.length > 1; f.cur = f.variants[0]; });
   const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
 
-  // persistence: the last-picked "Other" member (drives the slot's self-label) and
-  // the last instrument overall (reload straight back into it)
-  const OTHER_KEY = "tuner-other", INST_KEY = "tuner-instrument";
-  let otherPicked = false;
-  {
-    const of = FAMILIES.findIndex((f) => f.other);
-    try {
-      const o = parseInt(localStorage.getItem(OTHER_KEY), 10);
-      if (of >= 0 && FAMILIES[of].variants.includes(o)) { FAMILIES[of].cur = o; otherPicked = true; }
-    } catch {}
-  }
+  const INST_KEY = "tuner-instrument"; // last instrument, to reload back into it
+  let emptyOther = false;              // "Other" family selected, no member chosen yet
 
   function parseNote(s) {
     const m = s.match(/^([A-G]#?)(\d)$/);
@@ -244,9 +235,9 @@
   const otherFam = FAMILIES.findIndex((f) => f.other);
   function updateOtherLabel() {
     if (otherFam < 0) return;
-    carItems[otherFam].textContent = otherPicked
-      ? INSTRUMENTS[FAMILIES[otherFam].cur].name.toUpperCase()
-      : "OTHER";
+    // the active Other member's name, or "OTHER" when empty / not on an Other member
+    const active = !emptyOther && FAMILIES[otherFam].variants.includes(state.instrument);
+    carItems[otherFam].textContent = active ? INSTRUMENTS[state.instrument].name.toUpperCase() : "OTHER";
   }
   updateOtherLabel();
 
@@ -357,9 +348,23 @@
 
   // i is a FAMILY index. Re-picking the current family just recenters; a new
   // family switches to its default variant (the hold-menu refines this later).
+  // "Other" opens EMPTY (blank hero + readout, slot reads "OTHER") — a member only
+  // loads once picked from the underbelly. state.instrument is parked on a member
+  // so familyOf() resolves to Other and the "^" opens its members.
+  function enterOtherEmpty() {
+    if (otherFam < 0) return;
+    emptyOther = true;
+    state.instrument = FAMILIES[otherFam].cur;
+    document.body.classList.add("other-empty");
+    carouselTo(otherFam);
+    updateOtherLabel();
+    try { localStorage.setItem(INST_KEY, String(FAMILIES[otherFam].cur)); } catch {}
+  }
+
   function carouselPick(i) {
     closeVariantMenu(); // switching family dismisses any open variant menu
-    if (familyOf(state.instrument) === i) carouselTo(i);
+    if (familyOf(state.instrument) === i && !emptyOther) carouselTo(i);
+    else if (FAMILIES[i].other) enterOtherEmpty();
     else selectInstrument(FAMILIES[i].cur, true);
   }
 
@@ -1110,16 +1115,14 @@
   }, { passive: false });
 
   function selectInstrument(i, byUser) {
+    emptyOther = false;
+    document.body.classList.remove("other-empty");
     if (byUser) state.instrumentPicked = true;
     state.instrument = i;
     const selFam = FAMILIES[familyOf(i)];
     if (selFam) selFam.cur = i;
     try { localStorage.setItem(INST_KEY, String(i)); } catch {}
-    if (selFam && selFam.other) {           // an Other member → self-label + remember
-      otherPicked = true;
-      try { localStorage.setItem(OTHER_KEY, String(i)); } catch {}
-      updateOtherLabel();
-    }
+    updateOtherLabel(); // Other slot shows this member's name when it's an Other member
     const inst = INSTRUMENTS[i];
     carouselTo(familyOf(i));
     const hs = usesHeadstock(inst);
@@ -1639,11 +1642,14 @@
 
   const savedA4 = parseInt((() => { try { return localStorage.getItem(A4_KEY); } catch { return null; } })(), 10);
   setA4(Number.isFinite(savedA4) ? savedA4 : 440); // load calibration before mode reset
-  // reload straight back into the last instrument (default Guitar 6 on first run)
+  // reload into the last instrument — EXCEPT "Other" members, which return to the
+  // empty "Other" slot (pick a member to load one). Default Guitar 6 on first run.
   {
     let start = 1;
     try { const s = parseInt(localStorage.getItem(INST_KEY), 10); if (Number.isInteger(s) && INSTRUMENTS[s]) start = s; } catch {}
-    selectInstrument(start);
+    const sf = FAMILIES[familyOf(start)];
+    if (sf && sf.other) { sf.cur = start; enterOtherEmpty(); }
+    else selectInstrument(start);
   }
   setMode("manual");   // launch straight onto the 6-string headstock, not auto
   bootMic();           // simulate iOS launch: prompt / auto-listen / denied
