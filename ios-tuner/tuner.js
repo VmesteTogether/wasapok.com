@@ -872,7 +872,7 @@
       // (fade via the .genhero mask); wound (low) strings get a wrapped-ridge
       // overlay whose spacing rides the --wind var
       el.innerHTML =
-        `<span class="gstr-line${wound ? " wound" : ""}" style="width:${w}px;--wind:${wind}px"></span>`;
+        `<span class="gstr-line${wound ? " wound" : ""}" style="width:${w}px;--wind:${wind}px;--gallop-delay:${(-i * 0.16).toFixed(2)}s"></span>`;
       genericHero.appendChild(el);
       return { el, noteIndex: p.noteIndex, octave: p.octave };
     });
@@ -1127,9 +1127,16 @@
     const sx = idle ? 1 : Math.min(1.5, 1 + vel * 0.05);
     const sy = 1 / Math.sqrt(sx);
 
+    // chrome dot reflects the lit VU bar (which sits between the dot and centre):
+    // drift sharp -> colour reflects on the LEFT, drift flat -> RIGHT; the glow
+    // spills that way too, so the bubble looks like it's picking up the bar beside it
+    const reflX = (50 - (clamped / 50) * 30).toFixed(1);
+    const glowDx = (-(clamped / 50) * 4).toFixed(1);
     for (const dot of hbarDots) {
       dot.style.left = left.toFixed(1) + "%";
       dot.style.setProperty("--dot-color", bg);
+      dot.style.setProperty("--refl-x", reflX + "%");
+      dot.style.setProperty("--glow-dx", glowDx + "px");
       dot.style.transform =
         `translate(-50%,-50%) scaleX(${sx.toFixed(3)}) scaleY(${sy.toFixed(3)})`;
     }
@@ -1395,6 +1402,7 @@
 
   function setButtonState(s) {
     state.btn = s;
+    document.body.classList.toggle("listening", s === "listening"); // gates the string glint gallop
     micBtn.classList.remove("live", "requesting", "denied");
     micBtn.disabled = false;
     // on/off is icon-only (orange mic ↔ slashed blue mic); only denied keeps text

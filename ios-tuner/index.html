@@ -598,19 +598,21 @@
     100% { opacity: 0;   transform: translate(-50%,-50%) scale(2.7); }
   }
   /* liquid-glass bubble: specular sheen, mass, squash-stretch driven in JS */
-  /* hyper-reflective liquid-chrome ball: a sky reflection + specular glint on top,
-     a dark horizon band, a bright ground rim. --dot-color (set by JS) is no longer
-     a flat fill — it drives the tuning feedback as a colored glow + a reflected
-     tint at the base, so the dot reads as chrome that glows toward green in tune. */
+  /* hyper-reflective liquid-chrome ball that REFLECTS its environment: sky
+     reflection + specular glint on top, dark horizon band, bright ground rim.
+     The lit VU bar (which sits between the dot and centre) casts its colour onto
+     the side of the ball facing it — JS drives --dot-color (the bar colour),
+     --refl-x (which side: <50% left, >50% right) and --glow-dx (glow spill), so
+     the bubble reads as chrome picking up the bar it's beside, leaning toward home. */
   .hbar-dot {
     position: absolute; top: 50%; left: 50%; width: 22px; height: 22px;
     border-radius: 50%; z-index: 3;
     background:
       radial-gradient(circle at 50% 15%, #ffffff 0%, rgba(255,255,255,0.85) 9%, rgba(255,255,255,0) 32%),
-      radial-gradient(ellipse 92% 58% at 50% 112%, var(--dot-color, rgba(120,128,140,0.6)) 0%, transparent 60%),
+      radial-gradient(ellipse 66% 82% at var(--refl-x, 50%) 60%, var(--dot-color, rgba(120,128,140,0.5)) 0%, transparent 58%),
       linear-gradient(180deg, #f7fafd 0%, #cfd6e0 24%, #767f8b 50%, #aab2be 72%, #f1f4f9 100%);
     box-shadow:
-      0 0 14px -1px var(--dot-color, transparent),
+      var(--glow-dx, 0px) 1px 13px -1px var(--dot-color, transparent),
       0 2px 7px rgba(40,46,66,0.42),
       inset 0 1.5px 1.5px rgba(255,255,255,0.92),
       inset 0 -3px 4px rgba(0,0,0,0.22);
@@ -725,6 +727,19 @@
     left: 50%; top: 23%; width: 100%; height: 20px;
     transform: translateX(-50%); border-radius: 50%;
     background: radial-gradient(closest-side, #fff 0%, #fff 20%, rgba(255,255,255,0.5) 44%, rgba(255,255,255,0) 74%);
+  }
+  /* mic on: the glint gallops down each string — a travelling reflection that
+     makes the chrome feel alive (à la GuitarTuna's forward-moving backdrop).
+     Per-string --gallop-delay staggers them into a descending wave. */
+  @keyframes gstr-gallop {
+    0%   { top: -14%; opacity: 0; }
+    16%  { opacity: 1; }
+    84%  { opacity: 1; }
+    100% { top: 110%; opacity: 0; }
+  }
+  body.listening .genhero .gstr-line::before {
+    animation: gstr-gallop 1.6s linear infinite;
+    animation-delay: var(--gallop-delay, 0s);
   }
   /* wound (low) strings: a wrapped-ridge overlay, spacing set per-string by
      --wind (coarser on thicker strings). Kept on ::after with soft-light so the
