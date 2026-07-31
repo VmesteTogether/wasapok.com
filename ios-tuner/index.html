@@ -375,7 +375,7 @@
     border-radius: 28px;
     padding: 12px 12px 2px;
     position: relative;
-    transition: background 0.3s, box-shadow 0.3s;
+    transition: background 0.3s, box-shadow 0.3s, opacity 0.3s, filter 0.3s;
   }
   .gauge-card.intune {
     background: linear-gradient(180deg, rgba(52,199,89,0.16), rgba(52,199,89,0.09));
@@ -917,6 +917,53 @@
     border: 1px solid rgba(255,255,255,0.55);
     box-shadow: inset 0 0.5px 0 rgba(255,255,255,0.7);
   }
+  /* chevron rests pointing UP; flips DOWN while its underbelly menu is open */
+  #carInd svg { transition: transform 0.28s cubic-bezier(0.32,0.72,0,1); }
+  body.ub-open #carInd svg { transform: rotate(180deg); }
+
+  /* ---- variant "underbelly" menu ------------------------------------------ */
+  /* opens below the instrument bar: a shadowed recess over the mic/A4/octave row,
+     holding a second-tier carousel of the current family's variants */
+  .underbelly {
+    position: absolute; top: 36px; left: 8px; right: 8px; height: 72px;
+    border-radius: 16px; overflow: hidden; z-index: 5;
+    background: linear-gradient(180deg, rgba(36,40,52,0.96), rgba(20,23,31,0.98));
+    box-shadow: inset 0 12px 22px -8px rgba(0,0,0,0.7),
+                inset 0 1px 0 rgba(255,255,255,0.06),
+                inset 0 0 0 1px rgba(255,255,255,0.05);
+    opacity: 0; transform: translateY(8px); pointer-events: none;
+    transition: opacity 0.26s cubic-bezier(0.32,0.72,0,1), transform 0.26s cubic-bezier(0.32,0.72,0,1);
+  }
+  body.ub-open .underbelly { opacity: 1; transform: translateY(0); pointer-events: auto; }
+  .ub-title {
+    position: absolute; top: 8px; left: 0; right: 0; text-align: center;
+    font-size: 9px; font-weight: 700; letter-spacing: 1.6px;
+    color: rgba(255,255,255,0.32); pointer-events: none;
+  }
+  .ub-carousel {
+    position: absolute; left: 0; right: 0; bottom: 13px; height: 26px; overflow: hidden;
+    cursor: grab; touch-action: none;
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+            mask-image: linear-gradient(to right, transparent, #000 12%, #000 88%, transparent);
+  }
+  .ub-carousel::before { /* selection window */
+    content: ""; position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%);
+    width: 92px; height: 22px; border-radius: 11px; z-index: 0;
+    background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.05));
+    border: 1px solid rgba(255,255,255,0.14); box-shadow: inset 0 1px 0 rgba(255,255,255,0.12);
+  }
+  .mi {
+    position: absolute; left: 50%; top: 50%; z-index: 1;
+    font-size: 12px; font-weight: 700; letter-spacing: 0.4px;
+    color: rgba(255,255,255,0.4); white-space: nowrap;
+    user-select: none; -webkit-user-select: none;
+    transition: transform 0.28s cubic-bezier(0.32,0.72,0,1), opacity 0.28s, color 0.2s;
+  }
+  .mi.sel { color: #eaf3ff; text-shadow: 0 0 10px rgba(120,180,255,0.7); }
+  .ub-carousel.dragging .mi { transition: none; }
+
+  /* hero eases + dims a hair to "make room" while the underbelly is open */
+  body.ub-open .gauge-card { opacity: 0.82; filter: brightness(0.94) saturate(0.95); }
 
   /* dev-only: the compressing option (1ca) pulls the edge-fade in so the bunched
      outer labels show more (current/uniform keeps the wider 10% fade). 1ca is the
@@ -1468,6 +1515,13 @@
         </div>
       </div>
       <span class="mic-caption" id="micLabel"></span>
+      <!-- variant "underbelly": opens below the bar (chevron flips down), covering
+           the mic/A4/octave row with a shadowed second-tier carousel of the
+           current family's variants (guitar 6/7, bass 4/5/6) -->
+      <div class="underbelly" id="underbelly" aria-hidden="true">
+        <div class="ub-title" id="ubTitle"></div>
+        <div class="ub-carousel" id="ubCarousel"></div>
+      </div>
     </div>
 
     <div class="home-indicator"></div>

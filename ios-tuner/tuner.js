@@ -151,6 +151,7 @@
   // ---------- mode (auto detect / manual target) ----------
 
   function setMode(mode) {
+    closeVariantMenu(); // don't leave the variant menu open across a mode switch
     state.mode = mode;
     modeSeg.dataset.mode = mode;
     modeSeg.querySelectorAll(".seg-btn").forEach((b) =>
@@ -317,18 +318,100 @@
   // i is a FAMILY index. Re-picking the current family just recenters; a new
   // family switches to its default variant (the hold-menu refines this later).
   function carouselPick(i) {
+    closeVariantMenu(); // switching family dismisses any open variant menu
     if (familyOf(state.instrument) === i) carouselTo(i);
     else selectInstrument(FAMILIES[i].variants[0], true);
   }
 
-  // stub for the tuning/variant menu (built next); flash the indicator so the
-  // tap/hold gesture is visibly registered for now
-  function openVariantMenu(fi) {
-    if (!FAMILIES[fi] || !FAMILIES[fi].hasOptions) return;
-    carInd.classList.remove("poke");
-    void carInd.offsetWidth; // restart the flash
-    carInd.classList.add("poke");
+  // ---------- variant "underbelly" menu ----------
+  // The "^" (up at rest) flips DOWN and a shadowed second-tier carousel opens
+  // below the bar with the current family's variants (guitar 6/7, bass 4/5/6).
+  // Tap / scrub to pick; picking, re-triggering, a family switch or a mode switch
+  // all close it. Same engine will later drive the "Other" category + "+".
+  const underbelly = document.getElementById("underbelly");
+  const ubTitle = document.getElementById("ubTitle");
+  const ubCarousel = document.getElementById("ubCarousel");
+  const UB_PITCH = 104;
+  let ubFamily = -1;   // family index currently shown, or -1 when closed
+  let ubItems = [];    // { el, instIdx }
+  let ubCenters = [];
+  let ubX = 0;
+
+  const ubNearest = (x) => {
+    let s = 0, best = Infinity;
+    ubCenters.forEach((c, i) => { const d = Math.abs(c - x); if (d < best) { best = d; s = i; } });
+    return s;
+  };
+  function layoutUb(x) {
+    ubX = x;
+    const sel = ubNearest(x);
+    ubItems.forEach((it, i) => {
+      const dx = ubCenters[i] - x, a = Math.abs(dx);
+      const scale = Math.max(0.72, 1 - a / 300);
+      const op = i === sel ? 1 : Math.max(0.22, 0.72 - a / 240);
+      it.el.style.transform = `translate(calc(-50% + ${dx.toFixed(1)}px), -50%) scale(${scale.toFixed(3)})`;
+      it.el.style.opacity = op.toFixed(3);
+      it.el.classList.toggle("sel", i === sel);
+    });
   }
+  function buildUb(fam) {
+    ubCarousel.innerHTML = "";
+    ubItems = fam.variants.map((instIdx) => {
+      const el = document.createElement("span");
+      el.className = "mi";
+      const inst = INSTRUMENTS[instIdx];
+      el.textContent = fam.custom ? inst.name.toUpperCase() : `${inst.count}-STRING`;
+      ubCarousel.appendChild(el);
+      return { el, instIdx };
+    });
+    ubCenters = ubItems.map((_, i) => i * UB_PITCH);
+    ubTitle.textContent = fam.name.toUpperCase();
+    const cur = fam.variants.indexOf(state.instrument);
+    ubCarousel.classList.add("dragging"); // seat instantly (no fly-in) on build
+    layoutUb(ubCenters[cur >= 0 ? cur : 0]);
+    requestAnimationFrame(() => requestAnimationFrame(() => ubCarousel.classList.remove("dragging")));
+  }
+  function openVariantMenu(fi) {
+    const fam = FAMILIES[fi];
+    if (!fam || !fam.hasOptions) return;
+    if (ubFamily === fi) { closeVariantMenu(); return; } // re-trigger toggles closed
+    ubFamily = fi;
+    buildUb(fam);
+    document.body.classList.add("ub-open");
+  }
+  function closeVariantMenu() {
+    if (ubFamily === -1) return;
+    ubFamily = -1;
+    document.body.classList.remove("ub-open");
+  }
+  function ubPick(i) {
+    const it = ubItems[i];
+    closeVariantMenu();
+    if (it) selectInstrument(it.instIdx, true);
+  }
+
+  let ubDrag = false, ubMoved = false, ubStartX = 0, ubStart = 0;
+  ubCarousel.addEventListener("pointerdown", (e) => {
+    ubDrag = true; ubMoved = false; ubStartX = e.clientX; ubStart = ubX;
+    ubCarousel.setPointerCapture(e.pointerId);
+  });
+  ubCarousel.addEventListener("pointermove", (e) => {
+    if (!ubDrag) return;
+    const dx = (e.clientX - ubStartX) / phoneScale;
+    if (!ubMoved && Math.abs(dx) > 5) { ubMoved = true; ubCarousel.classList.add("dragging"); }
+    if (ubMoved) {
+      const min = ubCenters[0], max = ubCenters[ubCenters.length - 1];
+      layoutUb(Math.max(min, Math.min(max, ubStart - dx)));
+    }
+  });
+  ubCarousel.addEventListener("pointerup", (e) => {
+    if (!ubDrag) return;
+    ubDrag = false; ubCarousel.classList.remove("dragging");
+    if (ubMoved) { ubPick(ubNearest(ubX)); return; }
+    const rect = ubCarousel.getBoundingClientRect();
+    ubPick(ubNearest(ubX + (e.clientX - rect.left - rect.width / 2) / phoneScale));
+  });
+  ubCarousel.addEventListener("pointercancel", () => { ubDrag = false; ubCarousel.classList.remove("dragging"); });
 
   let carDragging = false, carMoved = false, carStartX = 0, carStart = 0, carHoldTimer = null, carHeldOpened = false;
   instCarousel.addEventListener("pointerdown", (e) => {
