@@ -313,15 +313,17 @@
       let px = dx, py = 0, pz = 0, rotY = 0, scale = 1;
       let op = i === sel ? 1 : Math.max(0.28, 0.82 - a / 300);
       if (carMode !== "off") {
-        const th = Math.min(Math.PI / 2, a / CAR_COMP_R);
+        const round = carMode === "round";        // 1d: rounder + tighter so more neighbours show
+        const R = round ? 116 : CAR_COMP_R;       // smaller radius = tighter bunching toward center
+        const th = Math.min(Math.PI / 2, a / R);
         const sgn = Math.sign(dx);
-        px = sgn * CAR_COMP_R * Math.sin(th);
+        px = sgn * R * Math.sin(th);
         // gentle foreshorten (floored) so wide labels (CHROMATIC/MANDOLIN) shrink
         // just enough to not slide under their neighbours as they compress
         scale = CAR_COMP_MIN_SCALE + (1 - CAR_COMP_MIN_SCALE) * Math.cos(th);
-        // fade to 0 toward the clamp so piled-up far labels don't accrue a grey mass
-        if (i !== sel) op = Math.max(0, Math.cos(th));
-        if (carMode === "drum") {
+        // fade outer labels; 1d keeps a floor so the ±2/±3 neighbours read through the fog
+        if (i !== sel) op = Math.max(round ? 0.4 : 0, Math.cos(th));
+        if (carMode === "drum" || round) {                   // 3D rounded drum (1c + 1d)
           py = CAR_ARC * (1 - Math.cos(th));                 // dip below the centre line
           pz = -CAR_DEPTH * (1 - Math.cos(th));              // recede into the screen at the rim
           rotY = sgn * (th * 180 / Math.PI) * CAR_ROT_GAIN;  // convex: each label's outer edge recedes
@@ -431,8 +433,7 @@
   }
   function ubPick(i) {
     const it = ubItems[i];
-    closeVariantMenu();
-    if (it) selectInstrument(it.instIdx, true);
+    if (it) selectInstrument(it.instIdx, true); // linger: the menu stays open until tapped off
   }
 
   let ubDrag = false, ubMoved = false, ubStartX = 0, ubStart = 0;
@@ -457,6 +458,13 @@
     ubPick(ubNearest(ubX + (e.clientX - rect.left - rect.width / 2) / phoneScale));
   });
   ubCarousel.addEventListener("pointercancel", () => { ubDrag = false; ubCarousel.classList.remove("dragging"); });
+  // tap anywhere outside the menu (and outside the instrument bar) dismisses it
+  document.addEventListener("pointerdown", (e) => {
+    if (ubFamily === -1) return;
+    if (underbelly.contains(e.target) || instCarousel.contains(e.target)) return;
+    e.stopPropagation();
+    closeVariantMenu();
+  }, true);
 
   let carDragging = false, carMoved = false, carStartX = 0, carStart = 0, carHoldTimer = null, carHeldOpened = false;
   instCarousel.addEventListener("pointerdown", (e) => {
