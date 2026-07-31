@@ -313,17 +313,22 @@
       let px = dx, py = 0, pz = 0, rotY = 0, scale = 1;
       let op = i === sel ? 1 : Math.max(0.28, 0.82 - a / 300);
       if (carMode !== "off") {
-        const round = carMode === "round";        // 1d: rounder + tighter so more neighbours show
-        const R = round ? 116 : CAR_COMP_R;       // smaller radius = tighter bunching toward center
+        const round = carMode === "round";
+        // 1d ("round"): built on option 1 (uniform) — near-centre spacing stays
+        // roughly uniform, but the OUTER labels bunch closer (gentle sin, larger
+        // radius) with a soft 2D dip + slight shrink so the wheel reads rounded,
+        // and an opacity floor so the ±2/±3 neighbours show through the fade fog.
+        // 2D only — no 3D drum.
+        const R = round ? 180 : CAR_COMP_R;
         const th = Math.min(Math.PI / 2, a / R);
         const sgn = Math.sign(dx);
         px = sgn * R * Math.sin(th);
-        // gentle foreshorten (floored) so wide labels (CHROMATIC/MANDOLIN) shrink
-        // just enough to not slide under their neighbours as they compress
-        scale = CAR_COMP_MIN_SCALE + (1 - CAR_COMP_MIN_SCALE) * Math.cos(th);
-        // fade outer labels; 1d keeps a floor so the ±2/±3 neighbours read through the fog
-        if (i !== sel) op = Math.max(round ? 0.4 : 0, Math.cos(th));
-        if (carMode === "drum" || round) {                   // 3D rounded drum (1c + 1d)
+        const minScale = round ? 0.82 : CAR_COMP_MIN_SCALE;
+        scale = minScale + (1 - minScale) * Math.cos(th);
+        if (i !== sel) op = Math.max(round ? 0.45 : 0, Math.cos(th));
+        if (round) {
+          py = 10 * (1 - Math.cos(th));                      // gentle 2D dip = rounded wheel, no 3D
+        } else if (carMode === "drum") {
           py = CAR_ARC * (1 - Math.cos(th));                 // dip below the centre line
           pz = -CAR_DEPTH * (1 - Math.cos(th));              // recede into the screen at the rim
           rotY = sgn * (th * 180 / Math.PI) * CAR_ROT_GAIN;  // convex: each label's outer edge recedes
@@ -453,9 +458,11 @@
   ubCarousel.addEventListener("pointerup", (e) => {
     if (!ubDrag) return;
     ubDrag = false; ubCarousel.classList.remove("dragging");
-    if (ubMoved) { ubPick(ubNearest(ubX)); return; }
-    const rect = ubCarousel.getBoundingClientRect();
-    ubPick(ubNearest(ubX + (e.clientX - rect.left - rect.width / 2) / phoneScale));
+    let idx;
+    if (ubMoved) idx = ubNearest(ubX);
+    else { const rect = ubCarousel.getBoundingClientRect(); idx = ubNearest(ubX + (e.clientX - rect.left - rect.width / 2) / phoneScale); }
+    layoutUb(ubCenters[idx]); // snap the chosen label under the fixed capsule
+    ubPick(idx);
   });
   ubCarousel.addEventListener("pointercancel", () => { ubDrag = false; ubCarousel.classList.remove("dragging"); });
   // tap anywhere outside the menu (and outside the instrument bar) dismisses it
