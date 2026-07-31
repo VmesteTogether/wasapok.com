@@ -676,67 +676,81 @@
      center string is dressed as the hero — machine head on top, filament, anchor
      foot — neighbors recede and fade, so it reads as a single gleaming string
      flanked by ghosts of the next ones, not a lonely line. */
-  .genhero { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .genhero {
+    position: absolute; inset: 0; overflow: hidden; pointer-events: none;
+    /* strings run off the top & bottom — fade them in/out at both edges so they
+       read as continuing beyond the frame (strings-through-a-window) */
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%);
+    mask-image: linear-gradient(to bottom, transparent 0, #000 15%, #000 85%, transparent 100%);
+  }
   .gstr {
     position: absolute;
     left: 50%; top: 50%;
-    width: 46px; height: 300px;
+    width: 46px; height: 460px;   /* taller than the capsule so the centered string bleeds off both ends */
     transform-origin: center center;
     will-change: transform, opacity;
     transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.32s;
   }
   .genhero.seating .gstr { transition: none; } /* seat instantly on (re)build, no fly-in */
-  /* the string: a metallic filament with a bright specular core down its middle */
+  /* the string: a LIQUID-CHROME filament — a mirror-bright cross-section (dark
+     edges → white specular core) crossed with a soft vertical "horizon"
+     reflection down its length. Chrome is the hero accent; blue/green ride on
+     top as a glow when selected/in-tune. */
   .gstr-line {
     position: absolute;
-    left: 50%; top: 42px; bottom: 30px;
+    left: 50%; top: 0; bottom: 0;   /* full height → bleeds via the .genhero mask */
     transform: translateX(-50%);
     border-radius: 3px;
-    background: linear-gradient(90deg,
-      rgba(120,128,140,0.45), rgba(176,184,196,0.92) 40%,
-      #f0f3f7 50%, rgba(160,168,180,0.85) 60%, rgba(112,120,132,0.45));
-    box-shadow: 0 1px 3px rgba(50,55,75,0.16);
-    transition: background 0.16s, box-shadow 0.16s;
+    background:
+      linear-gradient(180deg,
+        rgba(255,255,255,0) 0%, rgba(255,255,255,0.30) 38%,
+        rgba(14,18,28,0.20) 50%, rgba(255,255,255,0.18) 63%,
+        rgba(255,255,255,0) 100%),
+      linear-gradient(90deg,
+        #2f333a 0%, #565d68 11%, #9aa3af 29%, #eef2f7 43%,
+        #ffffff 50%, #e6ebf1 57%, #8b93a0 72%, #525963 89%, #2c3037 100%);
+    box-shadow: 0 1px 5px rgba(30,36,54,0.34), inset 0 0 1px rgba(255,255,255,0.6);
+    transition: box-shadow 0.18s, background 0.18s;
   }
-  /* machine head at the top — a small silver button with a washer/post below,
-     where the string would wind on */
-  .gstr-peg {
-    position: absolute;
-    left: 50%; top: 4px;
-    width: 27px; height: 15px;
-    transform: translateX(-50%);
-    border-radius: 7px;
-    background: linear-gradient(180deg, #f4f6f9, #c8ced7 55%, #99a1ad);
-    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.9), 0 2px 5px rgba(50,55,75,0.22);
+  /* wound (low) strings: a wrapped-ridge overlay, spacing set per-string by
+     --wind (coarser on thicker strings). Kept on ::after with soft-light so the
+     ridges survive the blue/green recolor of a selected string. */
+  .gstr-line.wound::after {
+    content: ""; position: absolute; inset: 0; border-radius: inherit;
+    background: repeating-linear-gradient(183deg,
+      rgba(255,255,255,0.50) 0,
+      rgba(255,255,255,0.06) calc(var(--wind, 3px) * 0.30),
+      rgba(0,0,0,0.40) calc(var(--wind, 3px) * 0.60),
+      rgba(255,255,255,0.06) calc(var(--wind, 3px) * 0.90),
+      rgba(255,255,255,0.50) var(--wind, 3px));
+    mix-blend-mode: soft-light;
+    opacity: 0.95;
   }
-  .gstr-peg::after {
-    content: ""; position: absolute; left: 50%; bottom: -8px;
-    width: 10px; height: 10px; border-radius: 50%;
-    transform: translateX(-50%);
-    background: radial-gradient(circle at 40% 34%, #f4f6f9, #aab1bc 72%);
-    box-shadow: 0 1px 2px rgba(50,55,75,0.26);
-  }
-  /* anchor foot near the bottom, just above the wheel — the string "plants" here */
-  .gstr-anchor {
-    position: absolute;
-    left: 50%; bottom: 16px;
-    width: 17px; height: 7px;
-    transform: translateX(-50%);
-    border-radius: 3px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(198,205,215,0.72));
-    box-shadow: 0 1px 2px rgba(50,55,75,0.2);
-  }
-  /* selection: the centered/selected string lights blue, green in tune — mirrors
-     the headstock's lit-string treatment so the two hero styles feel like one app */
+  /* selection: chrome stays; blue rides on top as a glow + a cool tint in the
+     reflection (chrome hero, blue accent — not a solid blue string) */
   .gstr.sel .gstr-line {
-    background: linear-gradient(90deg,
-      rgba(0,122,255,0.5), #4da2ff 42%, #cfe6ff 50%, #4da2ff 58%, rgba(0,122,255,0.5));
-    box-shadow: 0 0 8px rgba(0,122,255,0.6);
+    background:
+      linear-gradient(180deg,
+        rgba(150,200,255,0) 0%, rgba(150,200,255,0.34) 38%,
+        rgba(0,52,132,0.24) 50%, rgba(150,200,255,0.22) 63%,
+        rgba(150,200,255,0) 100%),
+      linear-gradient(90deg,
+        #2a313d 0%, #4f6890 11%, #9db6dc 29%, #dcebff 43%,
+        #f5faff 50%, #cfe1f8 57%, #7089a8 72%, #45505f 89%, #283039 100%);
+    box-shadow: 0 0 16px rgba(0,122,255,0.78), 0 0 6px rgba(0,122,255,0.6),
+      0 1px 5px rgba(30,36,54,0.34), inset 0 0 1px rgba(255,255,255,0.65);
   }
   .gstr.sel.intune .gstr-line {
-    background: linear-gradient(90deg,
-      rgba(52,199,89,0.5), #5fd67e 42%, #d3f6dd 50%, #5fd67e 58%, rgba(52,199,89,0.5));
-    box-shadow: 0 0 9px rgba(52,199,89,0.72);
+    background:
+      linear-gradient(180deg,
+        rgba(150,240,180,0) 0%, rgba(150,240,180,0.34) 38%,
+        rgba(0,100,44,0.24) 50%, rgba(150,240,180,0.22) 63%,
+        rgba(150,240,180,0) 100%),
+      linear-gradient(90deg,
+        #283a30 0%, #4f8f6d 11%, #9ddcb6 29%, #dcffe8 43%,
+        #f5fff8 50%, #cff8dd 57%, #709e85 72%, #45604f 89%, #28392f 100%);
+    box-shadow: 0 0 17px rgba(52,199,89,0.85), 0 0 6px rgba(52,199,89,0.62),
+      0 1px 5px rgba(30,36,54,0.34), inset 0 0 1px rgba(255,255,255,0.65);
   }
 
   /* reference-tone wing (instruments) — the flip-camera position */

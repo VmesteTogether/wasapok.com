@@ -419,12 +419,17 @@
   // ---------- guitar headstock ----------
 
   const headstock = document.getElementById("headstock");
+  const genericHero = document.getElementById("genericHero");
   let pegEls = []; // { g, line, noteIndex, octave }
+  let genericStrings = []; // { el, noteIndex, octave } — generic-hero string DOM
 
-  // guitar + bass both make the headstock the Manual-mode hero (the pegs ARE the
-  // string picker); other strings fall back to inline pills in the sheet.
+  // guitar + bass make the headstock the Manual-mode hero (the pegs ARE the
+  // string picker). Every OTHER string instrument now gets the generic
+  // multi-string hero instead of the old inline pills, so all string
+  // instruments share the same hero + wheel console.
   const usesHeadstock = (inst) =>
     !!inst.strings && (inst.icon === "guitar" || inst.icon === "bass");
+  const usesHero = (inst) => !!inst.strings; // any string instrument → a hero (headstock or generic strings)
 
   function buildHeadstock(inst) {
     const cx = 110;
@@ -764,6 +769,8 @@
       p.g.classList.toggle("intune", active);
       p.lines.forEach((l) => l.classList.toggle("intune", active));
     });
+    genericStrings.forEach((gsn) =>
+      gsn.el.classList.toggle("intune", on && gsn.el.classList.contains("sel")));
   }
 
   // ---------- string wheel (guitar hero) ----------
@@ -809,6 +816,15 @@
       // octave rides only the centered item (fades out as it leaves)
       it.sup.style.opacity = Math.max(0, 1 - Math.abs(d) * 2).toFixed(2);
     });
+    // generic-hero strings share the wheel's scroll position, so each string
+    // sits directly above its note and slides/fades in lockstep with it
+    genericStrings.forEach((gsn, i) => {
+      const { x, s, o } = wheelParams(i - pos);
+      gsn.el.style.transform =
+        `translate(calc(-50% + ${x.toFixed(1)}px), -50%) scale(${s.toFixed(3)})`;
+      gsn.el.style.opacity = o.toFixed(3);
+      gsn.el.style.zIndex = String(100 - Math.round(Math.abs(i - pos) * 10));
+    });
   }
 
   function buildWheel(inst) {
@@ -821,11 +837,45 @@
       stringWheel.appendChild(el);
       return { el, sup: el.querySelector("sup"), noteIndex, octave };
     });
-    // seat the drum instantly (no fly-in), then re-enable transitions
+    // seat the drum instantly (no fly-in), then re-enable transitions —
+    // suppress the generic-hero strings' transition through the same seat so
+    // they don't animate in from the stack when a new instrument is picked
     stringWheel.classList.add("dragging");
+    genericHero.classList.add("seating");
     layoutWheel(0);
-    requestAnimationFrame(() => requestAnimationFrame(() =>
-      stringWheel.classList.remove("dragging")));
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      stringWheel.classList.remove("dragging");
+      genericHero.classList.remove("seating");
+    }));
+  }
+
+  // ---------- generic multi-string hero (universal fallback) ----------
+  // One vertical string per note for instruments without bespoke headstock art.
+  // Positioning is driven by layoutWheel (shared carousel); here we just build
+  // the DOM and set each string's thickness from its RELATIVE pitch in the set
+  // (lowest = thickest, like real strings) with a floor for same-pitch sets.
+  function buildGenericHero(inst) {
+    genericHero.innerHTML = "";
+    const parsed = inst.strings.map(parseNote);
+    const midis = parsed.map((p) => midiOf(p.noteIndex, p.octave));
+    const lo = Math.min(...midis), hi = Math.max(...midis);
+    const THICK = 10, THIN = 5.5; // px filament width: low → thick, high → thin (kept substantial so the chrome mirror reads even on the thinnest string)
+    const WOUND_BELOW_MIDI = 56; // G3 and lower render wound (wrapped core); higher = plain steel — roughly IRL (uke stays all-plain, cello all-wound). Tunable.
+    genericStrings = parsed.map((p, i) => {
+      const t = hi > lo ? (midis[i] - lo) / (hi - lo) : 0.5; // 0 lowest → 1 highest
+      const w = +(THICK + (THIN - THICK) * t).toFixed(2);
+      const wound = midis[i] < WOUND_BELOW_MIDI;
+      const wind = (1.5 + w * 0.22).toFixed(2); // winding pitch: coarser wrap on thicker strings
+      const el = document.createElement("span");
+      el.className = "gstr";
+      // liquid-chrome filament that bleeds off the top & bottom of the capsule
+      // (fade via the .genhero mask); wound (low) strings get a wrapped-ridge
+      // overlay whose spacing rides the --wind var
+      el.innerHTML =
+        `<span class="gstr-line${wound ? " wound" : ""}" style="width:${w}px;--wind:${wind}px"></span>`;
+      genericHero.appendChild(el);
+      return { el, noteIndex: p.noteIndex, octave: p.octave };
+    });
   }
 
   function wheelSelect(i) {
@@ -837,7 +887,19 @@
   }
 
   const WHEEL_STEP = 58; // px of finger travel per index step (center spacing)
-  let whDragging = false, whMoved = false, whStartX = 0, whStartPos = 0;
+  let whDragging = false, whMoved = false, whStartX = 0, whStartPos = 0, whHoldT = null, whLP = false;
+
+  // item whose drum position is nearest a screen x (tap + long-press target)
+  function wheelNearest(clientX) {
+    const rect = stringWheel.getBoundingClientRect();
+    const tx = (clientX - rect.left - rect.width / 2) / phoneScale;
+    let best = 0, bestDist = Infinity;
+    wheelItems.forEach((it, i) => {
+      const d = Math.abs(wheelParams(i - wheelPos).x - tx);
+      if (d < bestDist) { bestDist = d; best = i; }
+    });
+    return best;
+  }
 
   stringWheel.addEventListener("pointerdown", (e) => {
     whDragging = true;
@@ -845,6 +907,13 @@
     whStartX = e.clientX;
     whStartPos = wheelPos;
     stringWheel.setPointerCapture(e.pointerId);
+    // custom slot: press-and-hold a note opens its pitch editor
+    whLP = false;
+    clearTimeout(whHoldT);
+    if (INSTRUMENTS[state.instrument].custom) {
+      const pi = wheelNearest(e.clientX);
+      whHoldT = setTimeout(() => { if (!whMoved) { whLP = true; openNoteEditor(pi); } }, 450);
+    }
   });
   stringWheel.addEventListener("pointermove", (e) => {
     if (!whDragging) return;
@@ -852,6 +921,7 @@
     if (!whMoved && Math.abs(dx) > 5) {
       whMoved = true;
       stringWheel.classList.add("dragging");
+      clearTimeout(whHoldT);
     }
     if (whMoved) {
       layoutWheel(Math.max(0, Math.min(wheelItems.length - 1, whStartPos - dx / WHEEL_STEP)));
@@ -861,26 +931,53 @@
     if (!whDragging) return;
     whDragging = false;
     stringWheel.classList.remove("dragging");
-    if (whMoved) {
-      wheelSelect(Math.round(wheelPos)); // snap to nearest
-    } else {
-      // tap: select the item whose drum position is nearest the tap
-      const rect = stringWheel.getBoundingClientRect();
-      const tx = (e.clientX - rect.left - rect.width / 2) / phoneScale;
-      let best = 0, bestDist = Infinity;
-      wheelItems.forEach((it, i) => {
-        const dist = Math.abs(wheelParams(i - wheelPos).x - tx);
-        if (dist < bestDist) { bestDist = dist; best = i; }
-      });
-      wheelSelect(best);
-    }
+    clearTimeout(whHoldT);
+    if (whLP) { whLP = false; return; }  // long-press opened the editor — no select
+    if (whMoved) wheelSelect(Math.round(wheelPos));
+    else wheelSelect(wheelNearest(e.clientX));
   });
   stringWheel.addEventListener("pointercancel", () => {
     if (!whDragging) return;
     whDragging = false;
     stringWheel.classList.remove("dragging");
+    clearTimeout(whHoldT);
     if (whMoved) wheelSelect(Math.round(wheelPos));
   });
+
+  // ---------- note editor (custom slot): long-press a wheel note to retune it ----------
+  const neScrim = document.getElementById("neScrim");
+  const neGrid = document.getElementById("neGrid");
+  const neOctVal = document.getElementById("neOctVal");
+  let neIndex = -1, neNote = 0, neOct = 4;
+  NOTES.forEach((nm, k) => {
+    const b = document.createElement("button");
+    b.className = "note-btn" + (nm.includes("#") ? " sharp" : "");
+    b.textContent = nm.replace("#", "♯");
+    b.addEventListener("click", () => { neNote = k; applyNoteEdit(); });
+    neGrid.appendChild(b);
+  });
+  function neSync() {
+    neOctVal.textContent = neOct;
+    [...neGrid.children].forEach((b, k) => b.classList.toggle("selected", k === neNote));
+  }
+  function applyNoteEdit() {
+    const inst = INSTRUMENTS[state.instrument];
+    inst.strings[neIndex] = NOTES[neNote] + neOct;   // e.g. "E2" / "C#3"
+    buildHeadstock(inst); buildWheel(inst);
+    state.noteIndex = neNote; state.octave = neOct;  // select the string you just set
+    syncTarget();
+    neSync();
+  }
+  function openNoteEditor(i) {
+    const p = parseNote(INSTRUMENTS[state.instrument].strings[i]);
+    neIndex = i; neNote = p.noteIndex; neOct = p.octave;
+    neSync();
+    neScrim.classList.add("show");
+  }
+  document.getElementById("neOctDown").addEventListener("click", () => { if (neOct > OCT_MIN) { neOct--; applyNoteEdit(); } });
+  document.getElementById("neOctUp").addEventListener("click", () => { if (neOct < OCT_MAX) { neOct++; applyNoteEdit(); } });
+  document.getElementById("neDone").addEventListener("click", () => neScrim.classList.remove("show"));
+  neScrim.addEventListener("click", (e) => { if (e.target === neScrim) neScrim.classList.remove("show"); });
   stringWheel.addEventListener("wheel", (e) => {
     e.preventDefault();
     const dir = Math.sign(e.deltaY + e.deltaX);
@@ -896,38 +993,17 @@
     carouselTo(familyOf(i));
     const hs = usesHeadstock(inst);
     noteGrid.style.display = inst.strings ? "none" : "";
-    stringRow.style.display = inst.strings && !hs ? "" : "none";
-    pickerLabel.style.display = hs ? "none" : ""; // headstock picks pegs on the hero, not in the sheet
+    stringRow.style.display = "none";               // string pills retired — every string instrument is now a hero
+    pickerLabel.style.display = inst.strings ? "none" : ""; // only Chromatic keeps the inline label
+    stringButtons = [];
     if (!hs) pegEls = [];
-    if (!inst.strings) {
+    if (!inst.strings) {                            // Chromatic — no hero
+      genericStrings = []; genericHero.innerHTML = "";
       pickerLabelText.textContent = "Target Note";
-      stringButtons = [];
-    } else if (hs) {
-      stringButtons = [];
-      buildHeadstock(inst);
+    } else {                                        // any string instrument → hero + wheel
+      if (hs) { genericStrings = []; genericHero.innerHTML = ""; buildHeadstock(inst); }
+      else buildGenericHero(inst);
       buildWheel(inst);
-      const low = parseNote(inst.strings[0]);
-      state.noteIndex = low.noteIndex;
-      state.octave = low.octave;
-    } else {
-      pickerLabelText.textContent = `${inst.name} Strings`;
-      stringRow.innerHTML = "";
-      stringButtons = inst.strings.map((s) => {
-        const { noteIndex, octave } = parseNote(s);
-        const b = document.createElement("button");
-        b.className = "string-btn";
-        b.innerHTML = `${NOTES[noteIndex].replace("#", "♯")}<small>${octave}</small>`;
-        b.dataset.noteIndex = noteIndex;
-        b.dataset.octave = octave;
-        b.addEventListener("click", () => {
-          state.noteIndex = noteIndex;
-          state.octave = octave;
-          syncTarget();
-        });
-        stringRow.appendChild(b);
-        return b;
-      });
-      // default to the lowest string
       const low = parseNote(inst.strings[0]);
       state.noteIndex = low.noteIndex;
       state.octave = low.octave;
@@ -937,6 +1013,54 @@
     syncTarget();
   }
 
+  // ---------- custom "+" slot: swipe the headstock to switch shape + count ----------
+  // Each committed horizontal swipe flips to the next CUSTOM_SHAPES entry
+  // (guitar-6 ↔ bass-4), reseeding the wheel with that shape's default tuning.
+  // Only the custom slot swipes; a committed drag suppresses the peg tap.
+  const CUSTOM_SHAPES = [
+    { icon: "guitar", strings: ["E2", "A2", "D3", "G3", "B3", "E4"] },
+    { icon: "bass",   strings: ["E1", "A1", "D2", "G2"] },
+  ];
+  function cycleCustomShape(dir) {
+    const ci = INSTRUMENTS.findIndex((x) => x.custom);
+    const inst = INSTRUMENTS[ci];
+    inst.shape = ((inst.shape || 0) + dir + CUSTOM_SHAPES.length) % CUSTOM_SHAPES.length;
+    const sh = CUSTOM_SHAPES[inst.shape];
+    inst.icon = sh.icon; inst.strings = sh.strings.slice();
+    selectInstrument(ci, false);              // rebuild headstock + wheel for the new shape
+    for (const el of [hsHero, tunerStrip]) {  // quick fade-in so the swap reads as a flip
+      el.style.transition = "none"; el.style.opacity = "0.25";
+      void el.offsetWidth;
+      el.style.transition = "opacity 0.22s"; el.style.opacity = "1";
+    }
+  }
+  function customSwipeHint() {  // one-time nudge that the custom headstock is swipeable
+    try {
+      if (localStorage.getItem("tuner-customhint")) return;
+      localStorage.setItem("tuner-customhint", "1");
+    } catch {}
+    headstock.animate(
+      [{ transform: "translateX(0)" }, { transform: "translateX(-9px)" },
+       { transform: "translateX(5px)" }, { transform: "translateX(0)" }],
+      { duration: 640, easing: "ease-in-out", delay: 280 });
+  }
+  let hsDownX = 0, hsTracking = false, hsSwiped = false;
+  hsHero.addEventListener("pointerdown", (e) => {
+    if (!INSTRUMENTS[state.instrument].custom) return;
+    hsTracking = true; hsSwiped = false; hsDownX = e.clientX;
+  });
+  hsHero.addEventListener("pointermove", (e) => {
+    if (!hsTracking) return;
+    if (Math.abs((e.clientX - hsDownX) / phoneScale) > 40) {
+      hsTracking = false; hsSwiped = true;
+      cycleCustomShape(e.clientX < hsDownX ? 1 : -1);
+    }
+  });
+  hsHero.addEventListener("pointerup", () => { hsTracking = false; });
+  hsHero.addEventListener("click", (e) => {  // a swipe must not also fire the peg's tap
+    if (hsSwiped) { e.stopPropagation(); e.preventDefault(); hsSwiped = false; }
+  }, true);
+
   // Manual surfaces: chromatic shows the note grid inline, violin-class shows
   // its string pills inline (guitar picks on the headstock). The footer console
   // (carousel + wings) shows in Manual; Auto hides it by visibility so the mic
@@ -945,8 +1069,8 @@
   function updateInlinePicker() {
     const inst = INSTRUMENTS[state.instrument];
     const manual = state.mode === "manual";
-    const hs = usesHeadstock(inst);
-    inlinePicker.style.display = manual && !hs ? "block" : "none";
+    const hero = usesHero(inst);
+    inlinePicker.style.display = manual && !hero ? "block" : "none"; // only Chromatic is inline now
     micArea.classList.toggle("auto", !manual);
     miniOct.style.display = !inst.strings ? "" : "none";
     // reference-tone speaker: instruments keep it in the right wing; chromatic's
@@ -959,10 +1083,14 @@
   // guitar + bass in Manual mode make the headstock the hero (replaces the dial)
   function updateHeroView() {
     const inst = INSTRUMENTS[state.instrument];
-    const hero = state.mode === "manual" && usesHeadstock(inst);
+    const hero = state.mode === "manual" && usesHero(inst);
+    const hs = usesHeadstock(inst);
     hsHero.style.display = hero ? "" : "none";
     tunerStrip.style.display = hero ? "" : "none";
-    gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the headstock
+    gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the hero
+    headstock.style.display = hero && hs ? "" : "none";
+    genericHero.style.display = hero && !hs ? "" : "none";
+    if (hero && inst.custom) customSwipeHint();
   }
 
   // bubble-level tuner — a liquid-glass bubble slides flat(−50) ↔ sharp(+50);
@@ -1030,6 +1158,8 @@
       p.g.classList.toggle("sel", sel);
       p.lines.forEach((l) => l.classList.toggle("sel", sel));
     });
+    genericStrings.forEach((gsn) => gsn.el.classList.toggle("sel",
+      gsn.noteIndex === state.noteIndex && gsn.octave === state.octave));
     noteDisplay.firstChild.textContent = NOTES[state.noteIndex].replace("#", "♯");
     octDisplay.textContent = state.octave;
     const wi = wheelItems.findIndex((w) =>
