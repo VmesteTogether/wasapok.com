@@ -729,13 +729,22 @@
     background: radial-gradient(closest-side, #fff 0%, #fff 20%, rgba(255,255,255,0.5) 44%, rgba(255,255,255,0) 74%);
     opacity: 0; transition: opacity 0.3s; /* hidden on non-selected strings */
   }
-  .gstr.sel .gstr-line::before {
-    opacity: 1;
-    animation: gstr-glint 12s ease-in-out infinite;
-  }
+  /* on the selected string the glint travels on an INVERSE speed curve: quick
+     through the low/centre, DECELERATING into the upper-half "sweet spot" where it
+     swells white-hot (scale + full opacity + a soft glow), then eases off and
+     drifts back down dim. One bloom per cycle; `linear` timing so the keyframe
+     SPACING (not easing) shapes the speed, and the bloom lands where a reflection
+     would align (mid-path), not at a travel extreme. */
+  .gstr.sel .gstr-line::before { animation: gstr-glint 12s linear infinite; }
   @keyframes gstr-glint {
-    0%, 100% { transform: translate(-50%, -10px); }
-    50%      { transform: translate(-50%, 10px); }
+    0%   { transform: translate(-50%, 10px)  scale(1);    opacity: 0.4;  filter: none; }
+    25%  { transform: translate(-50%, -2px)  scale(1);    opacity: 0.5;  filter: none; }
+    38%  { transform: translate(-50%, -5px)  scale(1.12); opacity: 0.72; filter: drop-shadow(0 0 2px rgba(255,255,255,0.5)); }
+    46%  { transform: translate(-50%, -6px)  scale(1.45); opacity: 1;    filter: drop-shadow(0 0 5px rgba(255,255,255,0.9)); }
+    55%  { transform: translate(-50%, -7px)  scale(1.12); opacity: 0.7;  filter: drop-shadow(0 0 2px rgba(255,255,255,0.5)); }
+    68%  { transform: translate(-50%, -9px)  scale(1);    opacity: 0.45; filter: none; }
+    74%  { transform: translate(-50%, -10px) scale(1);    opacity: 0.4;  filter: none; }
+    100% { transform: translate(-50%, 10px)  scale(1);    opacity: 0.4;  filter: none; }
   }
   /* wound (low) strings: a wrapped-ridge overlay, spacing set per-string by
      --wind (coarser on thicker strings). Kept on ::after with soft-light so the
