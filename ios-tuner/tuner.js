@@ -872,10 +872,30 @@
       // (fade via the .genhero mask); wound (low) strings get a wrapped-ridge
       // overlay whose spacing rides the --wind var
       el.innerHTML =
-        `<span class="gstr-line${wound ? " wound" : ""}" style="width:${w}px;--wind:${wind}px;--gallop-delay:${(-i * 0.16).toFixed(2)}s"></span>`;
+        `<span class="gstr-line${wound ? " wound" : ""}" style="width:${w}px;--wind:${wind}px"></span>`;
       genericHero.appendChild(el);
       return { el, noteIndex: p.noteIndex, octave: p.octave };
     });
+    // reverberation overlay: a standing sine-wave centred over the selected
+    // string, revealed + oscillated by CSS (.gstr-wave) while listening
+    const wave = document.createElement("div");
+    wave.className = "gstr-wave";
+    wave.innerHTML =
+      `<svg viewBox="0 0 44 460"><path d="${sineWavePath(44, 460, 9, 2.5)}" fill="none" stroke="rgba(236,243,250,0.92)" stroke-width="3.4" stroke-linecap="round"/></svg>`;
+    genericHero.appendChild(wave);
+  }
+
+  // vertical sine polyline for the reverberation overlay (amp px each side of
+  // centre, `periods` full waves down the height)
+  function sineWavePath(w, h, amp, periods) {
+    const cx = w / 2, steps = 64;
+    let d = "";
+    for (let i = 0; i <= steps; i++) {
+      const y = (h * i / steps).toFixed(1);
+      const x = (cx + amp * Math.sin(periods * 2 * Math.PI * i / steps)).toFixed(1);
+      d += (i === 0 ? "M" : "L") + x + "," + y;
+    }
+    return d;
   }
 
   function wheelSelect(i) {
@@ -1131,12 +1151,10 @@
     // drift sharp -> colour reflects on the LEFT, drift flat -> RIGHT; the glow
     // spills that way too, so the bubble looks like it's picking up the bar beside it
     const reflX = (50 - (clamped / 50) * 30).toFixed(1);
-    const glowDx = (-(clamped / 50) * 4).toFixed(1);
     for (const dot of hbarDots) {
       dot.style.left = left.toFixed(1) + "%";
       dot.style.setProperty("--dot-color", bg);
       dot.style.setProperty("--refl-x", reflX + "%");
-      dot.style.setProperty("--glow-dx", glowDx + "px");
       dot.style.transform =
         `translate(-50%,-50%) scaleX(${sx.toFixed(3)}) scaleY(${sy.toFixed(3)})`;
     }
