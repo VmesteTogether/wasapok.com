@@ -245,12 +245,20 @@
   // then re-measured once the web font loads: the fallback font's metrics differ,
   // so the first pass can be too narrow — which clipped MANDOLIN and crowded
   // CHROMATIC against the capsule edges.
+  const carSlotL = document.getElementById("carSlotL");
+  const carSlotR = document.getElementById("carSlotR");
   let FIXED_CAP_W;
   function measureCarousel() {
     const longest = Math.max(...carItems.map((el) => el.offsetWidth));
     FIXED_CAP_W = Math.round(longest + 30);   // longest word + ~15px breathing room each side
     const PITCH = Math.round(longest + 24);    // pitch that clears the capsule
     carCenters = carItems.map((el, i) => i * PITCH);
+    if (carSlotL) {                            // 1f: recessed neighbour wells at ±1
+      const w = FIXED_CAP_W - 16;
+      carSlotL.style.width = w + "px"; carSlotR.style.width = w + "px";
+      carSlotL.style.left = "calc(50% - " + PITCH + "px)";
+      carSlotR.style.left = "calc(50% + " + PITCH + "px)";
+    }
   }
   measureCarousel();
   if (document.fonts && document.fonts.ready) {
