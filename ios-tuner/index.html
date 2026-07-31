@@ -15,7 +15,7 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="Tuner">
-<meta name="theme-color" content="#000000">
+<meta name="theme-color" content="#eaedf3">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   /* self-hosted Inter (latin-subset variable, weights 100-900) — an
@@ -1191,13 +1191,13 @@
   .fit-toggle .ic-compress { display: none; }
 
   /* ---- fill-screen ON ---- */
-  body.fs { background: #000; }              /* black behind any letterbox */
+  body.fs { background: #eaedf3; }           /* app-tone letterbox: blends with the UI edges instead of stark black bars */
   body.fs .phone {
     border-radius: 0;                        /* edge-to-edge screen */
     border: none;
     box-shadow: none;                        /* drop the aluminium frame */
   }
-  body.fs .dev-reset, body.fs .opt-toggle { display: none; }  /* hide the dev rail */
+  body.fs .dev-reset { display: none; }  /* hide reset; keep 1/1c/1ca reachable even in fill-screen */
   /* pin the construction to the viewport's top-left; the JS translate+scale
      centers it deterministically (flex centering + a scale transform drifted) */
   body.fs #phoneWrap { position: fixed; top: 0; left: 0; }
@@ -1215,10 +1215,6 @@
   body.fs .fit-toggle:active { opacity: 1; }
   body.fs .fit-toggle .ic-expand { display: none; }
   body.fs .fit-toggle .ic-compress { display: block; }
-
-  /* launched from the Home Screen: it IS the app, so drop the fill-screen exit
-     control — there's no browser chrome to return to */
-  body.standalone .fit-toggle { display: none; }
 
   /* prominent tuner bar (locked in): a chunkier groove, a bigger bubble, bolder
      ♭/♯, and more air isolating it from the wheel + cents — overrides the base
@@ -1547,19 +1543,14 @@
     addEventListener("orientationchange", fit);
     if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
 
-    // launched from the Home Screen (iOS "Add to Home Screen", or any installed
-    // PWA)? Force edge-to-edge automatically and mark the body so the manual
-    // exit control hides — the standalone window IS the app.
-    const standalone = (navigator.standalone === true) ||
-      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
-    if (standalone) {
-      document.body.classList.add("standalone");
-      setFS(true, { persist: false });
-    } else {
-      let saved = "0";
-      try { saved = localStorage.getItem(KEY) || "0"; } catch {}
-      if (saved === "1") setFS(true, { persist: false });
-    }
+    // Deliberately NO auto fill-screen on Home Screen launch: fill mode letterboxes
+    // when the viewport isn't exactly 390x844, and it used to hide the dev options
+    // rail (1 / 1c / 1ca). Land in the normal interactive view so options are always
+    // reachable; the corner control still toggles the clean full-screen preview when
+    // wanted (and the options rail now stays reachable there too).
+    let saved = "0";
+    try { saved = localStorage.getItem(KEY) || "0"; } catch {}
+    if (saved === "1") setFS(true, { persist: false });
   })();
 </script>
 </body>
