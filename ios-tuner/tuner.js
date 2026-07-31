@@ -86,6 +86,10 @@
       FAMILIES.splice(1, 0, cf);
     }
   }
+  // only families with more than one variant get the "^" underbelly menu (Guitar,
+  // Bass). Single-variant families (uke/violin/etc.) show no chevron for now —
+  // the coming "Other" family will re-group them and regain one.
+  FAMILIES.forEach((f) => { f.hasOptions = f.variants.length > 1; });
   const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
 
   function parseNote(s) {
