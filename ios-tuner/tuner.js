@@ -312,7 +312,12 @@
       // bunch + foreshorten only, no 3D.
       let px = dx, py = 0, pz = 0, rotY = 0, scale = 1;
       let op = i === sel ? 1 : Math.max(0.28, 0.82 - a / 300);
-      if (carMode !== "off") {
+      if (carMode === "caps") {
+        // 1e: option-1 uniform layout (px=dx) + a per-label liquid-glass capsule
+        // whose opacity reflects centredness — bright centre, muted ±1, gone by ±2
+        const pitch = (carCenters[1] - carCenters[0]) || 100;
+        el.style.setProperty("--cap-op", Math.max(0, 1 - (a / pitch) * 0.5).toFixed(3));
+      } else if (carMode !== "off") {
         const round = carMode === "round";
         // 1d ("round"): built on option 1 (uniform) — near-centre spacing stays
         // roughly uniform, but the OUTER labels bunch closer (gentle sin, larger
