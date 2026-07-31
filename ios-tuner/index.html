@@ -622,7 +622,10 @@
   /* bass headstocks are physically bigger than a guitar's — render the whole
      SVG a touch larger so the size difference reads (the neck is already drawn
      thinner in JS, so it still comes out narrower than the guitar's). */
-  .hs-hero .headstock.bass svg { width: 310px; }
+  /* nudge the bass SVG up toward the capsule's top edge; because the board is
+     drawn well below the visible window, the same 10px is revealed as extra
+     fretboard at the bottom (crown had ~14px of headroom, so it stays uncropped) */
+  .hs-hero .headstock.bass svg { width: 310px; margin-top: -10px; }
   #headstock .peg { cursor: pointer; }
   #headstock .peg .hit { fill: transparent; }
   #headstock .peg .btn {
