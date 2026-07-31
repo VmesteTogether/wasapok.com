@@ -2,8 +2,21 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Tuner</title>
+<!-- Installable web-app: Safari -> Share -> Add to Home Screen launches this
+     full-screen with no browser chrome, so the 390x844 mockup maps to the whole
+     device screen — the closest thing to running the real app. black-translucent
+     lets the web view go edge-to-edge; the design draws its own status bar,
+     Dynamic Island and home indicator, so we deliberately don't reserve space
+     (or add safe-area padding) for the system chrome, which would distort the
+     pixel-perfect layout. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Tuner">
+<meta name="theme-color" content="#000000">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   /* self-hosted Inter (latin-subset variable, weights 100-900) — an
      open-source San Francisco stand-in so non-Apple devices render the UI in
@@ -652,6 +665,77 @@
     filter: drop-shadow(0 0 3px rgba(52, 199, 89, 0.9));
   }
 
+  /* ---------- generic multi-string hero (universal fallback) ----------
+     For instruments we don't draw a bespoke headstock (viola/mandolin/banjo/
+     uke/violin/cello, or a custom string count), the hero is one vertical
+     string per note, each riding the SAME carousel as the wheel below (JS drives
+     x/scale/opacity from wheelParams). Thickness encodes relative pitch. The
+     center string is dressed as the hero — machine head on top, filament, anchor
+     foot — neighbors recede and fade, so it reads as a single gleaming string
+     flanked by ghosts of the next ones, not a lonely line. */
+  .genhero { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+  .gstr {
+    position: absolute;
+    left: 50%; top: 50%;
+    width: 46px; height: 300px;
+    transform-origin: center center;
+    will-change: transform, opacity;
+    transition: transform 0.32s cubic-bezier(0.32, 0.72, 0, 1), opacity 0.32s;
+  }
+  .genhero.seating .gstr { transition: none; } /* seat instantly on (re)build, no fly-in */
+  /* the string: a metallic filament with a bright specular core down its middle */
+  .gstr-line {
+    position: absolute;
+    left: 50%; top: 42px; bottom: 30px;
+    transform: translateX(-50%);
+    border-radius: 3px;
+    background: linear-gradient(90deg,
+      rgba(120,128,140,0.45), rgba(176,184,196,0.92) 40%,
+      #f0f3f7 50%, rgba(160,168,180,0.85) 60%, rgba(112,120,132,0.45));
+    box-shadow: 0 1px 3px rgba(50,55,75,0.16);
+    transition: background 0.16s, box-shadow 0.16s;
+  }
+  /* machine head at the top — a small silver button with a washer/post below,
+     where the string would wind on */
+  .gstr-peg {
+    position: absolute;
+    left: 50%; top: 4px;
+    width: 27px; height: 15px;
+    transform: translateX(-50%);
+    border-radius: 7px;
+    background: linear-gradient(180deg, #f4f6f9, #c8ced7 55%, #99a1ad);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.9), 0 2px 5px rgba(50,55,75,0.22);
+  }
+  .gstr-peg::after {
+    content: ""; position: absolute; left: 50%; bottom: -8px;
+    width: 10px; height: 10px; border-radius: 50%;
+    transform: translateX(-50%);
+    background: radial-gradient(circle at 40% 34%, #f4f6f9, #aab1bc 72%);
+    box-shadow: 0 1px 2px rgba(50,55,75,0.26);
+  }
+  /* anchor foot near the bottom, just above the wheel — the string "plants" here */
+  .gstr-anchor {
+    position: absolute;
+    left: 50%; bottom: 16px;
+    width: 17px; height: 7px;
+    transform: translateX(-50%);
+    border-radius: 3px;
+    background: linear-gradient(180deg, rgba(255,255,255,0.88), rgba(198,205,215,0.72));
+    box-shadow: 0 1px 2px rgba(50,55,75,0.2);
+  }
+  /* selection: the centered/selected string lights blue, green in tune — mirrors
+     the headstock's lit-string treatment so the two hero styles feel like one app */
+  .gstr.sel .gstr-line {
+    background: linear-gradient(90deg,
+      rgba(0,122,255,0.5), #4da2ff 42%, #cfe6ff 50%, #4da2ff 58%, rgba(0,122,255,0.5));
+    box-shadow: 0 0 8px rgba(0,122,255,0.6);
+  }
+  .gstr.sel.intune .gstr-line {
+    background: linear-gradient(90deg,
+      rgba(52,199,89,0.5), #5fd67e 42%, #d3f6dd 50%, #5fd67e 58%, rgba(52,199,89,0.5));
+    box-shadow: 0 0 9px rgba(52,199,89,0.72);
+  }
+
   /* reference-tone wing (instruments) — the flip-camera position */
   .tone-btn {
     appearance: none;
@@ -1013,6 +1097,33 @@
   .perm-btn.allow { font-weight: 600; border-left: 0.5px solid rgba(60,60,67,0.29); }
   .perm-btn:active { background: rgba(0,0,0,0.06); }
 
+  /* custom-slot note editor (long-press a wheel string) */
+  .ne-scrim {
+    position: absolute; inset: 0; z-index: 110;
+    display: none; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.28);
+    -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  }
+  .ne-scrim.show { display: flex; animation: scrimIn 0.2s ease; }
+  .ne-sheet { width: 300px; border-radius: 24px; padding: 16px; }
+  .ne-hdr { font-size: 15px; font-weight: 600; color: var(--label); text-align: center; margin-bottom: 10px; letter-spacing: -0.2px; }
+  .ne-grid { padding: 6px; }
+  .ne-oct { display: flex; align-items: center; justify-content: center; gap: 14px; margin: 14px 0 2px; }
+  .ne-oclabel { font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .ne-ostep {
+    width: 34px; height: 34px; border-radius: 50%; border: none;
+    background: rgba(120, 120, 128, 0.16); color: var(--label);
+    font-family: inherit; font-size: 19px; cursor: pointer;
+  }
+  .ne-ostep:active { background: rgba(120, 120, 128, 0.28); }
+  .ne-oval { font-size: 17px; font-weight: 600; color: var(--label); min-width: 16px; text-align: center; font-variant-numeric: tabular-nums; }
+  .ne-done {
+    display: block; width: 100%; margin-top: 12px; padding: 11px;
+    border: none; border-radius: 14px; background: var(--blue); color: #fff;
+    font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
+  }
+  .ne-done:active { filter: brightness(0.95); }
+
   /* dev-only reset button — liquid-glass pebble beside the phone construction */
   .dev-reset {
     position: fixed;
@@ -1104,6 +1215,10 @@
   body.fs .fit-toggle:active { opacity: 1; }
   body.fs .fit-toggle .ic-expand { display: none; }
   body.fs .fit-toggle .ic-compress { display: block; }
+
+  /* launched from the Home Screen: it IS the app, so drop the fill-screen exit
+     control — there's no browser chrome to return to */
+  body.standalone .fit-toggle { display: none; }
 
   /* prominent tuner bar (locked in): a chunkier groove, a bigger bubble, bolder
      ♭/♯, and more air isolating it from the wheel + cents — overrides the base
@@ -1224,6 +1339,7 @@
         </div>
         <div class="hs-hero" id="hsHero" style="display: none;">
           <div class="headstock" id="headstock"></div>
+          <div class="genhero" id="genericHero" style="display: none;"></div>
         </div>
       </div>
 
@@ -1321,6 +1437,21 @@
         </div>
       </div>
     </div>
+
+    <!-- custom-slot note editor — opened by long-pressing a string in the wheel -->
+    <div class="ne-scrim overlay" id="neScrim">
+      <div class="ne-sheet glass">
+        <div class="ne-hdr">Tune String</div>
+        <div class="ne-grid note-grid" id="neGrid"></div>
+        <div class="ne-oct">
+          <span class="ne-oclabel">Octave</span>
+          <button class="ne-ostep" id="neOctDown" aria-label="Octave down">&minus;</button>
+          <span class="ne-oval" id="neOctVal">4</span>
+          <button class="ne-ostep" id="neOctUp" aria-label="Octave up">+</button>
+        </div>
+        <button class="ne-done" id="neDone">Done</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -1416,9 +1547,19 @@
     addEventListener("orientationchange", fit);
     if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
 
-    let saved = "0";
-    try { saved = localStorage.getItem(KEY) || "0"; } catch {}
-    if (saved === "1") setFS(true, { persist: false });
+    // launched from the Home Screen (iOS "Add to Home Screen", or any installed
+    // PWA)? Force edge-to-edge automatically and mark the body so the manual
+    // exit control hides — the standalone window IS the app.
+    const standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (standalone) {
+      document.body.classList.add("standalone");
+      setFS(true, { persist: false });
+    } else {
+      let saved = "0";
+      try { saved = localStorage.getItem(KEY) || "0"; } catch {}
+      if (saved === "1") setFS(true, { persist: false });
+    }
   })();
 </script>
 </body>
