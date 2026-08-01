@@ -94,7 +94,7 @@
     const KEEP = new Set(["Chromatic", "Custom", "Guitar", "Bass"]);
     const others = FAMILIES.filter((f) => !KEEP.has(f.name));
     if (others.length) {
-      const other = { name: "Other", other: true, icon: others[0].icon,
+      const other = { name: "More", other: true, icon: others[0].icon,
         variants: others.flatMap((f) => f.variants) };
       for (let k = FAMILIES.length - 1; k >= 0; k--) if (!KEEP.has(FAMILIES[k].name)) FAMILIES.splice(k, 1);
       FAMILIES.push(other);
@@ -230,14 +230,14 @@
     return el;
   });
 
-  // the "Other" slot self-labels: "OTHER" until a member is picked, then that
+  // the "More" slot self-labels: "MORE" until a member is picked, then that
   // member's name (persisted, so it survives reloads)
   const otherFam = FAMILIES.findIndex((f) => f.other);
   function updateOtherLabel() {
     if (otherFam < 0) return;
-    // the active Other member's name, or "OTHER" when empty / not on an Other member
+    // the active More member's name, or "MORE" when empty / not on a More member
     const active = !emptyOther && FAMILIES[otherFam].variants.includes(state.instrument);
-    carItems[otherFam].textContent = active ? INSTRUMENTS[state.instrument].name.toUpperCase() : "OTHER";
+    carItems[otherFam].textContent = active ? INSTRUMENTS[state.instrument].name.toUpperCase() : "MORE";
   }
   updateOtherLabel();
 
