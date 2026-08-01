@@ -247,17 +247,15 @@
   // CHROMATIC against the capsule edges.
   const carSlotL = document.getElementById("carSlotL");
   const carSlotR = document.getElementById("carSlotR");
-  let FIXED_CAP_W;
+  let FIXED_CAP_W, CAR_PITCH;
   function measureCarousel() {
     const longest = Math.max(...carItems.map((el) => el.offsetWidth));
     FIXED_CAP_W = Math.round(longest + 30);   // longest word + ~15px breathing room each side
-    const PITCH = Math.round(longest + 24);    // pitch that clears the capsule
-    carCenters = carItems.map((el, i) => i * PITCH);
-    if (carSlotL) {                            // 1f: recessed neighbour wells at ±1
+    CAR_PITCH = Math.round(longest + 24);      // pitch that clears the capsule
+    carCenters = carItems.map((el, i) => i * CAR_PITCH);
+    if (carSlotL) {                            // 1f: recessed neighbour wells (JS drives left/opacity)
       const w = FIXED_CAP_W - 16;
       carSlotL.style.width = w + "px"; carSlotR.style.width = w + "px";
-      carSlotL.style.left = "calc(50% - " + PITCH + "px)";
-      carSlotR.style.left = "calc(50% + " + PITCH + "px)";
     }
   }
   measureCarousel();
@@ -309,6 +307,19 @@
   function layoutCarousel(x) {
     carX = x;
     const sel = carNearest(x);
+    // 1f wells: each END well FOLLOWS its end word into the centre — it tracks the
+    // word (so its outer edge holds a constant gap) and fades over the last half-
+    // pitch as it merges under the centre capsule, so it's never left orphaned as
+    // an empty capsule at the edge. Interior wells stay fixed ±1 slots (dl/dr ≥ P).
+    if (carSlotL) {
+      const P = CAR_PITCH || (carCenters[1] - carCenters[0]) || 100;
+      const dl = Math.max(0, x);                              // Chromatic's px distance from centre
+      const dr = Math.max(0, (FAMILIES.length - 1) * P - x);  // Other's px distance from centre
+      carSlotL.style.left = `calc(50% - ${Math.min(dl, P).toFixed(1)}px)`;
+      carSlotR.style.left = `calc(50% + ${Math.min(dr, P).toFixed(1)}px)`;
+      carSlotL.style.opacity = Math.min(1, 2 * dl / P).toFixed(3);
+      carSlotR.style.opacity = Math.min(1, 2 * dr / P).toFixed(3);
+    }
     carItems.forEach((el, i) => {
       const dx = carCenters[i] - x;
       const a = Math.abs(dx);
