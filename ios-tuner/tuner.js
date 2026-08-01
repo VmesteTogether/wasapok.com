@@ -106,8 +106,9 @@
   const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
 
   const INST_KEY = "tuner-instrument"; // last instrument, to reload back into it
+  const OTHER_KEY = "tuner-more-chosen"; // the "set" More member — the More slot stays it until changed
   let emptyOther = false;              // "More" family selected, no member chosen yet
-  let otherChosen = -1;                // INSTRUMENT idx of the last More member chosen (the tab remembers it)
+  let otherChosen = -1;                // INSTRUMENT idx of the More member the slot is SET to (-1 = unset)
 
   function parseNote(s) {
     const m = s.match(/^([A-G]#?)(\d)$/);
@@ -438,7 +439,9 @@
   function carouselPick(i) {
     closeVariantMenu(); // switching family dismisses any open variant menu
     if (familyOf(state.instrument) === i && !emptyOther) carouselTo(i);
-    else if (FAMILIES[i].other) enterOtherEmpty();
+    // More stays SET to its member: once chosen, landing on More returns to that
+    // instrument (swipe away & back keeps it); it opens empty only until first set.
+    else if (FAMILIES[i].other) { if (otherChosen >= 0) selectInstrument(otherChosen, true); else enterOtherEmpty(); }
     else selectInstrument(FAMILIES[i].cur, true);
   }
 
@@ -1203,7 +1206,10 @@
     state.instrument = i;
     const selFam = FAMILIES[familyOf(i)];
     if (selFam) selFam.cur = i;
-    if (familyOf(i) === otherFam) otherChosen = i; // remember the chosen More member for the tab label
+    if (familyOf(i) === otherFam) { // the More slot is now SET to this member (persist it, survives reload)
+      otherChosen = i;
+      try { localStorage.setItem(OTHER_KEY, String(i)); } catch {}
+    }
     try { localStorage.setItem(INST_KEY, String(i)); } catch {}
     updateOtherLabel();
     carSel = -1;        // force the capsule to re-measure — the More label width may have just changed
@@ -1610,7 +1616,7 @@
 
   // dev reset: wipe the stored permission and reload to the first-launch state
   document.getElementById("devReset").addEventListener("click", () => {
-    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); localStorage.removeItem(PEEK_KEY); } catch {}
+    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); localStorage.removeItem(PEEK_KEY); localStorage.removeItem(OTHER_KEY); } catch {}
     location.reload();
   });
 
@@ -1726,14 +1732,20 @@
 
   const savedA4 = parseInt((() => { try { return localStorage.getItem(A4_KEY); } catch { return null; } })(), 10);
   setA4(Number.isFinite(savedA4) ? savedA4 : 440); // load calibration before mode reset
-  // reload into the last instrument — EXCEPT "Other" members, which return to the
-  // empty "Other" slot (pick a member to load one). Default Guitar 6 on first run.
+  // reload into the last instrument. The More slot keeps whatever member it was SET
+  // to (persisted) — reload restores that, not the empty placeholder. More opens
+  // empty only when it was never set. Default Guitar 6 on first run.
   {
     let start = 1;
     try { const s = parseInt(localStorage.getItem(INST_KEY), 10); if (Number.isInteger(s) && INSTRUMENTS[s]) start = s; } catch {}
+    try { const o = parseInt(localStorage.getItem(OTHER_KEY), 10); if (Number.isInteger(o) && FAMILIES[otherFam] && FAMILIES[otherFam].variants.includes(o)) otherChosen = o; } catch {}
     const sf = FAMILIES[familyOf(start)];
-    if (sf && sf.other) { sf.cur = start; enterOtherEmpty(); }
-    else selectInstrument(start);
+    if (sf && sf.other) {
+      if (otherChosen >= 0) selectInstrument(otherChosen); // More was set → reload into that member
+      else { sf.cur = start; enterOtherEmpty(); }          // never set → empty placeholder
+    } else {
+      selectInstrument(start); // boot elsewhere; the restored otherChosen keeps the More slot's label
+    }
   }
   setMode("manual");   // launch straight onto the 6-string headstock, not auto
   bootMic();           // simulate iOS launch: prompt / auto-listen / denied
