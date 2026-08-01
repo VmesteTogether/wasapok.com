@@ -1634,10 +1634,12 @@
   </svg>
 </button>
 
-<!-- dev-only: carousel layout — 1 uniform / 1f fixed center + recessed neighbour wells -->
+<!-- dev-only: carousel layout — 1 uniform / 1g uniform w/ neighbours pushed out / 1f fixed center + recessed neighbour wells / 1h = 1g + those wells -->
 <div class="opt-toggle" id="optToggle">
   <button type="button" data-caropt="0" aria-label="Uniform">1</button>
+  <button type="button" data-caropt="1g" aria-label="Uniform, neighbours pushed further from center">1g</button>
   <button type="button" data-caropt="1f" aria-label="Fixed center + recessed neighbour wells">1f</button>
+  <button type="button" data-caropt="1h" aria-label="Neighbours pushed out, with recessed wells around them">1h</button>
 </div>
 
 <script src="tuner.js"></script>
@@ -1649,15 +1651,16 @@
     const KEY = "tuner-carcomp";
     const btns = [...document.querySelectorAll("#optToggle button")];
     const apply = (v) => {
-      document.body.classList.toggle("carslots", v === "1f");       // fixed center + recessed neighbour wells
+      document.body.classList.toggle("carslots", v === "1f" || v === "1h"); // recessed neighbour wells: 1f and 1h
       btns.forEach((b) => b.classList.toggle("active", b.dataset.caropt === v));
       try { localStorage.setItem(KEY, v); } catch {}
-      if (window.__carSetComp) window.__carSetComp("off");           // uniform layout for both 1 and 1f
+      // 1g/1h nudge the neighbours out (carMode "spread"); 1 and 1f stay uniform
+      if (window.__carSetComp) window.__carSetComp((v === "1g" || v === "1h") ? "spread" : "off");
     };
     btns.forEach((b) => b.addEventListener("click", () => apply(b.dataset.caropt)));
     let saved = "0";
     try { saved = localStorage.getItem(KEY) || "0"; } catch {}
-    if (saved !== "1f") saved = "0"; // only 1 (uniform) and 1f remain; migrate legacy options
+    if (!["1f", "1g", "1h"].includes(saved)) saved = "0"; // 1 (uniform), 1g (spread), 1f (wells), 1h (spread+wells); migrate legacy
     apply(saved);
   })();
 

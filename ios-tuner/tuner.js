@@ -296,6 +296,15 @@
   const CAR_ARC = 20;           // px the outer labels dip below center — the visible curve
   const CAR_ROT_GAIN = 0.9;     // how hard edge labels turn away in 3D (0 = flat, 1 = full drum angle)
   const CAR_DEPTH = 80;         // px the outer labels recede into the screen (perspective bite)
+  const CAR_SPREAD = 18;        // 1g/1h: extra px the neighbours are pushed OUT from the centre capsule
+  // smooth, saturating (tanh) outward nudge of a distance-from-centre: the centre
+  // word stays put (carSpread(0)=0) and the sign never snaps as a word scrolls
+  // through the middle. Shared by 1g's labels and 1h's neighbour wells so the
+  // wells sit exactly around the pushed-out words. Odd fn: carSpread(-d) = -carSpread(d).
+  const carSpread = (d) => {
+    const pitch = (carCenters[1] - carCenters[0]) || CAR_PITCH || 100;
+    return d + CAR_SPREAD * Math.tanh(d / pitch);
+  };
 
   function updateCarCapsule(sel) {
     const fam = FAMILIES[sel];
@@ -315,8 +324,13 @@
       const P = CAR_PITCH || (carCenters[1] - carCenters[0]) || 100;
       const dl = Math.max(0, x);                              // Chromatic's px distance from centre
       const dr = Math.max(0, (FAMILIES.length - 1) * P - x);  // Other's px distance from centre
-      carSlotL.style.left = `calc(50% - ${Math.min(dl, P).toFixed(1)}px)`;
-      carSlotR.style.left = `calc(50% + ${Math.min(dr, P).toFixed(1)}px)`;
+      // 1h nudges the wells out by the same carSpread as the words, so each well
+      // stays wrapped around its pushed-out neighbour; 1f leaves them at ±P.
+      const sp = carMode === "spread";
+      const offL = sp ? carSpread(Math.min(dl, P)) : Math.min(dl, P);
+      const offR = sp ? carSpread(Math.min(dr, P)) : Math.min(dr, P);
+      carSlotL.style.left = `calc(50% - ${offL.toFixed(1)}px)`;
+      carSlotR.style.left = `calc(50% + ${offR.toFixed(1)}px)`;
       carSlotL.style.opacity = Math.min(1, 2 * dl / P).toFixed(3);
       carSlotR.style.opacity = Math.min(1, 2 * dr / P).toFixed(3);
     }
@@ -336,6 +350,14 @@
         // whose opacity reflects centredness — bright centre, muted ±1, gone by ±2
         const pitch = (carCenters[1] - carCenters[0]) || 100;
         el.style.setProperty("--cap-op", Math.max(0, 1 - (a / pitch) * 0.5).toFixed(3));
+      } else if (carMode === "spread") {
+        // 1g / 1h: option 1 (uniform) exactly, but each non-centre label is nudged
+        // a bit further OUT from the centre capsule (carSpread). The ±1 neighbours
+        // gain breathing room; the centre word stays put. Opacity/colour stay keyed
+        // to the original dx, so the fade reads identically to option 1. 1h adds the
+        // recessed neighbour wells (below) around these pushed-out words. No dip /
+        // shrink / 3D.
+        px = carSpread(dx);
       } else if (carMode !== "off") {
         const round = carMode === "round";
         // 1d ("round"): built on option 1 (uniform) — near-centre spacing stays
