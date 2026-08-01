@@ -306,12 +306,26 @@
     return d + CAR_SPREAD * Math.tanh(d / pitch);
   };
 
+  const CAP_BUBBLE = 34;   // "+" tab: collapse the capsule to a rounded bubble around the "+" — wider than
+                           // the chip for presence, but height stays at the CSS 22px (radius 11 = fully
+                           // rounded ends) so it's never taller than the traditional centre capsule
+  const CAP_PAD = 44;      // "More" tab: snug capsule = live label width + this; wide enough that the
+                           // trailing "^" chevron (an 18px chip inset 11px from the edge) clears the word
+                           // with a small gap, instead of overlapping it, while staying tighter than FIXED
   function updateCarCapsule(sel) {
     const fam = FAMILIES[sel];
     if (!fam) return;
     carInd.classList.toggle("no-options", !fam.hasOptions);
-    carCapsule.style.width = FIXED_CAP_W + "px";
-    carInd.style.left = `calc(50% + ${(FIXED_CAP_W / 2 - 11).toFixed(1)}px)`;
+    // Fixed width for the instrument tabs, but DYNAMIC for the two meta tabs: the
+    // capsule collapses to a circle around the "+" (custom) chip and to a snug
+    // capsule hugging the short "More" word (or its picked member's name). The CSS
+    // `transition: width` animates it, so scrubbing onto them reads as the capsule
+    // tightening/collapsing in and blooming back out.
+    let capW = FIXED_CAP_W;
+    if (fam.custom) capW = CAP_BUBBLE;                             // rounded bubble around "+"
+    else if (fam.other) capW = carItems[sel].offsetWidth + CAP_PAD; // snug around "More"/member
+    carCapsule.style.width = capW + "px";
+    carInd.style.left = `calc(50% + ${(capW / 2 - 11).toFixed(1)}px)`;
   }
   function layoutCarousel(x) {
     carX = x;
@@ -1183,7 +1197,8 @@
     const selFam = FAMILIES[familyOf(i)];
     if (selFam) selFam.cur = i;
     try { localStorage.setItem(INST_KEY, String(i)); } catch {}
-    updateOtherLabel(); // Other slot shows this member's name when it's an Other member
+    updateOtherLabel(); // More slot shows this member's name when it's a More member
+    carSel = -1;        // force the capsule to re-measure — the More label width may have just changed
     const inst = INSTRUMENTS[i];
     carouselTo(familyOf(i));
     const hs = usesHeadstock(inst);
