@@ -985,11 +985,50 @@
   /* hero eases + dims a hair to "make room" while the underbelly is open */
   body.ub-open .gauge-card { opacity: 0.82; filter: brightness(0.94) saturate(0.95); }
 
-  /* "Other" selected but no member chosen yet: blank the headstock/hero + the
-     tuner readout, leaving an empty card until a member is picked */
+  /* "More" selected but no member chosen yet: blank the headstock/hero + the
+     tuner readout, and drop a big faint circled-plus placeholder into the card */
   body.other-empty #hsHero,
   body.other-empty #tunerStrip,
   body.other-empty .readout { visibility: hidden; }
+
+  /* the empty-state placeholder — a large, faint grey outlined circle with a "+"
+     in the middle, centred in the hero card. Purely decorative (pointer-events
+     off); reads as "pick something to load here". Hidden unless body.other-empty. */
+  /* keep the empty card a consistent height (matches the hero card's 386px) no
+     matter which instrument was showing before More was tapped, so the
+     placeholder is always centred in a full-size card */
+  body.other-empty .gauge-card { min-height: 386px; }
+  .more-empty {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    pointer-events: none;
+    z-index: 2;
+  }
+  body.other-empty .more-empty { display: flex; }
+  .me-ring {
+    position: relative;
+    width: 150px;
+    height: 150px;
+    border-radius: 50%;
+    border: 3px solid rgba(60, 60, 67, 0.16);
+  }
+  /* the "+" — two bars centred in the ring (not a font glyph, so it stays crisp
+     and pixel-centred), same faint grey as the ring */
+  .me-ring::before,
+  .me-ring::after {
+    content: "";
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    background: rgba(60, 60, 67, 0.16);
+    border-radius: 3px;
+    transform: translate(-50%, -50%);
+  }
+  .me-ring::before { width: 56px; height: 5px; }  /* horizontal bar */
+  .me-ring::after  { width: 5px; height: 56px; }  /* vertical bar */
 
   /* dev-only: the compressing option (1ca) pulls the edge-fade in so the bunched
      outer labels show more (current/uniform keeps the wider 10% fade). 1ca is the
@@ -1491,6 +1530,10 @@
           <div class="headstock" id="headstock"></div>
           <div class="genhero" id="genericHero" style="display: none;"></div>
         </div>
+        <!-- "More" empty state: no member picked yet, so the hero card shows a big
+             faint circled-plus placeholder instead of a blank card (shown only under
+             body.other-empty; unrelated to the carousel's own "+" custom tab) -->
+        <div class="more-empty" id="moreEmpty" aria-hidden="true"><div class="me-ring"></div></div>
       </div>
 
       <div class="strip" id="tunerStrip" style="display: none;">

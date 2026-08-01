@@ -106,7 +106,8 @@
   const familyOf = (instIdx) => FAMILIES.findIndex((f) => f.variants.includes(instIdx));
 
   const INST_KEY = "tuner-instrument"; // last instrument, to reload back into it
-  let emptyOther = false;              // "Other" family selected, no member chosen yet
+  let emptyOther = false;              // "More" family selected, no member chosen yet
+  let otherChosen = -1;                // INSTRUMENT idx of the last More member chosen (the tab remembers it)
 
   function parseNote(s) {
     const m = s.match(/^([A-G]#?)(\d)$/);
@@ -230,14 +231,16 @@
     return el;
   });
 
-  // the "More" slot self-labels: "MORE" until a member is picked, then that
-  // member's name (persisted, so it survives reloads)
+  // the "More" slot REMEMBERS the last More member the user chose and keeps showing
+  // its name — even after they select another family or swipe the carousel away, so
+  // your picked exotic instrument stays labelled there. Only "MORE" until one has
+  // been chosen this session, and while sitting on the empty placeholder.
   const otherFam = FAMILIES.findIndex((f) => f.other);
   function updateOtherLabel() {
     if (otherFam < 0) return;
-    // the active More member's name, or "MORE" when empty / not on a More member
-    const active = !emptyOther && FAMILIES[otherFam].variants.includes(state.instrument);
-    carItems[otherFam].textContent = active ? INSTRUMENTS[state.instrument].name.toUpperCase() : "MORE";
+    carItems[otherFam].textContent = (!emptyOther && otherChosen >= 0)
+      ? INSTRUMENTS[otherChosen].name.toUpperCase()
+      : "MORE";
   }
   updateOtherLabel();
 
@@ -425,6 +428,10 @@
     document.body.classList.add("other-empty");
     carouselTo(otherFam);
     updateOtherLabel();
+    // re-sync the inline picker + mic console to the (string-instrument) More member
+    // we've parked on, so a leftover picker — e.g. Chromatic's note grid — doesn't
+    // linger under the empty placeholder card
+    updateInlinePicker();
     try { localStorage.setItem(INST_KEY, String(FAMILIES[otherFam].cur)); } catch {}
   }
 
@@ -1196,8 +1203,9 @@
     state.instrument = i;
     const selFam = FAMILIES[familyOf(i)];
     if (selFam) selFam.cur = i;
+    if (familyOf(i) === otherFam) otherChosen = i; // remember the chosen More member for the tab label
     try { localStorage.setItem(INST_KEY, String(i)); } catch {}
-    updateOtherLabel(); // More slot shows this member's name when it's a More member
+    updateOtherLabel();
     carSel = -1;        // force the capsule to re-measure — the More label width may have just changed
     const inst = INSTRUMENTS[i];
     carouselTo(familyOf(i));
