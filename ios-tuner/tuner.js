@@ -554,12 +554,7 @@
     carHeldOpened = false;
     clearTimeout(carHoldTimer);
     carHoldTimer = setTimeout(() => {
-      // Only a family that HAS a variant menu consumes the press. Otherwise (+ and
-      // Chromatic have no menu) leave carHeldOpened false so pointerup still selects
-      // — else a slow press on + then a scrub away strands the hero on the empty
-      // build ("tap + to add a string") while the carousel shows another instrument.
-      const fam = FAMILIES[familyOf(state.instrument)];
-      if (!carMoved && fam && fam.hasOptions) { carHeldOpened = true; openVariantMenu(familyOf(state.instrument)); }
+      if (!carMoved) { carHeldOpened = true; openVariantMenu(familyOf(state.instrument)); }
     }, 480);
   });
   instCarousel.addEventListener("pointermove", (e) => {
@@ -1181,9 +1176,7 @@
   function applyNoteEdit() {
     const inst = INSTRUMENTS[state.instrument];
     inst.strings[neIndex] = NOTES[neNote] + neOct;   // e.g. "E2" / "C#3"
-    if (inst.custom) saveBuild();                    // the + tab's tuning is the persisted build
-    if (usesHeadstock(inst)) buildHeadstock(inst); else buildGenericHero(inst); // generic vs headstock hero
-    buildWheel(inst);
+    buildHeadstock(inst); buildWheel(inst);
     state.noteIndex = neNote; state.octave = neOct;  // select the string you just set
     syncTarget();
     neSync();
@@ -1197,14 +1190,6 @@
   document.getElementById("neOctDown").addEventListener("click", () => { if (neOct > OCT_MIN) { neOct--; applyNoteEdit(); } });
   document.getElementById("neOctUp").addEventListener("click", () => { if (neOct < OCT_MAX) { neOct++; applyNoteEdit(); } });
   document.getElementById("neDone").addEventListener("click", () => neScrim.classList.remove("show"));
-  document.getElementById("neRemove").addEventListener("click", () => {
-    if (neIndex < 0 || neIndex >= buildStrings.length) return;
-    buildStrings.splice(neIndex, 1);
-    saveBuild();
-    INSTRUMENTS[state.instrument].strings = buildStrings;
-    neScrim.classList.remove("show");
-    selectInstrument(state.instrument, false); // rebuild without the removed string
-  });
   neScrim.addEventListener("click", (e) => { if (e.target === neScrim) neScrim.classList.remove("show"); });
   stringWheel.addEventListener("wheel", (e) => {
     e.preventDefault();
@@ -1219,10 +1204,6 @@
     document.body.classList.remove("other-empty");
     if (byUser) state.instrumentPicked = true;
     state.instrument = i;
-    if (INSTRUMENTS[i].custom) {              // the "+" tab IS the build canvas
-      INSTRUMENTS[i].strings = buildStrings;  // (may be empty) — the persisted build tuning
-      INSTRUMENTS[i].icon = "custom";         // always the generic strings hero
-    }
     const selFam = FAMILIES[familyOf(i)];
     if (selFam) selFam.cur = i;
     if (familyOf(i) === otherFam) { // the More slot is now SET to this member (persist it, survives reload)
@@ -1247,45 +1228,62 @@
       if (hs) { genericStrings = []; genericHero.innerHTML = ""; buildHeadstock(inst); }
       else buildGenericHero(inst);
       buildWheel(inst);
-      if (inst.strings.length) {                    // empty Build canvas has no string to select
-        const low = parseNote(inst.strings[0]);
-        state.noteIndex = low.noteIndex;
-        state.octave = low.octave;
-      }
+      const low = parseNote(inst.strings[0]);
+      state.noteIndex = low.noteIndex;
+      state.octave = low.octave;
     }
     updateHeroView();
     updateInlinePicker();
     syncTarget();
   }
 
-  // ---------- custom "+" slot: the "Build your own" note carousel ----------
-  // The + tab (between Chromatic and Guitar) IS the builder — an empty note carousel
-  // you fill in: tap + to add a string, long-press to retune, remove in the editor.
-  // Always the generic strings hero. Persisted, up to BUILD_MAX strings.
-  const BUILD_KEY = "tuner-build-tuning";
-  const BUILD_MAX = 12;
-  let buildStrings = (() => {
-    try { const j = JSON.parse(localStorage.getItem(BUILD_KEY)); if (Array.isArray(j)) return j.filter((s) => typeof s === "string"); } catch {}
-    return [];
-  })();
-  const saveBuild = () => { try { localStorage.setItem(BUILD_KEY, JSON.stringify(buildStrings)); } catch {} };
-
-  // custom "Build" form: the + button appends a string (default a 4th above the
-  // last, clamped), capped at BUILD_MAX; long-press a string to retune it.
-  const addStr = document.getElementById("addStr");
-  function nextBuildString() {
-    if (!buildStrings.length) return "E2";
-    const p = parseNote(buildStrings[buildStrings.length - 1]);
-    const m = Math.min(midiOf(11, OCT_MAX), midiOf(p.noteIndex, p.octave) + 5); // up a 4th, clamped to B8
-    return NOTES[m % 12] + (Math.floor(m / 12) - 1);
+  // ---------- custom "+" slot: swipe the headstock to switch shape + count ----------
+  // Each committed horizontal swipe flips to the next CUSTOM_SHAPES entry
+  // (guitar-6 ↔ bass-4), reseeding the wheel with that shape's default tuning.
+  // Only the custom slot swipes; a committed drag suppresses the peg tap.
+  const CUSTOM_SHAPES = [
+    { icon: "guitar", strings: ["E2", "A2", "D3", "G3", "B3", "E4"] },
+    { icon: "bass",   strings: ["E1", "A1", "D2", "G2"] },
+  ];
+  function cycleCustomShape(dir) {
+    const ci = INSTRUMENTS.findIndex((x) => x.custom);
+    const inst = INSTRUMENTS[ci];
+    inst.shape = ((inst.shape || 0) + dir + CUSTOM_SHAPES.length) % CUSTOM_SHAPES.length;
+    const sh = CUSTOM_SHAPES[inst.shape];
+    inst.icon = sh.icon; inst.strings = sh.strings.slice();
+    selectInstrument(ci, false);              // rebuild headstock + wheel for the new shape
+    for (const el of [hsHero, tunerStrip]) {  // quick fade-in so the swap reads as a flip
+      el.style.transition = "none"; el.style.opacity = "0.25";
+      void el.offsetWidth;
+      el.style.transition = "opacity 0.22s"; el.style.opacity = "1";
+    }
   }
-  addStr.addEventListener("pointerdown", (e) => e.stopPropagation()); // never start a hero gesture
-  addStr.addEventListener("click", () => {
-    if (!INSTRUMENTS[state.instrument].custom || buildStrings.length >= BUILD_MAX) return;
-    buildStrings.push(nextBuildString());
-    saveBuild();
-    selectInstrument(state.instrument, false); // rebuild the hero + wheel
+  function customSwipeHint() {  // one-time nudge that the custom headstock is swipeable
+    try {
+      if (localStorage.getItem("tuner-customhint")) return;
+      localStorage.setItem("tuner-customhint", "1");
+    } catch {}
+    headstock.animate(
+      [{ transform: "translateX(0)" }, { transform: "translateX(-9px)" },
+       { transform: "translateX(5px)" }, { transform: "translateX(0)" }],
+      { duration: 640, easing: "ease-in-out", delay: 280 });
+  }
+  let hsDownX = 0, hsTracking = false, hsSwiped = false;
+  hsHero.addEventListener("pointerdown", (e) => {
+    if (!INSTRUMENTS[state.instrument].custom) return;
+    hsTracking = true; hsSwiped = false; hsDownX = e.clientX;
   });
+  hsHero.addEventListener("pointermove", (e) => {
+    if (!hsTracking) return;
+    if (Math.abs((e.clientX - hsDownX) / phoneScale) > 40) {
+      hsTracking = false; hsSwiped = true;
+      cycleCustomShape(e.clientX < hsDownX ? 1 : -1);
+    }
+  });
+  hsHero.addEventListener("pointerup", () => { hsTracking = false; });
+  hsHero.addEventListener("click", (e) => {  // a swipe must not also fire the peg's tap
+    if (hsSwiped) { e.stopPropagation(); e.preventDefault(); hsSwiped = false; }
+  }, true);
 
   // Manual surfaces: chromatic shows the note grid inline, violin-class shows
   // its string pills inline (guitar picks on the headstock). The footer console
@@ -1316,11 +1314,7 @@
     gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the hero
     headstock.style.display = hero && hs ? "" : "none";
     genericHero.style.display = hero && !hs ? "" : "none";
-    // custom "Build" form (the whole + tab): + button + empty prompt
-    const build = hero && inst.custom;
-    document.body.classList.toggle("build-mode", build);
-    document.body.classList.toggle("build-empty", build && inst.strings.length === 0);
-    if (build) addStr.disabled = inst.strings.length >= BUILD_MAX;
+    if (hero && inst.custom) customSwipeHint();
   }
 
   // bubble-level tuner — a liquid-glass bubble slides flat(−50) ↔ sharp(+50);
@@ -1622,7 +1616,7 @@
 
   // dev reset: wipe the stored permission and reload to the first-launch state
   document.getElementById("devReset").addEventListener("click", () => {
-    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); localStorage.removeItem(PEEK_KEY); localStorage.removeItem(OTHER_KEY); localStorage.removeItem(BUILD_KEY); } catch {}
+    try { localStorage.removeItem(PERM_KEY); localStorage.removeItem(A4_KEY); localStorage.removeItem(PEEK_KEY); localStorage.removeItem(OTHER_KEY); } catch {}
     location.reload();
   });
 

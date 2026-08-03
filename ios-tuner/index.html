@@ -1310,49 +1310,6 @@
     font-family: inherit; font-size: 16px; font-weight: 600; cursor: pointer;
   }
   .ne-done:active { filter: brightness(0.95); }
-  /* Remove-string action in the note editor — shown only on the custom Build form */
-  .ne-remove {
-    display: none; width: 100%; margin-top: 10px; padding: 10px;
-    border: none; border-radius: 14px;
-    background: rgba(255, 59, 48, 0.12); color: var(--red);
-    font-family: inherit; font-size: 15px; font-weight: 600; cursor: pointer;
-  }
-  .ne-remove:active { background: rgba(255, 59, 48, 0.22); }
-  body.build-mode .ne-remove { display: block; }
-
-  /* ---- custom "Build" (empty note carousel) form ------------------------- */
-  /* + circle button in the hero's lower-right — adds a string (up to the cap).
-     Same liquid-glass material as the console wings; shown only in build mode. */
-  .add-str {
-    position: absolute; right: 14px; bottom: 14px; z-index: 4;
-    width: 46px; height: 46px; border-radius: 50%;
-    display: none; align-items: center; justify-content: center;
-    font-family: inherit; font-size: 28px; font-weight: 300; line-height: 1;
-    color: var(--blue); cursor: pointer; padding-bottom: 2px;
-    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.28));
-    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
-    backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
-    border: 1px solid rgba(255,255,255,0.65);
-    box-shadow:
-      inset 0 1px 0.5px rgba(255,255,255,0.9),
-      inset 0 -1px 1px rgba(255,255,255,0.35),
-      0 4px 14px rgba(50,55,75,0.12),
-      0 1px 3px rgba(50,55,75,0.06);
-    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1), opacity 0.2s;
-  }
-  body.build-mode .add-str { display: flex; }
-  .add-str:active { transform: scale(0.9); }
-  .add-str:disabled { color: var(--label-3); opacity: 0.55; cursor: default; }
-  /* empty-state prompt, centred in the hero until the first string is added */
-  .build-hint {
-    position: absolute; inset: 0; z-index: 3;
-    display: none; align-items: center; justify-content: center;
-    font-size: 15px; font-weight: 500; color: var(--label-2);
-    pointer-events: none; text-align: center; padding: 0 44px;
-  }
-  body.build-empty .build-hint { display: flex; }
-  /* nothing to tune yet → hide the (empty) wheel strip so the card reads clean */
-  body.build-empty #tunerStrip { visibility: hidden; }
 
   /* dev-only reset button — liquid-glass pebble beside the phone construction */
   .dev-reset {
@@ -1572,9 +1529,6 @@
         <div class="hs-hero" id="hsHero" style="display: none;">
           <div class="headstock" id="headstock"></div>
           <div class="genhero" id="genericHero" style="display: none;"></div>
-          <!-- custom "Build" form: empty-state prompt + add-string button (lower-right) -->
-          <div class="build-hint" id="buildHint">Press&nbsp; +&nbsp; to add a string</div>
-          <button class="add-str" id="addStr" type="button" aria-label="Add string">+</button>
         </div>
         <!-- "More" empty state: no member picked yet, so the hero card shows a big
              faint circled-plus placeholder instead of a blank card (shown only under
@@ -1697,7 +1651,6 @@
           <span class="ne-oval" id="neOctVal">4</span>
           <button class="ne-ostep" id="neOctUp" aria-label="Octave up">+</button>
         </div>
-        <button class="ne-remove" id="neRemove" type="button">Remove String</button>
         <button class="ne-done" id="neDone">Done</button>
       </div>
     </div>
@@ -1732,7 +1685,7 @@
   <button type="button" data-caropt="1h" aria-label="Neighbours pushed out, with recessed wells around them">1h</button>
 </div>
 
-<script src="tuner.js?v=2"></script>
+<script src="tuner.js"></script>
 <script>
   // dev-only: pick the carousel layout — "0" uniform, "1f" fixed center capsule
   // + recessed neighbour wells. Both use the uniform ("off") label layout; 1f just
