@@ -554,7 +554,10 @@
     carHeldOpened = false;
     clearTimeout(carHoldTimer);
     carHoldTimer = setTimeout(() => {
-      if (!carMoved) { carHeldOpened = true; openVariantMenu(familyOf(state.instrument)); }
+      // only families WITH a variant menu consume the press; + / Chromatic have none,
+      // so leave carHeldOpened false → pointerup still selects (no stuck state)
+      const hf = FAMILIES[familyOf(state.instrument)];
+      if (!carMoved && hf && hf.hasOptions) { carHeldOpened = true; openVariantMenu(familyOf(state.instrument)); }
     }, 480);
   });
   instCarousel.addEventListener("pointermove", (e) => {
@@ -1176,9 +1179,12 @@
   function applyNoteEdit() {
     const inst = INSTRUMENTS[state.instrument];
     inst.strings[neIndex] = NOTES[neNote] + neOct;   // e.g. "E2" / "C#3"
-    buildHeadstock(inst); buildWheel(inst);
-    state.noteIndex = neNote; state.octave = neOct;  // select the string you just set
-    syncTarget();
+    if (inst.custom) { cpSave(); cpRender(); }        // + tab: re-render its own panel only, no shared hero
+    else {
+      buildHeadstock(inst); buildWheel(inst);
+      state.noteIndex = neNote; state.octave = neOct; // select the string you just set
+      syncTarget();
+    }
     neSync();
   }
   function openNoteEditor(i) {
@@ -1187,6 +1193,43 @@
     neSync();
     neScrim.classList.add("show");
   }
+
+  // ---------- custom "+" tab: self-contained builder panel (independent DOM) ----------
+  const CP_KEY = "tuner-build-tuning", CP_MAX = 12;
+  const customPanel = document.getElementById("customPanel");
+  const cpList = document.getElementById("cpList");
+  const cpAddBtn = document.getElementById("cpAdd");
+  let cpStrings = (() => { try { const j = JSON.parse(localStorage.getItem(CP_KEY)); if (Array.isArray(j)) return j.filter((s) => typeof s === "string"); } catch {} return []; })();
+  const cpSave = () => { try { localStorage.setItem(CP_KEY, JSON.stringify(cpStrings)); } catch {} };
+  function cpNextString() { // default: a 4th above the last string (clamped), E2 to start
+    if (!cpStrings.length) return "E2";
+    const p = parseNote(cpStrings[cpStrings.length - 1]);
+    const m = Math.min(midiOf(11, OCT_MAX), midiOf(p.noteIndex, p.octave) + 5);
+    return NOTES[m % 12] + (Math.floor(m / 12) - 1);
+  }
+  function cpRender() {
+    const ci = INSTRUMENTS.findIndex((x) => x.custom);
+    if (ci >= 0) INSTRUMENTS[ci].strings = cpStrings; // panel is the source of truth (for the note editor)
+    customPanel.classList.toggle("has-strings", cpStrings.length > 0);
+    cpAddBtn.disabled = cpStrings.length >= CP_MAX;
+    cpList.innerHTML = "";
+    cpStrings.forEach((s, i) => {
+      const p = parseNote(s);
+      const row = document.createElement("div");
+      row.className = "cp-str";
+      row.innerHTML =
+        `<button class="cp-note" type="button">${NOTES[p.noteIndex].replace("#", "♯")}<sub>${p.octave}</sub></button>` +
+        `<button class="cp-x" type="button" aria-label="Remove string">&times;</button>`;
+      row.querySelector(".cp-note").addEventListener("click", () => openNoteEditor(i));
+      row.querySelector(".cp-x").addEventListener("click", () => { cpStrings.splice(i, 1); cpSave(); cpRender(); });
+      cpList.appendChild(row);
+    });
+  }
+  cpAddBtn.addEventListener("click", () => {
+    if (cpStrings.length >= CP_MAX) return;
+    cpStrings.push(cpNextString());
+    cpSave(); cpRender();
+  });
   document.getElementById("neOctDown").addEventListener("click", () => { if (neOct > OCT_MIN) { neOct--; applyNoteEdit(); } });
   document.getElementById("neOctUp").addEventListener("click", () => { if (neOct < OCT_MAX) { neOct++; applyNoteEdit(); } });
   document.getElementById("neDone").addEventListener("click", () => neScrim.classList.remove("show"));
@@ -1215,6 +1258,14 @@
     carSel = -1;        // force the capsule to re-measure — the More label width may have just changed
     const inst = INSTRUMENTS[i];
     carouselTo(familyOf(i));
+    if (inst.custom) {                    // the + tab renders ONLY in its own panel
+      noteGrid.style.display = "none"; stringRow.style.display = "none"; pickerLabel.style.display = "none";
+      genericStrings = []; genericHero.innerHTML = ""; pegEls = [];
+      cpRender();
+      updateHeroView();                   // hides gaugeCard + strip, shows #customPanel
+      updateInlinePicker();
+      return;
+    }
     const hs = usesHeadstock(inst);
     noteGrid.style.display = inst.strings ? "none" : "";
     stringRow.style.display = "none";               // string pills retired — every string instrument is now a hero
@@ -1307,14 +1358,19 @@
   // guitar + bass in Manual mode make the headstock the hero (replaces the dial)
   function updateHeroView() {
     const inst = INSTRUMENTS[state.instrument];
-    const hero = state.mode === "manual" && usesHero(inst);
+    const isCustom = !!inst.custom;
+    const manual = state.mode === "manual";
+    // the + tab swaps the whole shared card for its own panel; guitar/bass path is
+    // only active when NOT custom, so it can never render or be hidden by custom
+    customPanel.style.display = (manual && isCustom) ? "" : "none";
+    gaugeCard.style.display = (manual && isCustom) ? "none" : "";
+    const hero = manual && usesHero(inst) && !isCustom;
     const hs = usesHeadstock(inst);
     hsHero.style.display = hero ? "" : "none";
     tunerStrip.style.display = hero ? "" : "none";
     gaugeCard.classList.toggle("hero-hs", hero); // hides .readout, full-bleeds the hero
     headstock.style.display = hero && hs ? "" : "none";
     genericHero.style.display = hero && !hs ? "" : "none";
-    if (hero && inst.custom) customSwipeHint();
   }
 
   // bubble-level tuner — a liquid-glass bubble slides flat(−50) ↔ sharp(+50);

@@ -371,6 +371,49 @@
   .mc-step:disabled { color: var(--label-3); }
 
   /* gauge card */
+  /* custom "+" tab — self-contained builder panel. Scoped cp- classes only, no
+     global body classes, so nothing here can touch the Guitar/Bass hero. */
+  .cp { position: relative; border-radius: 28px; min-height: 386px; margin: 2px 0 8px; padding: 16px; }
+  .cp-empty {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    font-size: 15px; font-weight: 500; color: var(--label-2); text-align: center;
+    padding: 0 44px; pointer-events: none;
+  }
+  .cp.has-strings .cp-empty { display: none; }
+  .cp-list { display: flex; flex-direction: column; gap: 8px; }
+  .cp-str {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 14px; border-radius: 14px;
+    background: rgba(255,255,255,0.5); border: 1px solid rgba(255,255,255,0.65);
+  }
+  .cp-note {
+    appearance: none; border: none; background: transparent; cursor: pointer;
+    font-family: inherit; font-size: 20px; font-weight: 700; color: var(--label);
+    font-variant-numeric: tabular-nums;
+  }
+  .cp-note sub { font-size: 13px; font-weight: 600; color: var(--label-2); }
+  .cp-x {
+    appearance: none; border: none; cursor: pointer;
+    width: 26px; height: 26px; border-radius: 50%;
+    background: rgba(120,120,128,0.16); color: var(--label-2);
+    font-family: inherit; font-size: 15px;
+  }
+  .cp-add {
+    position: absolute; right: 14px; bottom: 14px; z-index: 2;
+    width: 46px; height: 46px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; padding-bottom: 2px;
+    font-family: inherit; font-size: 28px; font-weight: 300; line-height: 1;
+    color: var(--blue); cursor: pointer;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.28));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    border: 1px solid rgba(255,255,255,0.65);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.9), 0 4px 14px rgba(50,55,75,0.12);
+    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1), opacity 0.2s;
+  }
+  .cp-add:active { transform: scale(0.9); }
+  .cp-add:disabled { color: var(--label-3); opacity: 0.55; cursor: default; }
+
   .gauge-card {
     border-radius: 28px;
     padding: 12px 12px 2px;
@@ -1536,6 +1579,15 @@
         <div class="more-empty" id="moreEmpty" aria-hidden="true"><div class="me-ring"></div></div>
       </div>
 
+      <!-- custom "+" tab: fully self-contained builder (own DOM + scoped cp- CSS,
+           no global classes) — shown only when the + instrument is active, so it
+           can never affect the Guitar/Bass hero above -->
+      <div class="cp glass" id="customPanel" style="display: none;">
+        <div class="cp-empty" id="cpEmpty">Press&nbsp; +&nbsp; to add a string</div>
+        <div class="cp-list" id="cpList"></div>
+        <button class="cp-add" id="cpAdd" type="button" aria-label="Add string">+</button>
+      </div>
+
       <div class="strip" id="tunerStrip" style="display: none;">
         <div class="wheel" id="stringWheel"></div>
         <div class="hbar">
@@ -1685,7 +1737,7 @@
   <button type="button" data-caropt="1h" aria-label="Neighbours pushed out, with recessed wells around them">1h</button>
 </div>
 
-<script src="tuner.js"></script>
+<script src="tuner.js?v=3"></script>
 <script>
   // dev-only: pick the carousel layout — "0" uniform, "1f" fixed center capsule
   // + recessed neighbour wells. Both use the uniform ("off") label layout; 1f just
