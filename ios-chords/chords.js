@@ -28,8 +28,8 @@ var ROOT_PC = { 'C':0,'C#':1,'DB':1,'D':2,'D#':3,'EB':3,'E':4,'F':5,'F#':6,'GB':
 // ------------------------------------------------------------- elements
 var $ = function (id) { return document.getElementById(id); };
 var emptyScreen = $('emptyScreen'), analysisScreen = $('analysisScreen');
-var newBtn = $('newBtn'), demoBtn = $('demoBtn');
-var recordTile = $('recordTile'), fileInput = $('fileInput'), phone = $('phone');
+var newBtn = $('newBtn');
+var fileInput = $('fileInput'), phone = $('phone');
 var waveCanvas = $('wave'), waveWrap = $('waveWrap');
 var trimSel = $('trimSel'), trimBody = $('trimBody'), handleLeft = $('handleLeft'), handleRight = $('handleRight');
 var dimLeft = $('dimLeft'), dimRight = $('dimRight'), playhead = $('playhead');
@@ -129,11 +129,12 @@ document.addEventListener('paste', function (e) {
 });
 
 // ------------------------------------------------------------- record
-recordTile.addEventListener('click', function () {
+function onRecordTap() {
   var perm = null; try { perm = localStorage.getItem(PERM_KEY); } catch (e) {}
   if (perm === 'granted') startRec();
   else permScrim.classList.add('show');   // prompt (or re-prompt after a denial, for the sim)
-});
+}
+Array.prototype.forEach.call(document.querySelectorAll('.js-record'), function (el) { el.addEventListener('click', onRecordTap); });
 permAllow.addEventListener('click', function () {
   permScrim.classList.remove('show');
   try { localStorage.setItem(PERM_KEY, 'granted'); } catch (e) {}
@@ -222,7 +223,7 @@ var DEMOS = [
   { label: 'Bm', notes: [47, 54, 59, 62, 66] }
 ];
 var lastDemo = -1;
-demoBtn.addEventListener('click', function () {
+function onDemo() {
   var i; do { i = Math.floor(Math.random() * DEMOS.length); } while (i === lastDemo);
   lastDemo = i;
   var demo = DEMOS[i], sr = ctx().sampleRate, secs = 2.5, n = Math.floor(sr * secs);
@@ -239,7 +240,8 @@ demoBtn.addEventListener('click', function () {
   sourceName.textContent = 'Demo chord';
   setBuffer(buf);
   playSelection();
-});
+}
+Array.prototype.forEach.call(document.querySelectorAll('.js-demo'), function (el) { el.addEventListener('click', onDemo); });
 
 // ------------------------------------------------------------- waveform
 function sizeWave() {
