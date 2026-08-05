@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Chords</title>
+<!-- Installable web-app: Safari -> Share -> Add to Home Screen launches this
+     full-screen with no browser chrome, so the 390x844 mockup maps to the whole
+     device screen. The design draws its own status bar / Dynamic Island / home
+     indicator, so we deliberately don't reserve space for system chrome. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Chords">
+<meta name="theme-color" content="#eaedf3">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<style>
+  /* self-hosted Inter — an open-source SF stand-in so non-Apple devices render in
+     an SF-like face. Apple devices still get real SF via -apple-system. */
+  @font-face {
+    font-family: "Inter";
+    font-style: normal;
+    font-weight: 100 900;
+    font-display: swap;
+    src: url("fonts/inter-var.woff2") format("woff2");
+  }
+
+  :root {
+    --label: rgba(0, 0, 0, 0.88);
+    --label-2: rgba(60, 60, 67, 0.6);
+    --label-3: rgba(60, 60, 67, 0.3);
+    --blue: #007aff;
+    --green: #34c759;
+    --red: #ff3b30;
+    --orange: #ff9500;
+    --yellow: #ffcc00;
+    --glass: rgba(255, 255, 255, 0.52);
+    --glass-strong: rgba(255, 255, 255, 0.68);
+    --glass-edge: rgba(255, 255, 255, 0.75);
+    /* chrome — the hero accent (shared with Tuner): a vertical metallic sheen */
+    --chrome: linear-gradient(180deg, #f7fafd 0%, #cfd6e0 24%, #9aa3af 50%, #c2c9d3 74%, #f1f4f9 100%);
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+
+  html, body {
+    height: 100%;
+    background: linear-gradient(160deg, #eef1f6 0%, #e8ecf3 50%, #eceef4 100%);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "SF Pro Text", "Inter", "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    text-rendering: optimizeLegibility;
+    overflow: hidden;
+  }
+  body { display: flex; align-items: center; justify-content: center; }
+
+  /* ---------- phone boundary box (iPhone 14/15-ish, 390 x 844 pt) ---------- */
+  .phone-wrap { transform-origin: center center; }
+  .phone {
+    width: 390px;
+    height: 844px;
+    background: #f4f5f9;
+    border-radius: 54px;
+    border: 1px solid #c8cad2;
+    box-shadow: 0 0 0 10px #e2e3e9, 0 0 0 12px #b9bbc4, 0 30px 80px rgba(50, 55, 75, 0.28);
+    position: relative;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+
+  /* drifting color wash behind the glass */
+  .bg { position: absolute; inset: -60px; z-index: 0; pointer-events: none; filter: blur(42px) saturate(1.0); }
+  .bg .blob { position: absolute; width: 360px; height: 360px; border-radius: 50%; opacity: 0.55; }
+  .bg .b1 { background: radial-gradient(circle, #cadcf0 0%, transparent 70%); top: 2%;  left: -18%; animation: drift1 26s ease-in-out infinite alternate; }
+  .bg .b2 { background: radial-gradient(circle, #d4e0ec 0%, transparent 70%); top: 30%; right: -22%; animation: drift2 31s ease-in-out infinite alternate; }
+  .bg .b3 { background: radial-gradient(circle, #dbdcea 0%, transparent 70%); bottom: 8%; left: -8%; animation: drift3 37s ease-in-out infinite alternate; }
+  .bg .b4 { background: radial-gradient(circle, #ebe3db 0%, transparent 70%); bottom: -14%; right: 4%; animation: drift1 29s ease-in-out infinite alternate-reverse; }
+  @keyframes drift1 { from { transform: translate(0, 0) scale(1); }    to { transform: translate(70px, 90px) scale(1.15); } }
+  @keyframes drift2 { from { transform: translate(0, 0) scale(1.1); }  to { transform: translate(-80px, -60px) scale(0.95); } }
+  @keyframes drift3 { from { transform: translate(0, 0) scale(0.95); } to { transform: translate(60px, -80px) scale(1.12); } }
+
+  .phone > *:not(.bg):not(.overlay):not(.island) { position: relative; z-index: 1; }
+
+  /* liquid glass material */
+  .glass {
+    background: var(--glass);
+    -webkit-backdrop-filter: blur(28px) saturate(1.8);
+    backdrop-filter: blur(28px) saturate(1.8);
+    border: 1px solid var(--glass-edge);
+    box-shadow:
+      inset 0 1px 0 rgba(255, 255, 255, 0.95),
+      inset 0 -1px 0 rgba(255, 255, 255, 0.25),
+      0 10px 30px rgba(50, 55, 75, 0.10),
+      0 2px 8px rgba(50, 55, 75, 0.06);
+  }
+
+  .island {
+    position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+    width: 122px; height: 36px; background: #000; border-radius: 20px; z-index: 50;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.25);
+  }
+
+  .statusbar {
+    height: 59px; flex: 0 0 auto;
+    display: flex; align-items: flex-end; justify-content: space-between;
+    padding: 0 34px 8px;
+    font-size: 16px; font-weight: 600; color: var(--label); letter-spacing: -0.2px;
+  }
+  .statusbar .right { display: flex; gap: 7px; align-items: center; }
+  .statusbar svg { display: block; }
+
+  .navbar {
+    flex: 0 0 auto; padding: 4px 20px 2px;
+    display: flex; align-items: center; justify-content: space-between;
+  }
+  .navbar h1 { font-size: 34px; font-weight: 700; letter-spacing: 0.37px; color: var(--label); }
+  .nav-btn {
+    width: 36px; height: 36px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--blue); cursor: pointer; appearance: none;
+    background: linear-gradient(180deg, rgba(255,255,255,0.5), rgba(255,255,255,0.28));
+    -webkit-backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    backdrop-filter: blur(20px) saturate(1.8) brightness(1.05);
+    border: 1px solid rgba(255,255,255,0.65);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.9), 0 4px 14px rgba(50,55,75,0.10);
+    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1);
+  }
+  .nav-btn:active { transform: scale(0.9); }
+  .nav-btn svg { display: block; }
+
+  /* ---------- content ---------- */
+  .content { flex: 1; display: flex; flex-direction: column; padding: 4px 20px 0; min-height: 0; }
+  .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
+
+  /* ---------- empty state: balanced dual ---------- */
+  .empty-inner {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; gap: 24px; padding-bottom: 30px;
+  }
+  .dual { display: flex; gap: 14px; width: 100%; }
+  .tile {
+    flex: 1; position: relative;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 9px;
+    height: 156px; border-radius: 28px;
+    appearance: none; font-family: inherit; color: var(--label); cursor: pointer;
+    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1);
+  }
+  .tile:active { transform: scale(0.96); }
+  .tile-ic {
+    width: 58px; height: 58px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    color: #fff;
+    background: linear-gradient(180deg, #1a89ff, #0a76f2);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.45), inset 0 -1.5px 1.5px rgba(0,40,105,0.32),
+      0 4px 12px rgba(0,60,140,0.26);
+  }
+  .tile-ic svg { width: 30px; height: 30px; display: block; }
+  .tile-label { font-size: 19px; font-weight: 600; letter-spacing: -0.2px; }
+  .tile-sub { font-size: 12px; font-weight: 500; color: var(--label-2); margin-top: -3px; }
+  .tile input[type=file] { display: none; }
+  .drop-hint { font-size: 13px; font-weight: 500; color: var(--label-2); text-align: center; }
+  .demo-link {
+    appearance: none; border: none; background: transparent; font-family: inherit;
+    font-size: 14px; font-weight: 600; color: var(--blue); cursor: pointer;
+  }
+  .demo-link:active { opacity: 0.5; }
+
+  /* drop overlay (drag a file over the phone) */
+  .drop-overlay {
+    position: absolute; inset: 14px; z-index: 80; border-radius: 40px;
+    display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px;
+    background: rgba(0, 122, 255, 0.10);
+    border: 2px dashed rgba(0, 122, 255, 0.6);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+    color: var(--blue); font-size: 17px; font-weight: 600;
+  }
+  .drop-overlay.show { display: flex; }
+  .drop-overlay svg { width: 44px; height: 44px; }
+
+  /* ---------- analysis state ---------- */
+  .analysis-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 0 20px; -webkit-overflow-scrolling: touch; }
+  .analysis-scroll::-webkit-scrollbar { width: 0; height: 0; }
+
+  /* trim card — the iOS audio-trim surface (Voice Memos / Photos style) */
+  .trim-card { padding: 14px 14px 12px; border-radius: 24px; margin-bottom: 14px; }
+  .trim-source {
+    font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--label-2); margin: 0 2px 10px; display: flex; align-items: center; gap: 6px;
+  }
+  .trim-source svg { width: 13px; height: 13px; }
+  .trim-wavewrap {
+    position: relative; height: 118px; border-radius: 14px; overflow: hidden;
+    background: rgba(60, 60, 67, 0.06); touch-action: none;
+    box-shadow: inset 0 1px 3px rgba(50,55,75,0.10);
+  }
+  #wave { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
+  /* darken the audio OUTSIDE the current selection */
+  .trim-dim { position: absolute; top: 0; bottom: 0; background: rgba(30, 34, 46, 0.30); pointer-events: none; z-index: 2; }
+  .trim-dim.left { left: 0; }
+  .trim-dim.right { right: 0; }
+  /* the selection bracket — blue top/bottom rails + grabbable end caps */
+  .trim-sel { position: absolute; top: 0; bottom: 0; z-index: 3; box-sizing: border-box;
+    border-top: 3px solid var(--blue); border-bottom: 3px solid var(--blue); }
+  .trim-body { position: absolute; top: 0; bottom: 0; left: 16px; right: 16px; cursor: grab; touch-action: none; }
+  .trim-body:active { cursor: grabbing; }
+  .trim-handle {
+    position: absolute; top: 0; bottom: 0; width: 16px; background: var(--blue);
+    display: flex; align-items: center; justify-content: center; cursor: ew-resize; touch-action: none;
+    box-shadow: 0 1px 4px rgba(0,60,140,0.3);
+  }
+  .trim-handle.left { left: 0; border-radius: 9px 0 0 9px; }
+  .trim-handle.right { right: 0; border-radius: 0 9px 9px 0; }
+  .trim-handle i { width: 2px; height: 22px; background: rgba(255,255,255,0.92); border-radius: 1px; }
+  .trim-playhead { position: absolute; top: 0; bottom: 0; width: 2px; background: var(--orange); z-index: 4;
+    box-shadow: 0 0 6px rgba(255,149,0,0.7); display: none; }
+  .trim-playhead.on { display: block; }
+
+  .trim-controls { display: flex; align-items: center; gap: 12px; margin-top: 12px; padding: 0 2px; }
+  .play-btn {
+    width: 40px; height: 40px; border-radius: 50%; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
+    appearance: none; border: none; cursor: pointer; color: #fff;
+    background: linear-gradient(180deg, #1a89ff, #0a76f2);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.45), 0 3px 8px rgba(0,60,140,0.26);
+    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1);
+  }
+  .play-btn:active { transform: scale(0.92); }
+  .play-btn svg { width: 18px; height: 18px; display: block; }
+  .play-btn .ic-pause { display: none; }
+  .play-btn.playing .ic-play { display: none; }
+  .play-btn.playing .ic-pause { display: block; }
+  .sel-time { font-size: 13px; font-weight: 600; color: var(--label); font-variant-numeric: tabular-nums; }
+  .trim-hint { font-size: 11.5px; font-weight: 500; color: var(--label-2); margin-left: auto; text-align: right; max-width: 130px; line-height: 1.25; }
+
+  .status { font-size: 14px; font-weight: 500; color: var(--label-2); text-align: center; min-height: 20px; margin: 6px 0; }
+
+  /* ---------- result: hero chord ---------- */
+  .hero-card { border-radius: 24px; padding: 18px 16px 16px; margin-bottom: 12px; text-align: center; }
+  .hero-badge { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; color: var(--blue); margin-bottom: 4px; }
+  .hero-chord { font-size: 58px; font-weight: 700; letter-spacing: -1.5px; color: var(--label); line-height: 1; font-variant-numeric: tabular-nums; }
+  .hero-chord .acc { font-size: 40px; font-weight: 600; vertical-align: 6px; }
+  .hero-type { margin-top: 8px; font-size: 15px; font-weight: 500; color: var(--label-2); }
+  .hero-conf { margin: 15px auto 0; max-width: 230px; }
+  .conf-bar { position: relative; height: 9px; border-radius: 5px; background: rgba(60,60,67,0.14);
+    overflow: hidden; box-shadow: inset 0 1px 2px rgba(50,55,75,0.22); }
+  .conf-fill { position: absolute; top: 0; left: 0; bottom: 0; border-radius: 5px; background: var(--chrome);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.85), inset 0 -1px 1px rgba(0,0,0,0.12); }
+  .conf-pct { margin-top: 7px; font-size: 13px; font-weight: 600; color: var(--label-2); font-variant-numeric: tabular-nums; }
+  .hero-slash { margin-top: 10px; font-size: 13px; font-weight: 500; color: var(--label-2); line-height: 1.35; }
+  .hero-slash b { color: var(--label); font-weight: 600; }
+
+  .voicings { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 16px; }
+  .voicing { text-align: center; }
+  .voicing canvas { display: block; border-radius: 10px; }
+  .vlabel { font-size: 10px; font-weight: 500; color: var(--label-2); margin-top: 5px; max-width: 104px; line-height: 1.2; }
+
+  /* ---------- alternates ---------- */
+  .section-label {
+    font-size: 13px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
+    color: var(--label-2); margin: 14px 6px 8px;
+  }
+  .alt-card { border-radius: 16px; margin-bottom: 8px; overflow: hidden; cursor: pointer; }
+  .alt-head { display: flex; align-items: center; gap: 10px; padding: 12px 14px; }
+  .alt-name { font-size: 20px; font-weight: 700; color: var(--label); font-variant-numeric: tabular-nums; }
+  .alt-type { font-size: 12px; font-weight: 500; color: var(--label-2); }
+  .alt-conf { margin-left: auto; font-size: 13px; font-weight: 600; color: var(--label-2); font-variant-numeric: tabular-nums; }
+  .alt-chev { color: var(--label-3); transition: transform 0.25s cubic-bezier(0.32,0.72,0,1); }
+  .alt-card.open .alt-chev { transform: rotate(90deg); }
+  .alt-body { display: none; padding: 0 14px 14px; }
+  .alt-card.open .alt-body { display: block; }
+  .alt-slash { font-size: 12px; color: var(--label-2); margin-bottom: 8px; }
+
+  .none-btn {
+    display: block; width: 100%; margin-top: 6px; padding: 13px;
+    appearance: none; font-family: inherit; font-size: 15px; font-weight: 600;
+    color: var(--blue); cursor: pointer; border-radius: 16px;
+    background: rgba(120,120,128,0.10);
+    border: 1px solid rgba(255,255,255,0.55);
+    transition: background 0.15s, color 0.2s;
+  }
+  .none-btn:active { background: rgba(120,120,128,0.18); }
+  .none-btn.confirmed { color: var(--label-2); }
+  .exhausted { font-size: 13px; font-weight: 500; color: var(--label-2); text-align: center; margin-top: 14px; padding: 0 10px; line-height: 1.4; }
+
+  /* ---------- evidence (chroma) disclosure ---------- */
+  .evidence { margin-top: 14px; }
+  .evidence-toggle {
+    display: flex; align-items: center; justify-content: space-between; width: 100%;
+    padding: 12px 14px; border-radius: 16px; appearance: none; font-family: inherit; cursor: pointer;
+    font-size: 14px; font-weight: 600; color: var(--label);
+    background: rgba(120,120,128,0.08); border: 1px solid rgba(255,255,255,0.5);
+  }
+  .evidence-toggle .ev-chev { color: var(--label-3); transition: transform 0.25s cubic-bezier(0.32,0.72,0,1); }
+  .evidence.open .evidence-toggle .ev-chev { transform: rotate(180deg); }
+  .evidence-body { display: none; padding: 14px 12px 6px; }
+  .evidence.open .evidence-body { display: block; }
+  .chroma { display: flex; gap: 4px; align-items: flex-end; height: 60px; }
+  .chroma .bar { flex: 1; border-radius: 3px 3px 0 0; position: relative; min-height: 2px; background: rgba(60,60,67,0.16); }
+  .chroma .bar.on { background: var(--chrome); box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.8); }
+  .chroma .bar span { position: absolute; top: 100%; left: 0; right: 0; text-align: center;
+    font-size: 9px; font-weight: 600; color: var(--label-2); margin-top: 4px; }
+  .evidence-cap { font-size: 11px; color: var(--label-2); text-align: center; margin-top: 22px; line-height: 1.4; }
+
+  /* ---------- recording overlay ---------- */
+  .rec-scrim {
+    position: absolute; inset: 0; z-index: 90; display: none;
+    align-items: center; justify-content: center;
+    background: rgba(20, 24, 34, 0.22); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px);
+  }
+  .rec-scrim.show { display: flex; animation: scrimIn 0.2s ease; }
+  .rec-panel { width: 306px; border-radius: 28px; padding: 22px 20px 18px; text-align: center; }
+  .rec-status { display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 14px; font-weight: 600; color: var(--red); }
+  .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--red); animation: recPulse 1.4s ease-in-out infinite; }
+  @keyframes recPulse { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(0.8); } }
+  .rec-meter { width: 100%; height: 60px; margin: 16px 0 6px; display: block; }
+  .rec-time { font-size: 34px; font-weight: 700; color: var(--label); font-variant-numeric: tabular-nums; letter-spacing: -0.5px; }
+  .rec-actions { display: flex; flex-direction: column; align-items: center; gap: 12px; margin-top: 18px; }
+  .rec-stop {
+    width: 62px; height: 62px; border-radius: 50%; appearance: none; border: none; cursor: pointer;
+    background: linear-gradient(180deg, #ff5b52, #ff3b30);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.4), 0 6px 18px rgba(255,59,48,0.4);
+    display: flex; align-items: center; justify-content: center;
+    transition: transform 0.12s cubic-bezier(0.32,0.72,0,1);
+  }
+  .rec-stop:active { transform: scale(0.92); }
+  .rec-stop::after { content: ""; width: 22px; height: 22px; border-radius: 5px; background: #fff; }
+  .rec-cancel { appearance: none; border: none; background: transparent; font-family: inherit;
+    font-size: 15px; font-weight: 500; color: var(--label-2); cursor: pointer; }
+
+  /* ---------- mock iOS microphone permission alert ---------- */
+  .perm-scrim {
+    position: absolute; inset: 0; z-index: 100; display: none; align-items: center; justify-content: center;
+    background: rgba(0, 0, 0, 0.28); -webkit-backdrop-filter: blur(1px); backdrop-filter: blur(1px);
+  }
+  .perm-scrim.show { display: flex; animation: scrimIn 0.2s ease; }
+  @keyframes scrimIn { from { opacity: 0; } to { opacity: 1; } }
+  .perm-alert {
+    width: 270px; background: rgba(248, 248, 248, 0.82);
+    -webkit-backdrop-filter: blur(30px) saturate(1.6); backdrop-filter: blur(30px) saturate(1.6);
+    border-radius: 14px; overflow: hidden; box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+    animation: alertIn 0.24s cubic-bezier(0.32, 0.72, 0, 1);
+  }
+  @keyframes alertIn { from { transform: scale(1.12); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .perm-body { padding: 19px 16px 15px; text-align: center; }
+  .perm-title { font-size: 17px; font-weight: 600; letter-spacing: -0.2px; color: #000; line-height: 1.25; }
+  .perm-msg { margin-top: 5px; font-size: 13px; font-weight: 400; color: rgba(0,0,0,0.62); line-height: 1.3; }
+  .perm-actions { display: flex; border-top: 0.5px solid rgba(60,60,67,0.29); }
+  .perm-btn { flex: 1; appearance: none; background: transparent; border: none; font-family: inherit;
+    font-size: 17px; font-weight: 400; color: var(--blue); padding: 11px 4px; cursor: pointer; }
+  .perm-btn.allow { font-weight: 600; border-left: 0.5px solid rgba(60,60,67,0.29); }
+  .perm-btn:active { background: rgba(0,0,0,0.06); }
+
+  /* home indicator */
+  .home-indicator { flex: 0 0 auto; height: 34px; display: flex; align-items: center; justify-content: center; }
+  .home-indicator::after { content: ""; width: 139px; height: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.8); }
+
+  /* ---------- dev-only: fill-screen toggle ---------- */
+  .fit-toggle {
+    position: fixed; top: calc(50% - 48px); right: 30px; width: 40px; height: 40px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; color: var(--label-2);
+    background: rgba(255, 255, 255, 0.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8); backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 18px rgba(50,55,75,0.12);
+    cursor: pointer; padding: 0; z-index: 300;
+    transition: transform 0.15s cubic-bezier(0.32,0.72,0,1), color 0.15s, opacity 0.2s;
+  }
+  .fit-toggle:active { transform: scale(0.9); }
+  .fit-toggle svg { display: block; }
+  .fit-toggle .ic-compress { display: none; }
+
+  body.fs { background: #eaedf3; }
+  body.fs .phone { border-radius: 0; border: none; box-shadow: none; }
+  body.fs #phoneWrap { position: fixed; top: 0; left: 0; }
+  body.fs .fit-toggle { top: auto; bottom: 16px; right: 16px; width: 36px; height: 36px; opacity: 0.5; }
+  body.fs .fit-toggle:active { opacity: 1; }
+  body.fs .fit-toggle .ic-expand { display: none; }
+  body.fs .fit-toggle .ic-compress { display: block; }
+</style>
+</head>
+<body>
+
+<div class="phone-wrap" id="phoneWrap">
+  <div class="phone" id="phone">
+    <div class="bg">
+      <div class="blob b1"></div>
+      <div class="blob b2"></div>
+      <div class="blob b3"></div>
+      <div class="blob b4"></div>
+    </div>
+
+    <div class="island"></div>
+
+    <div class="statusbar">
+      <span id="clock">9:41</span>
+      <span class="right">
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="#1c1c1e"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="#1c1c1e"><path d="M8.5 12 L11.2 8.8 A4.4 4.4 0 0 0 5.8 8.8 Z"/><path d="M3.6 6.2 A7.4 7.4 0 0 1 13.4 6.2 L15.4 3.9 A10.4 10.4 0 0 0 1.6 3.9 Z" opacity="0.95"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="#1c1c1e" stroke-opacity="0.4"/><rect x="2" y="2" width="20" height="9" rx="2" fill="#1c1c1e"/><path d="M25.5 4.5 V8.5 A2.2 2.2 0 0 0 25.5 4.5Z" fill="#1c1c1e" fill-opacity="0.4"/></svg>
+      </span>
+    </div>
+
+    <div class="navbar">
+      <h1>Chords</h1>
+      <button class="nav-btn" id="newBtn" aria-label="Analyze another" title="New" style="display:none">
+        <svg width="19" height="19" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"><path d="M10 4 V16 M4 10 H16"/></svg>
+      </button>
+    </div>
+
+    <div class="content">
+      <!-- EMPTY STATE -->
+      <div class="screen" id="emptyScreen">
+        <div class="empty-inner">
+          <div class="dual">
+            <button class="tile glass" id="recordTile">
+              <span class="tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="currentColor" stroke="none"/>
+                  <path d="M6 11 a6 6 0 0 0 12 0"/><line x1="12" y1="17" x2="12" y2="20.5"/><line x1="8.5" y1="21" x2="15.5" y2="21"/>
+                </svg>
+              </span>
+              <span class="tile-label">Record</span>
+              <span class="tile-sub">Live chord</span>
+            </button>
+            <label class="tile glass" id="importTile">
+              <span class="tile-ic">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3 V14"/><path d="M7.5 10 L12 14.5 L16.5 10"/><path d="M4 16 V19 A1.5 1.5 0 0 0 5.5 20.5 H18.5 A1.5 1.5 0 0 0 20 19 V16"/>
+                </svg>
+              </span>
+              <span class="tile-label">Import</span>
+              <span class="tile-sub">Files &middot; Voice Memos</span>
+              <input type="file" id="fileInput" accept="audio/*">
+            </label>
+          </div>
+          <div class="drop-hint">or drop a sound bite anywhere</div>
+          <button class="demo-link" id="demoBtn">Try a demo chord</button>
+        </div>
+      </div>
+
+      <!-- ANALYSIS STATE -->
+      <div class="screen" id="analysisScreen" style="display:none">
+        <div class="analysis-scroll">
+          <div class="trim-card glass">
+            <div class="trim-source" id="trimSource">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 4 v10"/><circle cx="9" cy="16" r="2.4"/><path d="M11.4 16 V6 L18 4.5 V14"/><circle cx="15.6" cy="14" r="2.4"/></svg>
+              <span id="sourceName">audio</span>
+            </div>
+            <div class="trim-wavewrap" id="waveWrap">
+              <canvas id="wave"></canvas>
+              <div class="trim-dim left" id="dimLeft"></div>
+              <div class="trim-dim right" id="dimRight"></div>
+              <div class="trim-sel" id="trimSel">
+                <div class="trim-body" id="trimBody"></div>
+                <div class="trim-handle left" id="handleLeft"><i></i></div>
+                <div class="trim-handle right" id="handleRight"><i></i></div>
+              </div>
+              <div class="trim-playhead" id="playhead"></div>
+            </div>
+            <div class="trim-controls">
+              <button class="play-btn" id="playBtn" aria-label="Play selection">
+                <svg class="ic-play" viewBox="0 0 18 18" fill="currentColor"><path d="M4 3 L15 9 L4 15 Z"/></svg>
+                <svg class="ic-pause" viewBox="0 0 18 18" fill="currentColor"><rect x="4" y="3" width="3.5" height="12" rx="1.2"/><rect x="10.5" y="3" width="3.5" height="12" rx="1.2"/></svg>
+              </button>
+              <span class="sel-time" id="selTime"></span>
+              <span class="trim-hint" id="trimHint">drag the ends to isolate one chord</span>
+            </div>
+          </div>
+
+          <div class="status" id="status"></div>
+          <div id="result"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="home-indicator"></div>
+
+    <!-- drop overlay -->
+    <div class="drop-overlay overlay" id="dropOverlay">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3 V15"/><path d="M7 10 L12 15 L17 10"/><path d="M4 17 V19.5 A1.5 1.5 0 0 0 5.5 21 H18.5 A1.5 1.5 0 0 0 20 19.5 V17"/></svg>
+      Drop to analyze
+    </div>
+
+    <!-- recording overlay -->
+    <div class="rec-scrim overlay" id="recScrim">
+      <div class="rec-panel glass">
+        <div class="rec-status"><span class="rec-dot"></span>Recording</div>
+        <canvas class="rec-meter" id="recMeter"></canvas>
+        <div class="rec-time" id="recTime">0:00</div>
+        <div class="rec-actions">
+          <button class="rec-stop" id="recStop" aria-label="Stop and analyze"></button>
+          <button class="rec-cancel" id="recCancel">Cancel</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- mock iOS microphone permission alert -->
+    <div class="perm-scrim overlay" id="permScrim">
+      <div class="perm-alert">
+        <div class="perm-body">
+          <div class="perm-title">&ldquo;Chords&rdquo; Would Like to Access the Microphone</div>
+          <div class="perm-msg">Used to hear the chord you play so it can name it.</div>
+        </div>
+        <div class="perm-actions">
+          <button class="perm-btn" id="permDeny">Don&rsquo;t Allow</button>
+          <button class="perm-btn allow" id="permAllow">Allow</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- dev-only: fill the viewport at the exact iPhone aspect (the "just be the app" view) -->
+<button class="fit-toggle" id="fitToggle" aria-label="Fill the screen" title="Fill the screen">
+  <svg class="ic-expand" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 V2 H6 M16 6 V2 H12 M2 12 V16 H6 M16 12 V16 H12"/></svg>
+  <svg class="ic-compress" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 H6 V2 M16 6 H12 V2 M2 12 H6 V16 M16 12 H12 V16"/></svg>
+</button>
+
+<script src="analysis.js"></script>
+<script src="chords.js"></script>
+<script>
+  // fill-screen: scale the whole phone construction to fill the viewport at its
+  // exact 390x844 aspect (min(vw/390, vh/844)), centered. Standalone (Home Screen)
+  // launches straight into it; a normal tab restores the last manual choice.
+  (() => {
+    const AR_W = 390, AR_H = 844, KEY = "chords-fillscreen";
+    const wrap = document.getElementById("phoneWrap");
+    const btn = document.getElementById("fitToggle");
+    const fit = () => {
+      if (!document.body.classList.contains("fs")) { wrap.style.transform = ""; return; }
+      const vv = window.visualViewport;
+      const vw = vv ? vv.width : window.innerWidth;
+      const vh = vv ? vv.height : window.innerHeight;
+      const s = Math.min(vw / AR_W, vh / AR_H);
+      wrap.style.transform = "translate(" + (vw - AR_W) / 2 + "px, " + (vh - AR_H) / 2 + "px) scale(" + s + ")";
+    };
+    const setFS = (on, { native = false, persist = true } = {}) => {
+      document.body.classList.toggle("fs", on);
+      btn.setAttribute("aria-label", on ? "Exit full screen" : "Fill the screen");
+      fit();
+      if (persist) { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} }
+      if (native) { try { const el = document.documentElement;
+        if (on && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+        else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      } catch {} }
+    };
+    btn.addEventListener("click", () => setFS(!document.body.classList.contains("fs"), { native: true }));
+    addEventListener("resize", fit);
+    addEventListener("orientationchange", fit);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
+    const standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (standalone) { setFS(true, { persist: false }); }
+    else { let saved = "0"; try { saved = localStorage.getItem(KEY) || "0"; } catch {} if (saved === "1") setFS(true, { persist: false }); }
+  })();
+</script>
+</body>
+</html>
