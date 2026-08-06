@@ -528,6 +528,21 @@ function drawDiagram(v, rootPc) {
 }
 
 // ------------------------------------------------------------- init
+// dev-only: import-icon A/B ("a" faint grey circle / "b" bare blue glyph), persisted
+(function initIconOpt() {
+  var KEY = 'chords-icon-opt';
+  var btns = Array.prototype.slice.call(document.querySelectorAll('#iconOpt button'));
+  function apply(v) {
+    document.body.setAttribute('data-icon', v);
+    btns.forEach(function (b) { b.classList.toggle('active', b.dataset.icon === v); });
+    try { localStorage.setItem(KEY, v); } catch (e) {}
+  }
+  btns.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.icon); }); });
+  var saved = 'b'; try { saved = localStorage.getItem(KEY) || 'b'; } catch (e) {}
+  if (saved !== 'a' && saved !== 'b') saved = 'b';
+  apply(saved);
+})();
+
 showEmpty();
 
 })();

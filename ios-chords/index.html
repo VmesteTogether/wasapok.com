@@ -183,12 +183,20 @@
   }
   .import-row:active { transform: scale(0.98); }
   .ir-ic {
-    width: 40px; height: 40px; border-radius: 12px; flex: 0 0 auto;
-    display: flex; align-items: center; justify-content: center; color: #fff;
-    background: linear-gradient(180deg, #1a89ff, #0a76f2);
-    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.4), 0 3px 8px rgba(0,60,140,0.22);
+    width: 40px; height: 40px; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center;
   }
-  .ir-ic svg { width: 22px; height: 22px; display: block; }
+  .ir-ic svg { display: block; filter: drop-shadow(0 0 2.5px rgba(0,122,255,0.5)); }
+  /* Import-icon A/B (dev pebble, right rail). A = faint grey circle + blue glyph;
+     B = bare blue glyph. Both keep the 40px box so the row never shifts. */
+  body[data-icon="a"] .ir-ic {
+    border-radius: 50%; color: var(--blue);
+    background: rgba(120,120,128,0.12);
+    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.6);
+  }
+  body[data-icon="a"] .ir-ic svg { width: 22px; height: 22px; }
+  body[data-icon="b"] .ir-ic { color: var(--blue); }
+  body[data-icon="b"] .ir-ic svg { width: 28px; height: 28px; }
   .ir-text { display: flex; flex-direction: column; gap: 1px; }
   .ir-title { font-size: 16px; font-weight: 600; color: var(--label); letter-spacing: -0.2px; }
   .ir-sub { font-size: 12px; font-weight: 500; color: var(--label-2); }
@@ -405,9 +413,30 @@
   body.fs .fit-toggle:active { opacity: 1; }
   body.fs .fit-toggle .ic-expand { display: none; }
   body.fs .fit-toggle .ic-compress { display: block; }
+
+  /* dev-only: import-icon A/B pebble — "A" grey circle / "B" bare blue glyph */
+  .opt-toggle {
+    position: fixed; top: calc(50% - 150px); right: 30px;
+    display: flex; flex-direction: column; gap: 8px; z-index: 300;
+  }
+  .opt-toggle button {
+    width: 40px; height: 40px; border-radius: 50%; color: var(--label-2);
+    font-family: inherit; font-size: 14px; font-weight: 700; cursor: pointer;
+    background: rgba(255, 255, 255, 0.5);
+    -webkit-backdrop-filter: blur(20px) saturate(1.8); backdrop-filter: blur(20px) saturate(1.8);
+    border: 1px solid rgba(255, 255, 255, 0.75);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), 0 6px 18px rgba(50,55,75,0.12);
+    transition: transform 0.15s cubic-bezier(0.32,0.72,0,1), color 0.15s, background 0.15s;
+  }
+  .opt-toggle button.active {
+    background: var(--blue); color: #fff; border-color: rgba(255,255,255,0.5);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 6px 16px rgba(0,122,255,0.35);
+  }
+  .opt-toggle button:active { transform: scale(0.9); }
+  body.fs .opt-toggle { top: auto; bottom: 16px; left: 16px; right: auto; flex-direction: row; }
 </style>
 </head>
-<body>
+<body data-icon="b">
 
 <div class="phone-wrap" id="phoneWrap">
   <div class="phone" id="phone">
@@ -541,6 +570,12 @@
   <svg class="ic-expand" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 V2 H6 M16 6 V2 H12 M2 12 V16 H6 M16 12 V16 H12"/></svg>
   <svg class="ic-compress" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 H6 V2 M16 6 H12 V2 M2 12 H6 V16 M16 12 H12 V16"/></svg>
 </button>
+
+<!-- dev-only: import-icon A/B — "A" faint grey circle + blue glyph / "B" bare blue glyph -->
+<div class="opt-toggle" id="iconOpt" title="Import icon">
+  <button type="button" data-icon="a" aria-label="Option A - grey circle">A</button>
+  <button type="button" data-icon="b" aria-label="Option B - bare glyph">B</button>
+</div>
 
 <script src="analysis.js"></script>
 <script src="chords.js"></script>
