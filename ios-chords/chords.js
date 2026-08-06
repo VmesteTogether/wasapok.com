@@ -528,16 +528,16 @@ function drawDiagram(v, rootPc) {
 }
 
 // ------------------------------------------------------------- init
-// dev-only: import-icon A/B ("a" faint grey circle / "b" bare blue glyph), persisted
-(function initIconOpt() {
-  var KEY = 'chords-icon-opt';
-  var btns = Array.prototype.slice.call(document.querySelectorAll('#iconOpt button'));
+// dev-only: import-symbol A/B ("a" glyph on faint circle / "b" bare glyph), persisted
+(function initImpOpt() {
+  var KEY = 'chords-imp-opt';
+  var btns = Array.prototype.slice.call(document.querySelectorAll('#importOpt button'));
   function apply(v) {
-    document.body.setAttribute('data-icon', v);
-    btns.forEach(function (b) { b.classList.toggle('active', b.dataset.icon === v); });
+    document.body.setAttribute('data-imp', v);
+    btns.forEach(function (b) { b.classList.toggle('active', b.dataset.imp === v); });
     try { localStorage.setItem(KEY, v); } catch (e) {}
   }
-  btns.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.icon); }); });
+  btns.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.imp); }); });
   var saved = 'b'; try { saved = localStorage.getItem(KEY) || 'b'; } catch (e) {}
   if (saved !== 'a' && saved !== 'b') saved = 'b';
   apply(saved);
