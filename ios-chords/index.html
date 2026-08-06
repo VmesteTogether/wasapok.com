@@ -135,32 +135,24 @@
   .content { flex: 1; display: flex; flex-direction: column; padding: 4px 20px 0; min-height: 0; }
   .screen { flex: 1; display: flex; flex-direction: column; min-height: 0; }
 
-  /* ---------- empty state: one hero + a separated import zone ----------
-     Top-aligned (not centered) so enlarging the mic / moving the import row
-     down never shifts the mic — its center is pinned by padding-top. */
+  /* ---------- empty state: a co-equal pair (record + import) ----------
+     Two same-family buttons read as one choice: the mic is filled (the "live"
+     one), the import is a glass circle of matching size (a file, brought in) —
+     hierarchy carried by treatment, not scale. Pebble A/B tunes their sizes. */
   .empty-inner {
     flex: 1; display: flex; flex-direction: column;
-    align-items: center; justify-content: flex-start; gap: 0;
-    padding-top: 196px; padding-bottom: 30px;
+    align-items: center; justify-content: center; gap: 26px; padding-bottom: 34px;
   }
-  /* small faded-grey iOS separator — signals the mic and the import row below
-     are distinct options, not one grouped control */
-  .empty-sep {
-    color: var(--label-3); font-size: 22px; font-weight: 400; line-height: 1;
-    margin: 32px 0 34px; user-select: none; -webkit-user-select: none;
-  }
+  .pair { display: flex; align-items: center; justify-content: center; gap: 30px; }
   .demo-link {
     appearance: none; border: none; background: transparent; font-family: inherit;
     font-size: 14px; font-weight: 600; color: var(--blue); cursor: pointer;
-    margin-top: 20px;
   }
   .demo-link:active { opacity: 0.5; }
 
-  /* two big affordances: the filled mic hero (record) and, past the divider,
-     a glowing import symbol sized to echo it. */
-  .hero-listen-wrap { display: flex; flex-direction: column; align-items: center; gap: 14px; margin-bottom: 0; }
+  /* record — the filled, "live" button with a breathing invite ring */
   .hero-listen {
-    width: 140px; height: 140px; border-radius: 50%; appearance: none; border: none; cursor: pointer; position: relative;
+    border-radius: 50%; appearance: none; border: none; cursor: pointer; position: relative; flex: 0 0 auto;
     color: #fff; display: flex; align-items: center; justify-content: center;
     background: linear-gradient(180deg, #1a89ff, #0a76f2);
     box-shadow: inset 0 1.5px 0.5px rgba(255,255,255,0.45), inset 0 -2px 2px rgba(0,40,105,0.34),
@@ -168,35 +160,38 @@
     transition: transform 0.14s cubic-bezier(0.32,0.72,0,1);
   }
   .hero-listen:active { transform: scale(0.94); }
-  .hero-listen svg { width: 56px; height: 56px; display: block; }
-  /* breathing invite ring — a soft "I'm listening" halo, restrained */
+  .hero-listen svg { display: block; }
   .hero-listen::before {
     content: ""; position: absolute; inset: -11px; border-radius: 50%;
     border: 2px solid rgba(0,122,255,0.30); pointer-events: none;
     animation: heroPulse 2.6s ease-in-out infinite;
   }
   @keyframes heroPulse { 0%,100% { transform: scale(1); opacity: 0.75; } 50% { transform: scale(1.09); opacity: 0.2; } }
-  /* import affordance — the glowing symbol, sized to echo the mic button.
-     Dev A/B pebble: A = glyph on a faint grey circle; B = bare glyph. */
-  .import-hero {
-    width: 140px; height: 140px; flex: 0 0 auto;
-    display: flex; align-items: center; justify-content: center;
-    appearance: none; border: none; background: none; cursor: pointer; color: var(--blue);
+
+  /* import — a glass circle of matching size holding the glowing blue glyph */
+  .import-btn {
+    border-radius: 50%; appearance: none; cursor: pointer; flex: 0 0 auto;
+    display: flex; align-items: center; justify-content: center; color: var(--blue);
+    background: var(--glass); border: 1px solid var(--glass-edge);
+    -webkit-backdrop-filter: blur(28px) saturate(1.8); backdrop-filter: blur(28px) saturate(1.8);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,0.95), inset 0 -1px 0 rgba(255,255,255,0.25),
+      0 10px 30px rgba(50,55,75,0.10), 0 2px 8px rgba(50,55,75,0.06);
     transition: transform 0.14s cubic-bezier(0.32,0.72,0,1);
   }
-  .import-hero:active { transform: scale(0.94); }
-  .import-hero svg { display: block;
+  .import-btn:active { transform: scale(0.94); }
+  .import-btn svg { display: block;
     filter: drop-shadow(0 0 9px rgba(10,132,255,0.42)) drop-shadow(0 0 2.5px rgba(10,132,255,0.5)); }
-  /* A — glowing glyph housed in a faint grey circle */
-  body[data-imp="a"] .import-hero {
-    border-radius: 50%;
-    background: rgba(120,120,128,0.10);
-    box-shadow: inset 0 1px 0.5px rgba(255,255,255,0.55);
-    -webkit-backdrop-filter: blur(8px) saturate(1.4); backdrop-filter: blur(8px) saturate(1.4);
-  }
-  body[data-imp="a"] .import-hero svg { width: 98px; height: 98px; }
-  /* B — bare glowing glyph */
-  body[data-imp="b"] .import-hero svg { width: 118px; height: 118px; }
+
+  /* A — equal (130 / 130) */
+  body[data-pair="a"] .hero-listen { width: 130px; height: 130px; }
+  body[data-pair="a"] .hero-listen svg { width: 52px; height: 52px; }
+  body[data-pair="a"] .import-btn { width: 130px; height: 130px; }
+  body[data-pair="a"] .import-btn svg { width: 60px; height: 60px; }
+  /* B — matched lead (mic 140 / import 126) */
+  body[data-pair="b"] .hero-listen { width: 140px; height: 140px; }
+  body[data-pair="b"] .hero-listen svg { width: 56px; height: 56px; }
+  body[data-pair="b"] .import-btn { width: 126px; height: 126px; }
+  body[data-pair="b"] .import-btn svg { width: 56px; height: 56px; }
 
   /* drop overlay (drag a file over the phone) */
   .drop-overlay {
@@ -432,7 +427,7 @@
   body.fs .opt-toggle { top: auto; bottom: 16px; left: 16px; right: auto; flex-direction: row; }
 </style>
 </head>
-<body data-imp="b">
+<body data-pair="a">
 
 <div class="phone-wrap" id="phoneWrap">
   <div class="phone" id="phone">
@@ -465,21 +460,20 @@
       <!-- EMPTY STATE -->
       <div class="screen" id="emptyScreen">
         <div class="empty-inner">
-          <!-- one hero listen button + a subordinate import list-row -->
-          <div class="hero-listen-wrap">
-            <button class="hero-listen js-record" aria-label="Tap to listen">
+          <!-- a co-equal pair: record (filled) + import (glass), same family -->
+          <div class="pair">
+            <button class="hero-listen js-record" aria-label="Record a chord">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round">
                 <rect x="9" y="2.5" width="6" height="11.5" rx="3" fill="currentColor" stroke="none"/>
                 <path d="M6 11 a6 6 0 0 0 12 0"/><line x1="12" y1="17" x2="12" y2="20.5"/><line x1="8.5" y1="21" x2="15.5" y2="21"/>
               </svg>
             </button>
+            <label class="import-btn" for="fileInput" aria-label="Import from Files">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 3 V14"/><path d="M7.5 10 L12 14.5 L16.5 10"/><path d="M4 16 V19 A1.5 1.5 0 0 0 5.5 20.5 H18.5 A1.5 1.5 0 0 0 20 19 V16"/>
+              </svg>
+            </label>
           </div>
-          <div class="empty-sep" aria-hidden="true">&ndash;</div>
-          <label class="import-hero" for="fileInput" aria-label="Import from Files">
-            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round">
-              <path d="M12 3 V14"/><path d="M7.5 10 L12 14.5 L16.5 10"/><path d="M4 16 V19 A1.5 1.5 0 0 0 5.5 20.5 H18.5 A1.5 1.5 0 0 0 20 19 V16"/>
-            </svg>
-          </label>
           <button class="demo-link js-demo">Try a demo chord</button>
         </div>
         <input type="file" id="fileInput" accept="audio/*" hidden>
@@ -563,10 +557,10 @@
   <svg class="ic-compress" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 H6 V2 M16 6 H12 V2 M2 12 H6 V16 M16 12 H12 V16"/></svg>
 </button>
 
-<!-- dev-only: import-symbol A/B — "A" glowing glyph on a faint grey circle / "B" bare glowing glyph -->
-<div class="opt-toggle" id="importOpt" title="Import symbol">
-  <button type="button" data-imp="a" aria-label="Option A - on a faint circle">A</button>
-  <button type="button" data-imp="b" aria-label="Option B - bare glyph">B</button>
+<!-- dev-only: pair sizing A/B — "A" equal 130/130 / "B" matched lead (mic 140 / import 126) -->
+<div class="opt-toggle" id="pairOpt" title="Pair sizing">
+  <button type="button" data-pair="a" aria-label="Equal sizes">A</button>
+  <button type="button" data-pair="b" aria-label="Matched lead, mic larger">B</button>
 </div>
 
 <script src="analysis.js"></script>
