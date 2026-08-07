@@ -528,18 +528,18 @@ function drawDiagram(v, rootPc) {
 }
 
 // ------------------------------------------------------------- init
-// dev-only: pair sizing A/B ("a" equal 130/130 / "b" matched lead 140/126), persisted
-(function initPairOpt() {
-  var KEY = 'chords-pair-opt';
-  var btns = Array.prototype.slice.call(document.querySelectorAll('#pairOpt button'));
+// dev-only: import-symbol A/B ("a" glyph on faint circle / "b" bare glyph), persisted
+(function initImpOpt() {
+  var KEY = 'chords-imp-opt';
+  var btns = Array.prototype.slice.call(document.querySelectorAll('#importOpt button'));
   function apply(v) {
-    document.body.setAttribute('data-pair', v);
-    btns.forEach(function (b) { b.classList.toggle('active', b.dataset.pair === v); });
+    document.body.setAttribute('data-imp', v);
+    btns.forEach(function (b) { b.classList.toggle('active', b.dataset.imp === v); });
     try { localStorage.setItem(KEY, v); } catch (e) {}
   }
-  btns.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.pair); }); });
-  var saved = 'a'; try { saved = localStorage.getItem(KEY) || 'a'; } catch (e) {}
-  if (saved !== 'a' && saved !== 'b') saved = 'a';
+  btns.forEach(function (b) { b.addEventListener('click', function () { apply(b.dataset.imp); }); });
+  var saved = 'b'; try { saved = localStorage.getItem(KEY) || 'b'; } catch (e) {}
+  if (saved !== 'a' && saved !== 'b') saved = 'b';
   apply(saved);
 })();
 
