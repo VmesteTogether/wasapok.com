@@ -318,16 +318,19 @@
     ? arr.map(t => `<span class="tchip t-${t}${mod ? " " + mod : ""}">${t}</span>`).join("")
     : `<span class="hnone">—</span>`;
 
-  // compact 3-letter type tags + status-sorted order for the coverage matrix
+  // compact 3-letter type tags for the coverage matrix
   const TYPE_ABBR = { normal:"NOR", fire:"FIR", water:"WAT", electric:"ELC", grass:"GRS",
     ice:"ICE", fighting:"FIG", poison:"PSN", ground:"GRD", flying:"FLY", psychic:"PSY",
     bug:"BUG", rock:"ROC", ghost:"GHO", dragon:"DRA", dark:"DRK", steel:"STL", fairy:"FAI" };
-  const STATUS_RANK = { bad: 0, soft: 1, mid: 2, good: 3 };
+  // coverage chart splits into 3 clean blocks by NET SIGN (members weak vs resisting):
+  // neg = exposed (red), even = neutral (grey), pos = secure (green). Display-only —
+  // this is separate from the readiness `status`/scoring thresholds.
+  const netCat = (w, r) => (w > r ? "neg" : w < r ? "pos" : "even");
   const sortedTypes = (A) => TYPES.slice().sort((a, b) => {
-    const ra = STATUS_RANK[A.defRows[a].status], rb = STATUS_RANK[A.defRows[b].status];
-    if (ra !== rb) return ra - rb;
-    if (A.defRows[b].weak !== A.defRows[a].weak) return A.defRows[b].weak - A.defRows[a].weak;
-    return A.defRows[a].resist - A.defRows[b].resist;
+    const A1 = A.defRows[a], B1 = A.defRows[b];
+    const ma = A1.weak - A1.resist, mb = B1.weak - B1.resist;
+    if (mb !== ma) return mb - ma;          // most weak-leaning first -> 3 contiguous blocks
+    return B1.weak - A1.weak;               // tie: more interactions first
   });
 
   const priorityLine = (A) => {
@@ -391,7 +394,7 @@
     // TAP expands to the full per-member matrix (fits screen, no scrolling).
     const covCell = t => {
       const r = A.defRows[t];
-      return `<div class="cov-cell st-${r.status}"><span class="cov-t t-${t}">${TYPE_ABBR[t]}</span><span class="cov-net">${r.weak}/${r.resist}</span></div>`;
+      return `<div class="cov-cell nt-${netCat(r.weak, r.resist)}"><span class="cov-t t-${t}">${TYPE_ABBR[t]}</span><span class="cov-net">${r.weak}/${r.resist}</span></div>`;
     };
     const coverTile =
       `<div class="htile t-cover" tabindex="0">
@@ -446,14 +449,15 @@
     let last = null;
     const rows = sortedTypes(A).map(atk => {
       const r = A.defRows[atk];
-      const div = (last !== null && r.status !== last) ? " cov-div" : ""; last = r.status;
+      const cat = netCat(r.weak, r.resist);
+      const div = (last !== null && cat !== last) ? " cov-div" : ""; last = cat;
       const cells = units.map(u => {
         const m = effOn(atk, u.t1, u.t2);
         if (m === 1) return `<td></td>`;
         const cls = m >= 4 ? "cx4" : m >= 2 ? "cx2" : m === 0 ? "cx0" : m <= .25 ? "cx025" : "cx05";
         return `<td class="${cls}">×${m}</td>`;
       }).join("");
-      return `<tr class="st-${r.status}${div}"><td class="cov-rt"><span class="cov-t t-${atk}">${TYPE_ABBR[atk]}</span></td>${cells}<td class="cov-net-td st-${r.status}">${r.weak}/${r.resist}</td></tr>`;
+      return `<tr class="nt-${cat}${div}"><td class="cov-rt"><span class="cov-t t-${atk}">${TYPE_ABBR[atk]}</span></td>${cells}<td class="cov-net-td nt-${cat}">${r.weak}/${r.resist}</td></tr>`;
     }).join("");
     body.innerHTML = `<table class="cov"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
   };
