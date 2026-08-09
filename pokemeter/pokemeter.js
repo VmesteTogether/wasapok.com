@@ -51,37 +51,65 @@
     tick:   () => blip(1040, 0.03, "square", 0.03),
   };
 
-  // ------------------------------------------------------------ parallax ----
-  let gyroAsked = false;
-  const requestGyro = () => {
-    if (gyroAsked) return; gyroAsked = true;
-    const D = window.DeviceOrientationEvent;
-    if (D && typeof D.requestPermission === "function") D.requestPermission().catch(() => {});
+  // ------------------------------------------------- motion / parallax ------
+  // The blue grid backdrop is alive to the phone's motion: tilting slides it
+  // (deviceorientation) and actually moving/shaking it ripples it (devicemotion).
+  let motionAsked = false;
+  const requestMotion = () => {
+    if (motionAsked) return; motionAsked = true;
+    // iOS 13+ gates BOTH orientation and motion behind a gesture-triggered grant
+    const ask = E => { if (E && typeof E.requestPermission === "function") E.requestPermission().catch(() => {}); };
+    ask(window.DeviceOrientationEvent);
+    ask(window.DeviceMotionEvent);
   };
-  const firstTouchUnlock = () => { ensureAudio(); requestGyro(); };
+  const firstTouchUnlock = () => { ensureAudio(); requestMotion(); };
 
   const initTactile = () => {
-    const phone = $("#phone"), root = document.documentElement;
-    let raf = 0, tx = 0, ty = 0, cx = 0, cy = 0;
+    const root = document.documentElement, phone = $("#phone");
+    const MAX = 18;                        // px of parallax travel per axis
     const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+    let raf = 0;
+    let bx = 0, by = 0;                     // base target (tilt / pointer)
+    let mx = 0, my = 0;                     // live motion impulse (decays -> springs back)
+    let cx = 0, cy = 0;                     // smoothed value written to CSS vars
+
     const step = () => {
-      cx += (tx - cx) * 0.12; cy += (ty - cy) * 0.12;
+      const tx = clamp(bx + mx, MAX), ty = clamp(by + my, MAX);
+      cx += (tx - cx) * 0.14; cy += (ty - cy) * 0.14;
+      mx *= 0.88; my *= 0.88;              // impulse bleeds off after a move/shake
       root.style.setProperty("--px", cx.toFixed(2) + "px");
       root.style.setProperty("--py", cy.toFixed(2) + "px");
-      raf = (Math.abs(tx - cx) > 0.08 || Math.abs(ty - cy) > 0.08) ? requestAnimationFrame(step) : 0;
+      const live = Math.abs(tx - cx) > 0.05 || Math.abs(ty - cy) > 0.05 ||
+                   Math.abs(mx) > 0.05 || Math.abs(my) > 0.05;
+      raf = live ? requestAnimationFrame(step) : 0;
     };
     const kick = () => { if (!raf) raf = requestAnimationFrame(step); };
+
+    // desktop: pointer drives the base target
     phone.addEventListener("pointermove", e => {
       const r = phone.getBoundingClientRect();
-      tx = clamp(((e.clientX - r.left) / r.width - 0.5) * 20, 11);
-      ty = clamp(((e.clientY - r.top) / r.height - 0.5) * 20, 11);
+      bx = ((e.clientX - r.left) / r.width  - 0.5) * 2 * MAX;
+      by = ((e.clientY - r.top)  / r.height - 0.5) * 2 * MAX;
       kick();
     }, { passive: true });
-    phone.addEventListener("pointerleave", () => { tx = 0; ty = 0; kick(); });
+    phone.addEventListener("pointerleave", () => { bx = 0; by = 0; kick(); });
+
+    // device tilt drives the base target — grid slides as you angle the phone
     window.addEventListener("deviceorientation", e => {
-      if (e.gamma == null) return;
-      tx = clamp(e.gamma * 0.55, 11);
-      ty = clamp((e.beta - 42) * 0.45, 11);
+      if (e.gamma == null && e.beta == null) return;
+      bx = clamp((e.gamma || 0) * 0.85, MAX);
+      by = clamp(((e.beta || 0) - 42) * 0.70, MAX);
+      kick();
+    }, { passive: true });
+
+    // raw device MOTION adds a live impulse — moving/shaking ripples the grid.
+    // Use gravity-excluded acceleration only (accelerationIncludingGravity would
+    // pin a constant ~1g offset); if unavailable, tilt alone still drives it.
+    window.addEventListener("devicemotion", e => {
+      const a = e.acceleration;
+      if (!a || (a.x == null && a.y == null)) return;
+      mx = clamp(mx + (a.x || 0) * 0.9, MAX * 1.4);
+      my = clamp(my - (a.y || 0) * 0.9, MAX * 1.4);
       kick();
     }, { passive: true });
   };

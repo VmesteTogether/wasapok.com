@@ -78,17 +78,24 @@ body { display: flex; align-items: center; justify-content: center; }
 /* ---------- ambient HUD layers -------------------------------------------- */
 .amb { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 
-/* faint technical grid, parallaxed. Oversized well past the phone edges so the
-   parallax translate never uncovers the dark background at any edge (the phone's
-   overflow:hidden clips the excess). */
+/* technical cyan grid, parallaxed — the signature "field HUD" backdrop. It runs
+   the ENTIRE background edge-to-edge (see the standalone full-bleed rules below).
+   Two stacked grids (fine 34px + coarse 170px sector lines) read as a real blue
+   grid rather than near-black. Oversized well past the phone edges so the parallax
+   translate never uncovers a bare edge (the phone's overflow:hidden clips excess). */
 .grid-bg {
-  inset: -90px;
+  inset: -120px;
   background-image:
-    linear-gradient(var(--hair-soft) 1px, transparent 1px),
-    linear-gradient(90deg, var(--hair-soft) 1px, transparent 1px);
-  background-size: 34px 34px;
-  transform: translate(calc(var(--px) * -1.4), calc(var(--py) * -1.4));
-  opacity: 0.5;
+    /* fine grid */
+    linear-gradient(rgba(53,230,255,0.16) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(53,230,255,0.16) 1px, transparent 1px),
+    /* coarse sector grid */
+    linear-gradient(rgba(53,230,255,0.10) 1.5px, transparent 1.5px),
+    linear-gradient(90deg, rgba(53,230,255,0.10) 1.5px, transparent 1.5px);
+  background-size: 34px 34px, 34px 34px, 170px 170px, 170px 170px;
+  transform: translate(calc(var(--px) * -2), calc(var(--py) * -2));
+  opacity: 0.9;
+  will-change: transform;
 }
 /* large soft cyan pools for depth, parallaxed further (so oversized more) */
 .hexwash {
@@ -283,8 +290,12 @@ body { display: flex; align-items: center; justify-content: center; }
   margin: 4px 12px 12px;
   position: relative;
   padding: 16px 14px;
+  /* translucent glass plate so the reactive grid reads faintly through the
+     readout — the backdrop stays "all grid" — while a light blur keeps text crisp */
   background:
-    linear-gradient(180deg, rgba(22,32,42,0.9), rgba(11,16,21,0.9));
+    linear-gradient(180deg, rgba(22,32,42,0.72), rgba(11,16,21,0.78));
+  -webkit-backdrop-filter: blur(2px);
+  backdrop-filter: blur(2px);
   border: 1px solid var(--hair);
   overflow: hidden auto;
   -webkit-overflow-scrolling: touch;
@@ -533,11 +544,29 @@ body.standalone #phoneWrap { position: static; transform: none !important; }
 body.standalone .phone {
   width: 100vw; height: 100vh; height: 100dvh; max-width: none;
   border: none; border-radius: 0; box-shadow: none;
-  padding-top: env(safe-area-inset-top);
-  padding-bottom: env(safe-area-inset-bottom);
-  padding-left: env(safe-area-inset-left);
-  padding-right: env(safe-area-inset-right);
+  /* NO padding here: the ambient blue grid fills the true device edges, running
+     unbroken under the notch and the home-indicator swipe bar. The safe-area
+     insets are pushed onto the CONTENT below so nothing interactive hides under
+     the chrome, while the entire background stays grid — no black bands. */
 }
+/* keep content clear of the notch / rounded corners / home-indicator, but let
+   the grid show through the gaps those insets open up */
+body.standalone .hud-head {
+  padding-top: calc(8px + env(safe-area-inset-top));
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+}
+body.standalone .loadout {
+  padding-left: calc(12px + env(safe-area-inset-left));
+  padding-right: calc(12px + env(safe-area-inset-right));
+}
+body.standalone .console {
+  margin-left: calc(12px + env(safe-area-inset-left));
+  margin-right: calc(12px + env(safe-area-inset-right));
+  margin-bottom: calc(12px + env(safe-area-inset-bottom));
+}
+/* search overlay is full-screen too — keep its footer above the swipe bar */
+body.standalone .results-foot { padding-bottom: calc(14px + env(safe-area-inset-bottom)); }
 body.standalone .statusbar,
 body.standalone .home-indicator,
 body.standalone .fit-toggle { display: none; }
