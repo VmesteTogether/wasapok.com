@@ -78,8 +78,11 @@ body { display: flex; align-items: center; justify-content: center; }
 /* ---------- ambient HUD layers -------------------------------------------- */
 .amb { position: absolute; inset: 0; z-index: 0; pointer-events: none; }
 
-/* faint technical grid, parallaxed */
+/* faint technical grid, parallaxed. Oversized well past the phone edges so the
+   parallax translate never uncovers the dark background at any edge (the phone's
+   overflow:hidden clips the excess). */
 .grid-bg {
+  inset: -90px;
   background-image:
     linear-gradient(var(--hair-soft) 1px, transparent 1px),
     linear-gradient(90deg, var(--hair-soft) 1px, transparent 1px);
@@ -87,12 +90,13 @@ body { display: flex; align-items: center; justify-content: center; }
   transform: translate(calc(var(--px) * -1.4), calc(var(--py) * -1.4));
   opacity: 0.5;
 }
-/* large soft cyan pools for depth, parallaxed further */
+/* large soft cyan pools for depth, parallaxed further (so oversized more) */
 .hexwash {
+  inset: -110px;
   background:
-    radial-gradient(60% 40% at 22% 8%,  rgba(53,230,255,0.10), transparent 70%),
-    radial-gradient(70% 45% at 88% 30%, rgba(28,147,168,0.10), transparent 72%),
-    radial-gradient(80% 50% at 50% 108%, rgba(53,230,255,0.07), transparent 70%);
+    radial-gradient(600px 380px at 22% 12%,  rgba(53,230,255,0.10), transparent 70%),
+    radial-gradient(680px 430px at 86% 32%,  rgba(28,147,168,0.10), transparent 72%),
+    radial-gradient(760px 470px at 50% 100%, rgba(53,230,255,0.07), transparent 70%);
   transform: translate(calc(var(--px) * -2.6), calc(var(--py) * -2.6));
 }
 /* moving scanlines */
