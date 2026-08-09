@@ -83,6 +83,23 @@
     <!-- drawn home indicator — browser preview only, hidden in standalone -->
     <div class="home-indicator"></div>
 
+    <!-- expandable defensive-coverage matrix overlay (fits screen, no scroll) -->
+    <div class="matrix overlay" id="matrix" aria-hidden="true">
+      <div class="matrix-panel">
+        <div class="matrix-head">
+          <div class="matrix-title">DEFENSIVE&nbsp;COVERAGE <span class="matrix-sub">EFFECTIVENESS&nbsp;VS&nbsp;SQUAD</span></div>
+          <button class="matrix-close" id="matrixClose" type="button">COLLAPSE <span class="mx">&times;</span></button>
+        </div>
+        <div class="matrix-body" id="matrixBody"></div>
+        <div class="matrix-legend">
+          <span><i class="lg lg-se"></i>SUPER-EFF</span>
+          <span><i class="lg lg-rs"></i>RESIST</span>
+          <span><i class="lg lg-im"></i>IMMUNE</span>
+          <span class="lg-net">W/R&nbsp;=&nbsp;MEMBERS WEAK / RESISTING</span>
+        </div>
+      </div>
+    </div>
+
     <!-- tactical search overlay -->
     <div class="search overlay" id="search" aria-hidden="true">
       <div class="search-panel">

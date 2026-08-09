@@ -318,6 +318,18 @@
     ? arr.map(t => `<span class="tchip t-${t}${mod ? " " + mod : ""}">${t}</span>`).join("")
     : `<span class="hnone">—</span>`;
 
+  // compact 3-letter type tags + status-sorted order for the coverage matrix
+  const TYPE_ABBR = { normal:"NOR", fire:"FIR", water:"WAT", electric:"ELC", grass:"GRS",
+    ice:"ICE", fighting:"FIG", poison:"PSN", ground:"GRD", flying:"FLY", psychic:"PSY",
+    bug:"BUG", rock:"ROC", ghost:"GHO", dragon:"DRA", dark:"DRK", steel:"STL", fairy:"FAI" };
+  const STATUS_RANK = { bad: 0, soft: 1, mid: 2, good: 3 };
+  const sortedTypes = (A) => TYPES.slice().sort((a, b) => {
+    const ra = STATUS_RANK[A.defRows[a].status], rb = STATUS_RANK[A.defRows[b].status];
+    if (ra !== rb) return ra - rb;
+    if (A.defRows[b].weak !== A.defRows[a].weak) return A.defRows[b].weak - A.defRows[a].weak;
+    return A.defRows[a].resist - A.defRows[b].resist;
+  });
+
   const priorityLine = (A) => {
     if (!A.count) return "file your squad to begin";
     if (A.exposed.length) return `patch the <b>${A.exposed[0].t}</b> weak point`;
@@ -375,17 +387,19 @@
          : `<div class="rt-note ok">no deductions — fully outfitted</div>`}</div>
        <div class="rt-foot">this reads the field's threats, not your taste</div>`);
 
-    // DEFENSE
-    const defTile = tile("t-def",
-      `<div class="ht-kicker">DEFENSE<span class="ht-flip">›</span></div>
-       <div class="ht-rowlbl warn-lbl">WEAK</div>
-       <div class="ht-chips">${A.exposed.length ? chips(A.exposed.map(x => x.t), "warn") : `<span class="hgood">none shared</span>`}</div>
-       <div class="ht-rowlbl good-lbl">SECURE</div>
-       <div class="ht-chips">${chips(A.secure.slice(0, 8))}${A.secure.length > 8 ? `<span class="hnone">+${A.secure.length - 8}</span>` : ""}</div>`,
-      `<div class="ht-kicker">DEFENSE · DETAIL</div>
-       ${A.exposed.length
-         ? A.exposed.slice(0, 6).map(x => `<div class="ht-line"><span class="tchip t-${x.t} warn">${x.t}</span><b>${x.weak}</b>/${A.count} hit hard</div>`).join("")
-         : `<div class="ht-line hgood">no type threatens the whole squad</div>`}`);
+    // DEFENSIVE COVERAGE — the central chart. Collapsed = per-type net grid;
+    // TAP expands to the full per-member matrix (fits screen, no scrolling).
+    const covCell = t => {
+      const r = A.defRows[t];
+      return `<div class="cov-cell st-${r.status}"><span class="cov-t t-${t}">${TYPE_ABBR[t]}</span><span class="cov-net">${r.weak}/${r.resist}</span></div>`;
+    };
+    const coverTile =
+      `<div class="htile t-cover" tabindex="0">
+         <div class="htile-face htile-front">
+           <div class="ht-kicker">DEFENSIVE COVERAGE<span class="ht-flip">TAP · EXPAND ⤢</span></div>
+           <div class="cov-grid">${sortedTypes(A).map(covCell).join("")}</div>
+         </div>
+       </div>`;
 
     // OFFENSE
     const offHead = !A.uncovered.length ? `<span class="hgood">FULL SPECTRUM</span>`
@@ -413,13 +427,38 @@
          ? A.vacant.map(d => `<div class="ht-line"><b>${d.name}</b><i>${d.hint}</i></div>`).join("")
          : `<div class="ht-line hgood">all six duties staffed</div>`}`);
 
-    el.innerHTML = `<div class="home-grid">${readTile}${defTile}${offTile}${dutyTile}</div>`;
+    el.innerHTML = `<div class="home-grid">${readTile}${coverTile}${offTile}${dutyTile}</div>`;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       const f = el.querySelector(".rmeter-fill"); if (f) f.style.width = f.dataset.w + "%";
     }));
   };
 
-  const refreshDiagnostic = () => { updateStrip(); if (view === "home") renderHome(); };
+  const refreshDiagnostic = () => { updateStrip(); if (view === "home") renderHome(); if ($("#matrix").classList.contains("open")) renderMatrix(); };
+
+  // ---- expandable full defensive-coverage matrix (no scroll — fit to screen) -
+  const renderMatrix = () => {
+    const units = teamUnits();
+    const body = $("#matrixBody");
+    if (!units.length) { body.innerHTML = `<div class="home-empty"><p>NO SQUAD ON FILE</p></div>`; return; }
+    const A = analyzeTeam(units);
+    const head = `<tr><th class="cov-corner">VS</th>${units.map(u =>
+      `<th><img class="cov-sprite" src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt=""></th>`).join("")}<th class="cov-neth">W/R</th></tr>`;
+    let last = null;
+    const rows = sortedTypes(A).map(atk => {
+      const r = A.defRows[atk];
+      const div = (last !== null && r.status !== last) ? " cov-div" : ""; last = r.status;
+      const cells = units.map(u => {
+        const m = effOn(atk, u.t1, u.t2);
+        if (m === 1) return `<td></td>`;
+        const cls = m >= 4 ? "cx4" : m >= 2 ? "cx2" : m === 0 ? "cx0" : m <= .25 ? "cx025" : "cx05";
+        return `<td class="${cls}">×${m}</td>`;
+      }).join("");
+      return `<tr class="st-${r.status}${div}"><td class="cov-rt"><span class="cov-t t-${atk}">${TYPE_ABBR[atk]}</span></td>${cells}<td class="cov-net-td st-${r.status}">${r.weak}/${r.resist}</td></tr>`;
+    }).join("");
+    body.innerHTML = `<table class="cov"><thead>${head}</thead><tbody>${rows}</tbody></table>`;
+  };
+  const openMatrix = () => { renderMatrix(); const el = $("#matrix"); el.classList.add("open"); el.setAttribute("aria-hidden", "false"); sfx.open(); };
+  const closeMatrix = () => { const el = $("#matrix"); el.classList.remove("open"); el.setAttribute("aria-hidden", "true"); };
 
   // FLIP the six caps between the top strip and the right rail
   const reorient = (caps, first) => {
@@ -579,11 +618,16 @@
       applyView(view === "home" ? "team" : "home");
     });
 
-    // home: tap a tile to flip to its drill-down
+    // home: tap the coverage tile to expand the full matrix; other tiles flip
     $("#home").addEventListener("click", e => {
       const t = e.target.closest(".htile"); if (!t) return;
+      if (t.classList.contains("t-cover")) { openMatrix(); return; }
       t.classList.toggle("flipped"); sfx.tick();
     });
+
+    // defensive-coverage matrix overlay
+    $("#matrixClose").addEventListener("click", closeMatrix);
+    $("#matrix").addEventListener("click", e => { if (e.target === $("#matrix")) closeMatrix(); });
 
     // keep the rail aligned to the home region on viewport changes
     addEventListener("resize", layoutRail);
