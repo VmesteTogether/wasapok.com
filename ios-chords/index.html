@@ -14,7 +14,10 @@
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Chords">
-<meta name="theme-color" content="#eaedf3">
+<!-- theme-color paints the installed status-bar strip on iOS; match it to the app's
+     lightest surface (.phone bg) so the strip blends instead of reading as a darker
+     grey band above the white UI (was #eaedf3). -->
+<meta name="theme-color" content="#f4f5f9">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <style>
   /* self-hosted Inter — an open-source SF stand-in so non-Apple devices render in
