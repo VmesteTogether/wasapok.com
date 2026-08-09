@@ -2,15 +2,17 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Chords</title>
-<!-- Installable web-app: Safari -> Share -> Add to Home Screen launches this
-     full-screen with no browser chrome, so the 390x844 mockup maps to the whole
-     device screen. The design draws its own status bar / Dynamic Island / home
-     indicator, so we deliberately don't reserve space for system chrome. -->
+<!-- Installable web-app: Safari -> Share -> Add to Home Screen. Launched from the
+     Home Screen (standalone) the app sheds its drawn phone shell and fills the real
+     device screen edge-to-edge (see body.standalone), letting iOS supply the real
+     status bar / Dynamic Island / home indicator; content is inset by the device
+     safe areas. status-bar-style "default" keeps the real status-bar glyphs dark and
+     legible over the light UI (black-translucent would force them white/invisible). -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <meta name="apple-mobile-web-app-title" content="Chords">
 <meta name="theme-color" content="#eaedf3">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -51,6 +53,8 @@
     -moz-osx-font-smoothing: grayscale;
     text-rendering: optimizeLegibility;
     overflow: hidden;
+    overscroll-behavior: none;        /* no rubber-band bounce on the app shell */
+    -webkit-touch-callout: none;      /* no long-press image/link callout */
   }
   body { display: flex; align-items: center; justify-content: center; }
 
@@ -205,7 +209,7 @@
   .drop-overlay svg { width: 44px; height: 44px; }
 
   /* ---------- analysis state ---------- */
-  .analysis-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 0 20px; -webkit-overflow-scrolling: touch; }
+  .analysis-scroll { flex: 1; overflow-y: auto; overflow-x: hidden; padding: 6px 0 20px; -webkit-overflow-scrolling: touch; overscroll-behavior: contain; }
   .analysis-scroll::-webkit-scrollbar { width: 0; height: 0; }
 
   /* trim card — the iOS audio-trim surface (Voice Memos / Photos style) */
@@ -403,6 +407,38 @@
   body.fs .fit-toggle:active { opacity: 1; }
   body.fs .fit-toggle .ic-expand { display: none; }
   body.fs .fit-toggle .ic-compress { display: block; }
+
+  /* ---------- installed to the Home Screen: become the real app ----------
+     A standalone launch sheds the drawn phone shell (bezel, status bar, Dynamic
+     Island, home indicator) and fills the DEVICE screen edge-to-edge. iOS draws
+     the real status bar / Island / home indicator, so we hide our stand-ins and
+     inset the app by env(safe-area-inset-*): the layout flows to whatever iPhone
+     it lands on instead of scaling one fixed 390x844 canvas. The browser/desktop
+     preview is untouched and still shows the framed mockup. */
+  body.standalone {
+    background: #eaedf3;
+    display: block;                 /* stop centering a fixed box — the app IS the screen */
+  }
+  body.standalone #phoneWrap { position: static; transform: none !important; }
+  body.standalone .phone {
+    width: 100vw;
+    height: 100vh;                  /* stable in standalone (no collapsing browser chrome) */
+    height: 100dvh;                 /* dynamic-viewport unit where supported */
+    max-width: none;
+    border: none;
+    border-radius: 0;
+    box-shadow: none;
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+  /* the real device supplies these — hide our drawn stand-ins */
+  body.standalone .island,
+  body.standalone .statusbar,
+  body.standalone .home-indicator { display: none; }
+  /* dev/preview affordances don't belong in the shipped app */
+  body.standalone .fit-toggle { display: none; }
 </style>
 </head>
 <body>
@@ -539,9 +575,10 @@
 <script src="analysis.js"></script>
 <script src="chords.js"></script>
 <script>
-  // fill-screen: scale the whole phone construction to fill the viewport at its
-  // exact 390x844 aspect (min(vw/390, vh/844)), centered. Standalone (Home Screen)
-  // launches straight into it; a normal tab restores the last manual choice.
+  // fill-screen (desktop/browser preview): scale the whole phone construction to
+  // fill the viewport at its exact 390x844 aspect (min(vw/390, vh/844)), centered.
+  // NOTE: a Home-Screen (standalone) launch does NOT use this scale path — it takes
+  // the real-app path below (body.standalone: full-bleed + safe-area insets).
   (() => {
     const AR_W = 390, AR_H = 844, KEY = "chords-fillscreen";
     const wrap = document.getElementById("phoneWrap");
@@ -570,7 +607,10 @@
     if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
     const standalone = (navigator.standalone === true) ||
       (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
-    if (standalone) { setFS(true, { persist: false }); }
+    // Installed launch: become the real app (full-bleed, safe-area insets, real iOS
+    // chrome) via body.standalone — not the desktop scale-to-fit. A normal browser
+    // tab stays framed and restores the last manual fill-screen choice.
+    if (standalone) { document.body.classList.add("standalone"); }
     else { let saved = "0"; try { saved = localStorage.getItem(KEY) || "0"; } catch {} if (saved === "1") setFS(true, { persist: false }); }
   })();
 </script>
