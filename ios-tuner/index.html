@@ -1463,8 +1463,11 @@
      inset the app by env(safe-area-inset-*): the layout flows to whatever iPhone
      it lands on instead of scaling one fixed 390x844 canvas. The browser/desktop
      preview is untouched and still shows the framed mockup. */
+  /* unify the whole backdrop with the app's lightest surface so no darker sliver
+     (the old #eaedf3) can peek through a sub-pixel seam under the iOS status bar */
+  :root:has(body.standalone) { background-color: #f4f5f9; }
   body.standalone {
-    background: #eaedf3;
+    background: #f4f5f9;
     display: block;                 /* stop centering a fixed box — the app IS the screen */
   }
   body.standalone #phoneWrap { position: static; transform: none !important; }
