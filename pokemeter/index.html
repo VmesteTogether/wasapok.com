@@ -59,11 +59,26 @@
       </div>
     </header>
 
-    <!-- loadout strip: six add/party capsules -->
+    <!-- view toggle: flips between TEAM (loadout + readout) and HOME (squad diagnostic).
+         Steel/grey at rest; the status light glows amber when there's an actionable gap. -->
+    <button class="viewflip" id="viewFlip" type="button" aria-pressed="false">
+      <span class="vf-ico" aria-hidden="true"></span>
+      <span class="vf-core">
+        <span class="vf-label" id="vfLabel">HOME</span>
+        <span class="vf-sub" id="vfSub">SQUAD&nbsp;DIAGNOSTIC</span>
+      </span>
+      <span class="vf-status" id="vfStatus" aria-hidden="true"></span>
+      <span class="vf-chev" aria-hidden="true">&rsaquo;</span>
+    </button>
+
+    <!-- loadout strip: six capsules (top strip in TEAM view; right rail in HOME view) -->
     <section class="loadout" id="loadout" aria-label="Party loadout — six unit slots"></section>
 
-    <!-- per-unit readout console -->
+    <!-- per-unit readout console (TEAM view) -->
     <section class="console" id="console" aria-live="polite"></section>
+
+    <!-- squad diagnostic cockpit (HOME view) -->
+    <section class="home" id="home" aria-label="Squad diagnostic"></section>
 
     <!-- drawn home indicator — browser preview only, hidden in standalone -->
     <div class="home-indicator"></div>

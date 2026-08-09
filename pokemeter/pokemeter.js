@@ -19,6 +19,119 @@
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const prettify = ident => ident.replace(/-/g, " ");
 
+  // ------------------------------------------------ type / readiness engine ---
+  // Ported from aremypokemongood. IMPORTANT framing: this reads the FIELD's
+  // threats — it never grades the trainer. No pass/fail; readiness only ever
+  // reports how outfitted you are and what would raise it.
+  const TYPES = ["normal","fire","water","electric","grass","ice","fighting","poison",
+    "ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy"];
+  const CHART = {
+    normal:   { rock:.5, steel:.5, ghost:0 },
+    fire:     { grass:2, ice:2, bug:2, steel:2, fire:.5, water:.5, rock:.5, dragon:.5 },
+    water:    { fire:2, ground:2, rock:2, water:.5, grass:.5, dragon:.5 },
+    electric: { water:2, flying:2, electric:.5, grass:.5, dragon:.5, ground:0 },
+    grass:    { water:2, ground:2, rock:2, fire:.5, grass:.5, poison:.5, flying:.5, bug:.5, dragon:.5, steel:.5 },
+    ice:      { grass:2, ground:2, flying:2, dragon:2, fire:.5, water:.5, ice:.5, steel:.5 },
+    fighting: { normal:2, ice:2, rock:2, dark:2, steel:2, poison:.5, flying:.5, psychic:.5, bug:.5, fairy:.5, ghost:0 },
+    poison:   { grass:2, fairy:2, poison:.5, ground:.5, rock:.5, ghost:.5, steel:0 },
+    ground:   { fire:2, electric:2, poison:2, rock:2, steel:2, grass:.5, bug:.5, flying:0 },
+    flying:   { grass:2, fighting:2, bug:2, electric:.5, rock:.5, steel:.5 },
+    psychic:  { fighting:2, poison:2, psychic:.5, steel:.5, dark:0 },
+    bug:      { grass:2, psychic:2, dark:2, fire:.5, fighting:.5, poison:.5, flying:.5, ghost:.5, steel:.5, fairy:.5 },
+    rock:     { fire:2, ice:2, flying:2, bug:2, fighting:.5, ground:.5, steel:.5 },
+    ghost:    { psychic:2, ghost:2, dark:.5, normal:0 },
+    dragon:   { dragon:2, steel:.5, fairy:0 },
+    dark:     { psychic:2, ghost:2, fighting:.5, dark:.5, fairy:.5 },
+    steel:    { ice:2, rock:2, fairy:2, fire:.5, water:.5, electric:.5, steel:.5 },
+    fairy:    { fighting:2, dragon:2, dark:2, fire:.5, poison:.5, steel:.5 },
+  };
+  const effOn = (atk, d1, d2) => (CHART[atk][d1] ?? 1) * (d2 ? (CHART[atk][d2] ?? 1) : 1);
+
+  // six field duties, tested off base stats [hp,atk,def,spa,spd,spe]
+  const DUTIES = [
+    { key:"physatk",  name:"PHYS ATK",  hint:"ATK ≥ 100",              test:s => s[1] >= 100 },
+    { key:"specatk",  name:"SPEC ATK",  hint:"SPA ≥ 100",              test:s => s[3] >= 100 },
+    { key:"physwall", name:"PHYS WALL", hint:"DEF ≥ 100 · HP ≥ 60",    test:s => s[2] >= 100 && s[0] >= 60 },
+    { key:"specwall", name:"SPEC WALL", hint:"SPD ≥ 95 · HP ≥ 60",     test:s => s[4] >= 95  && s[0] >= 60 },
+    { key:"speed",    name:"SPEED",     hint:"SPE ≥ 105",              test:s => s[5] >= 105 },
+    { key:"support",  name:"SUPPORT",   hint:"HP ≥ 85 · both DEF ≥ 70",test:s => s[0] >= 85 && s[2] >= 70 && s[4] >= 70 },
+  ];
+
+  // per-unit combat class from base stats
+  const archetype = s => {
+    const [hp, atk, def, spa, spd] = s, spe = s[5];
+    const off = Math.max(atk, spa), phys = atk >= spa;
+    const bulkP = hp * def, bulkS = hp * spd, bst = s.reduce((a,b) => a+b, 0);
+    if (off >= 100 && spe >= 100) return phys ? "PHYS SWEEPER" : "SPEC SWEEPER";
+    if (atk >= 100 && spa >= 100) return "MIXED ATTACKER";
+    if (off >= 115) return phys ? "WALLBREAKER" : "SPEC BREAKER";
+    if (bulkP >= 9000 && bulkS >= 9000) return "FORTRESS";
+    if (bulkP >= 8200) return "PHYS WALL";
+    if (bulkS >= 8200) return "SPEC WALL";
+    if (spe >= 110) return "SCOUT";
+    if (off >= 95) return phys ? "PHYS ATTACKER" : "SPEC ATTACKER";
+    if (hp >= 85 && def >= 65 && spd >= 65) return "BULKY PIVOT";
+    if (bst < 430) return "IN TRAINING";
+    return "ALL-ROUNDER";
+  };
+
+  // whole-squad diagnostic. team = array of unit objects (nulls already stripped)
+  const analyzeTeam = (team) => {
+    const defRows = {}, exposed = [], secure = [];
+    TYPES.forEach(atk => {
+      let weak = 0, resist = 0;
+      team.forEach(p => { const m = effOn(atk, p.t1, p.t2); if (m >= 2) weak++; if (m < 1) resist++; });
+      let status = "mid";
+      if (weak >= 3 || (weak >= 2 && resist === 0)) { status = "bad"; exposed.push({ t: atk, weak }); }
+      else if (weak === 0 && resist >= Math.min(3, team.length)) { status = "good"; secure.push(atk); }
+      else if (weak > resist) status = "soft";
+      defRows[atk] = { weak, resist, status };
+    });
+
+    const stabs = [...new Set(team.flatMap(p => [p.t1, p.t2]).filter(Boolean))];
+    const offRows = {}, uncovered = [], walled = [];
+    TYPES.forEach(def => {
+      const best = stabs.length ? Math.max(...stabs.map(atk => effOn(atk, def, null))) : 0;
+      offRows[def] = best;
+      if (best < 1) { walled.push(def); uncovered.push(def); }
+      else if (best < 2) uncovered.push(def);
+    });
+
+    const staffed = DUTIES.filter(d => team.some(p => d.test(p.stats)));
+    const vacant  = DUTIES.filter(d => !team.some(p => d.test(p.stats)));
+
+    // readiness: same deduction weights as ampg, but reported as a positive meter
+    let score = 100; const notes = [];
+    const dEx = Math.min(28, exposed.length * 9);
+    if (dEx) { score -= dEx; notes.push({ tag: "shared weakness", val: dEx, types: exposed.map(x => x.t) }); }
+    const dWall = Math.min(16, walled.length * 8);
+    if (dWall) { score -= dWall; notes.push({ tag: "walled attacks", val: dWall, types: walled }); }
+    const neutralOnly = uncovered.length - walled.length;
+    const dOff = Math.min(15, Math.max(0, neutralOnly - 1) * 3);
+    if (dOff) { score -= dOff; notes.push({ tag: "coverage gaps", val: dOff }); }
+    const dRole = Math.min(30, vacant.length * 6);
+    if (dRole) { score -= dRole; notes.push({ tag: "unfilled duties", val: dRole, roles: vacant.map(d => d.name) }); }
+    if (team.length < 6) { const dSize = (6 - team.length) * 4; score -= dSize; notes.push({ tag: "roster forming", val: dSize }); }
+    score = Math.max(0, Math.round(score));
+
+    return { defRows, exposed, secure, stabs, offRows, uncovered, walled, staffed, vacant, score, notes, count: team.length };
+  };
+
+  // no-fail readiness tier. NEVER a pass/fail — the floor still reads as progress.
+  const READ_TIERS = [
+    { min: 88, label: "COMBAT READY", sub: "fully outfitted for the field" },
+    { min: 72, label: "FIELD READY",  sub: "solid kit — a few gaps to close" },
+    { min: 55, label: "HOLDING",      sub: "serviceable — room to sharpen" },
+    { min: 35, label: "OUTFITTING",   sub: "coming together — keep building" },
+    { min: 0,  label: "OUTFITTING",   sub: "early days — add and adjust" },
+  ];
+  const readiness = (A) => {
+    if (!A.count) return { label: "AWAITING SQUAD", sub: "file a unit to begin", score: A.score, items: 0 };
+    const tier = READ_TIERS.find(t => A.score >= t.min);
+    const items = A.exposed.length + A.walled.length + A.vacant.length;
+    return { label: tier.label, sub: tier.sub, score: A.score, items };
+  };
+
   let DEX = [];
   const byId = new Map();
   let party = [null, null, null, null, null, null];
@@ -195,6 +308,163 @@
     }));
   };
 
+  // ---------------------------------------------------- home / squad view ----
+  const VIEW_KEY = "pokemeter-view-v1";
+  const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let view = "team";
+  const teamUnits = () => party.filter(x => x != null).map(id => byId.get(id));
+
+  const chips = (arr, mod) => arr.length
+    ? arr.map(t => `<span class="tchip t-${t}${mod ? " " + mod : ""}">${t}</span>`).join("")
+    : `<span class="hnone">—</span>`;
+
+  const priorityLine = (A) => {
+    if (!A.count) return "file your squad to begin";
+    if (A.exposed.length) return `patch the <b>${A.exposed[0].t}</b> weak point`;
+    if (A.vacant.length)  return `staff a <b>${A.vacant[0].name}</b>`;
+    if (A.walled.length)  return `find an answer to <b>${A.walled[0]}</b>`;
+    return "well-rounded — fine-tune to taste";
+  };
+
+  // one flip-tile: front headline, back drill-down
+  const tile = (mods, front, back) =>
+    `<div class="htile ${mods}" tabindex="0">
+       <div class="htile-3d">
+         <div class="htile-face htile-front">${front}</div>
+         <div class="htile-face htile-back">${back}</div>
+       </div>
+     </div>`;
+
+  const updateStrip = (A) => {
+    A = A || analyzeTeam(teamUnits());
+    const actionable = A.count && (A.exposed.length || A.vacant.length || A.walled.length);
+    $("#viewFlip").classList.toggle("alert", !!actionable);
+  };
+
+  const renderHome = () => {
+    const el = $("#home");
+    const units = teamUnits();
+    const A = analyzeTeam(units);
+    updateStrip(A);
+
+    if (!units.length) {
+      el.innerHTML =
+        `<div class="home-empty">
+           <div class="ce-ring"></div>
+           <p>NO SQUAD ON FILE<br><b>FLIP TO TEAM</b> AND FILE A UNIT</p>
+         </div>`;
+      return;
+    }
+
+    const R = readiness(A);
+    const neutral = A.uncovered.filter(t => !A.walled.includes(t));
+
+    // READINESS — qualitative front, opt-in /100 on the back
+    const readTile = tile("t-read span2",
+      `<div class="rt-head"><span class="rt-kicker">SQUAD READINESS</span><span class="ht-flip">TAP · INDEX</span></div>
+       <div class="rt-tier">${R.label}</div>
+       <div class="rt-sub">${R.sub}</div>
+       <div class="rmeter"><div class="rmeter-fill" data-w="${R.score}"></div></div>
+       <div class="rt-priority">PRIORITY&nbsp;//&nbsp;${priorityLine(A)}</div>`,
+      `<div class="rt-head"><span class="rt-kicker">READINESS INDEX</span><span class="ht-flip">TAP · BACK</span></div>
+       <div class="rt-score">${R.score}<small>/100</small></div>
+       <div class="rt-notes">${A.notes.length
+         ? A.notes.map(n => `<div class="rt-note"><b>−${n.val}</b> ${n.tag}${
+             n.types ? ` <i>${n.types.slice(0, 5).join(", ")}</i>` : ""}${
+             n.roles ? ` <i>${n.roles.slice(0, 3).join(", ")}</i>` : ""}</div>`).join("")
+         : `<div class="rt-note ok">no deductions — fully outfitted</div>`}</div>
+       <div class="rt-foot">this reads the field's threats, not your taste</div>`);
+
+    // DEFENSE
+    const defTile = tile("t-def",
+      `<div class="ht-kicker">DEFENSE<span class="ht-flip">›</span></div>
+       <div class="ht-rowlbl warn-lbl">WEAK</div>
+       <div class="ht-chips">${A.exposed.length ? chips(A.exposed.map(x => x.t), "warn") : `<span class="hgood">none shared</span>`}</div>
+       <div class="ht-rowlbl good-lbl">SECURE</div>
+       <div class="ht-chips">${chips(A.secure.slice(0, 8))}${A.secure.length > 8 ? `<span class="hnone">+${A.secure.length - 8}</span>` : ""}</div>`,
+      `<div class="ht-kicker">DEFENSE · DETAIL</div>
+       ${A.exposed.length
+         ? A.exposed.slice(0, 6).map(x => `<div class="ht-line"><span class="tchip t-${x.t} warn">${x.t}</span><b>${x.weak}</b>/${A.count} hit hard</div>`).join("")
+         : `<div class="ht-line hgood">no type threatens the whole squad</div>`}`);
+
+    // OFFENSE
+    const offHead = !A.uncovered.length ? `<span class="hgood">FULL SPECTRUM</span>`
+      : A.walled.length ? `<span class="hwarn">${A.walled.length} WALLED</span>`
+      : `<span class="hsoft">${A.uncovered.length} GAPS</span>`;
+    const offTile = tile("t-off",
+      `<div class="ht-kicker">OFFENSE<span class="ht-flip">›</span></div>
+       <div class="ht-head2">${offHead}</div>
+       <div class="ht-rowlbl">STAB</div>
+       <div class="ht-chips">${chips(A.stabs)}</div>`,
+      `<div class="ht-kicker">OFFENSE · DETAIL</div>
+       ${A.walled.length ? `<div class="ht-line"><span class="hwarn">WALLED</span>${chips(A.walled, "warn")}</div>` : ""}
+       ${neutral.length ? `<div class="ht-line"><span class="hsoft">SOFT</span>${chips(neutral)}</div>` : ""}
+       ${!A.uncovered.length ? `<div class="ht-line hgood">every type takes super-effective STAB</div>` : ""}`);
+
+    // DUTY ROSTER
+    const dutyTile = tile("t-duty span2",
+      `<div class="ht-kicker">DUTY ROSTER<span class="ht-flip">›</span></div>
+       <div class="duty-strip">${DUTIES.map(d => {
+         const on = A.staffed.includes(d);
+         return `<div class="dpip ${on ? "on" : "off"}"><span class="dpip-dot"></span><span class="dpip-name">${d.name}</span></div>`;
+       }).join("")}</div>`,
+      `<div class="ht-kicker">DUTY ROSTER · GAPS</div>
+       ${A.vacant.length
+         ? A.vacant.map(d => `<div class="ht-line"><b>${d.name}</b><i>${d.hint}</i></div>`).join("")
+         : `<div class="ht-line hgood">all six duties staffed</div>`}`);
+
+    el.innerHTML = `<div class="home-grid">${readTile}${defTile}${offTile}${dutyTile}</div>`;
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const f = el.querySelector(".rmeter-fill"); if (f) f.style.width = f.dataset.w + "%";
+    }));
+  };
+
+  const refreshDiagnostic = () => { updateStrip(); if (view === "home") renderHome(); };
+
+  // FLIP the six caps between the top strip and the right rail
+  const reorient = (caps, first) => {
+    if (!first || prefersReduced) return;
+    const last = caps.map(c => c.getBoundingClientRect());
+    caps.forEach((c, i) => {
+      const f = first[i], l = last[i];
+      c.style.transformOrigin = "top left";
+      c.style.transition = "none";
+      c.style.transform = `translate(${(f.left - l.left).toFixed(1)}px, ${(f.top - l.top).toFixed(1)}px) scale(${(f.width / l.width) || 1}, ${(f.height / l.height) || 1})`;
+    });
+    requestAnimationFrame(() => caps.forEach((c, i) => {
+      c.style.transition = `transform .52s cubic-bezier(.22,1,.36,1) ${(i * 0.035).toFixed(3)}s`;
+      c.style.transform = "";
+      const inner = c.querySelector(".cap-in"); if (inner) inner.classList.add("reorient-flip");
+    }));
+    setTimeout(() => caps.forEach(c => {
+      c.style.transition = c.style.transform = c.style.transformOrigin = "";
+      const inner = c.querySelector(".cap-in"); if (inner) inner.classList.remove("reorient-flip");
+    }), 620 + caps.length * 35);
+  };
+
+  // pin the right rail to exactly cover the .home region (top/height are dynamic
+  // across preview vs standalone + safe-area, so measure rather than hardcode)
+  const layoutRail = () => {
+    const rail = $("#loadout"), home = $("#home");
+    if (view === "home") { rail.style.top = home.offsetTop + "px"; rail.style.height = home.offsetHeight + "px"; }
+    else { rail.style.top = ""; rail.style.height = ""; }
+  };
+
+  const applyView = (next, animate = true) => {
+    if (next === view) return;
+    const caps = [...$("#loadout").querySelectorAll(".cap")];
+    const first = animate ? caps.map(c => c.getBoundingClientRect()) : null;
+    view = next;
+    $("#phone").classList.toggle("view-home", view === "home");
+    $("#vfLabel").textContent = view === "home" ? "TEAM" : "HOME";
+    $("#vfSub").innerHTML = view === "home" ? "UNIT&nbsp;LOADOUT" : "SQUAD&nbsp;DIAGNOSTIC";
+    $("#viewFlip").setAttribute("aria-pressed", view === "home" ? "true" : "false");
+    if (view === "home") renderHome();
+    layoutRail();
+    try { localStorage.setItem(VIEW_KEY, view); } catch {}
+    if (animate) { reorient(caps, first); sfx.open(); }
+  };
+
   const selectSlot = (i) => {
     if (party[i] == null) return;
     activeSlot = i;
@@ -206,14 +476,14 @@
   const clearSlot = (i) => {
     party[i] = null; saveParty();
     if (activeSlot === i) activeSlot = party.findIndex(x => x != null);
-    renderLoadout(); renderConsole(); updateCount();
+    renderLoadout(); renderConsole(); updateCount(); refreshDiagnostic();
     sfx.clear();
   };
 
   const assignSlot = (i, id) => {
     party[i] = id; saveParty();
     activeSlot = i;
-    renderLoadout(); renderConsole(); updateCount();
+    renderLoadout(); renderConsole(); updateCount(); refreshDiagnostic();
     closeSearch();
     sfx.add();
   };
@@ -283,7 +553,8 @@
   };
 
   const wireEvents = () => {
-    // loadout: add (empty) / select (filled) / clear (x)
+    // loadout: add (empty) / select (filled) / clear (x). In HOME view the strip
+    // is the right rail — a filled unit hops back to TEAM so you can read it.
     $("#loadout").addEventListener("click", e => {
       firstTouchUnlock();
       const x = e.target.closest(".cap-x");
@@ -291,7 +562,9 @@
       const cap = e.target.closest(".cap");
       if (!cap) return;
       const i = +cap.dataset.slot;
-      if (party[i] == null) openSearch(i); else selectSlot(i);
+      if (party[i] == null) { openSearch(i); return; }
+      if (view === "home") applyView("team");
+      selectSlot(i);
     });
 
     // console: swap
@@ -299,6 +572,23 @@
       const s = e.target.closest(".swap-btn");
       if (s) { firstTouchUnlock(); openSearch(+s.dataset.swap); }
     });
+
+    // view toggle: flip TEAM <-> HOME
+    $("#viewFlip").addEventListener("click", () => {
+      firstTouchUnlock();
+      applyView(view === "home" ? "team" : "home");
+    });
+
+    // home: tap a tile to flip to its drill-down
+    $("#home").addEventListener("click", e => {
+      const t = e.target.closest(".htile"); if (!t) return;
+      t.classList.toggle("flipped"); sfx.tick();
+    });
+
+    // keep the rail aligned to the home region on viewport changes
+    addEventListener("resize", layoutRail);
+    addEventListener("orientationchange", layoutRail);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", layoutRail);
 
     // search
     $("#searchClose").addEventListener("click", closeSearch);
@@ -351,9 +641,14 @@
     renderLoadout();
     renderConsole();
     updateCount();
+    updateStrip();
     wireEvents();
     initTactile();
     clockTick();
+    // restore last view (no reorient animation on cold boot)
+    let savedView = "team";
+    try { savedView = localStorage.getItem(VIEW_KEY) === "home" ? "home" : "team"; } catch {}
+    if (savedView === "home") applyView("home", false);
   }
 
   boot();
