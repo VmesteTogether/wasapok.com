@@ -508,6 +508,20 @@
     if (animate) { reorient(caps, first); sfx.open(); }
   };
 
+  // ---------------------------------------------------------------- skin ----
+  // "hud" = the cyan HUD; "plastic" = a molded single-overshell device. The
+  // plastic colors live in CSS vars (--shell*) so they're easy to customize later.
+  const SKIN_KEY = "pokemeter-skin";
+  let skin = "hud";
+  const applySkin = (next, animate = true) => {
+    skin = next === "plastic" ? "plastic" : "hud";
+    $("#phone").classList.toggle("skin-plastic", skin === "plastic");
+    $("#skinToggle").setAttribute("aria-pressed", skin === "plastic" ? "true" : "false");
+    if (view === "home") layoutRail();
+    try { localStorage.setItem(SKIN_KEY, skin); } catch {}
+    if (animate) sfx.select();
+  };
+
   const selectSlot = (i) => {
     if (party[i] == null) return;
     activeSlot = i;
@@ -622,6 +636,12 @@
       applyView(view === "home" ? "team" : "home");
     });
 
+    // skin toggle: HUD <-> plastic overshell
+    $("#skinToggle").addEventListener("click", () => {
+      firstTouchUnlock();
+      applySkin(skin === "plastic" ? "hud" : "plastic");
+    });
+
     // home: tap the coverage tile to expand the full matrix; other tiles flip
     $("#home").addEventListener("click", e => {
       const t = e.target.closest(".htile"); if (!t) return;
@@ -693,7 +713,10 @@
     wireEvents();
     initTactile();
     clockTick();
-    // restore last view (no reorient animation on cold boot)
+    // restore last skin + view (no animation on cold boot)
+    let savedSkin = "hud";
+    try { savedSkin = localStorage.getItem(SKIN_KEY) === "plastic" ? "plastic" : "hud"; } catch {}
+    if (savedSkin === "plastic") applySkin("plastic", false);
     let savedView = "team";
     try { savedView = localStorage.getItem(VIEW_KEY) === "home" ? "home" : "team"; } catch {}
     if (savedView === "home") applyView("home", false);
