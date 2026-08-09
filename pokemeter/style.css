@@ -850,8 +850,10 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   --shell-edge: #7c2622;   /* deep seam / emboss shadow */
   --screen:     #0a1216;   /* recessed LCD */
   --screen-2:   #11212b;
-  --pl-txt:     #fff8f2;
-  --pl-txt-dim: rgba(255,248,242,0.62);
+  --pl-txt:     #fff8f2;                  /* label text on the shell */
+  --pl-txt-dim: rgba(255,248,242,0.62);   /* sub / secondary shell text */
+  --pl-txt-mid: rgba(255,248,242,0.78);   /* cap index · clear · chevron */
+  --pl-emboss:  var(--shell-edge);        /* label emboss (dark under light text) */
   /* the shell surface — a top light source; the glint tracks device tilt (--px/--py) */
   background: radial-gradient(150% 110% at calc(50% + var(--px)) calc(-6% + var(--py)),
     var(--shell-hi), var(--shell) 42%, var(--shell-lo) 100%);
@@ -861,15 +863,15 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 
 /* header embossed into the shell */
 #phone.skin-plastic .hud-head { border-bottom: 1px solid var(--shell-lo); box-shadow: 0 1px 0 var(--shell-hi); }
-#phone.skin-plastic .brand-text h1 { color: var(--pl-txt); text-shadow: 0 1px 0 var(--shell-edge), 0 -1px 1px rgba(255,255,255,0.25); }
-#phone.skin-plastic .brand-sub { color: rgba(255,255,255,0.55); }
+#phone.skin-plastic .brand-text h1 { color: var(--pl-txt); text-shadow: 0 1px 0 var(--pl-emboss), 0 -1px 1px rgba(255,255,255,0.25); }
+#phone.skin-plastic .brand-sub { color: var(--pl-txt-dim); }
 #phone.skin-plastic .brand-mark { background: linear-gradient(150deg, var(--shell-hi), var(--shell-lo));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 1px 2px rgba(0,0,0,.35); }
 #phone.skin-plastic .brand-mark::after { background: var(--shell-edge); }
 #phone.skin-plastic .sysreadout { clip-path: none; border-radius: 7px; border: none; color: var(--cyan);
   background: linear-gradient(180deg, var(--screen-2), var(--screen));
   box-shadow: inset 0 2px 4px rgba(0,0,0,.6), 0 1px 0 var(--shell-hi); }
-#phone.skin-plastic .sys-label { color: var(--pl-txt-dim); }
+#phone.skin-plastic .sys-label { color: var(--txt-2); }   /* on the dark LCD — skin-independent */
 #phone.skin-plastic .skin-toggle { clip-path: none; border-radius: 8px; border: none; color: var(--shell-edge);
   background: linear-gradient(180deg, var(--shell-hi), var(--shell-lo));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 2px 3px rgba(0,0,0,.3); }
@@ -895,9 +897,9 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic .cap.active { background: linear-gradient(180deg, var(--shell-hi), var(--shell) 52%, var(--shell-lo)); }
 #phone.skin-plastic .cap.active .cap-in { box-shadow: inset 0 0 0 2px rgba(255,255,255,.32), inset 0 1px 1px rgba(255,255,255,.22); }
 #phone.skin-plastic .cap-plus, #phone.skin-plastic .cap-empty-lbl,
-#phone.skin-plastic .cap-name, #phone.skin-plastic .cap-idx { color: var(--pl-txt); text-shadow: 0 1px 0 var(--shell-edge); }
-#phone.skin-plastic .cap.filled .cap-idx { color: rgba(255,255,255,.7); }
-#phone.skin-plastic .cap-x { color: rgba(255,255,255,.8); }
+#phone.skin-plastic .cap-name, #phone.skin-plastic .cap-idx { color: var(--pl-txt); text-shadow: 0 1px 0 var(--pl-emboss); }
+#phone.skin-plastic .cap.filled .cap-idx { color: var(--pl-txt-mid); }
+#phone.skin-plastic .cap-x { color: var(--pl-txt-mid); }
 
 /* the view-flip — a wide molded plastic bar; the gap light reads as an LED */
 #phone.skin-plastic .viewflip {
@@ -907,10 +909,10 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
     inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 5px rgba(0,0,0,.2);
 }
 #phone.skin-plastic .viewflip:active { transform: translateY(1.5px); filter: none; }
-#phone.skin-plastic .vf-label { color: var(--pl-txt); text-shadow: 0 1px 0 var(--shell-edge); }
-#phone.skin-plastic .vf-sub { color: rgba(255,255,255,.55); }
+#phone.skin-plastic .vf-label { color: var(--pl-txt); text-shadow: 0 1px 0 var(--pl-emboss); }
+#phone.skin-plastic .vf-sub { color: var(--pl-txt-dim); }
 #phone.skin-plastic .vf-ico { color: var(--pl-txt); }
-#phone.skin-plastic .vf-chev { color: rgba(255,255,255,.6); }
+#phone.skin-plastic .vf-chev { color: var(--pl-txt-mid); }
 #phone.skin-plastic .vf-status { background: rgba(0,0,0,.28); box-shadow: inset 0 1px 1px rgba(0,0,0,.45); opacity: 1; }
 #phone.skin-plastic .viewflip.alert { box-shadow: 0 3px 4px rgba(0,0,0,.28), 0 1px 0 var(--shell-hi), inset 0 1px 0 rgba(255,255,255,.5); }
 #phone.skin-plastic .viewflip.alert .vf-status { background: var(--amber); box-shadow: 0 0 6px rgba(255,182,74,.9), inset 0 0 2px rgba(255,255,255,.6); }
@@ -944,4 +946,19 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   clip-path: none; border-radius: 8px; border: none; color: var(--pl-txt);
   background: linear-gradient(180deg, var(--shell-hi), var(--shell-lo));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 3px rgba(0,0,0,.3);
+}
+
+/* ---- CREAM iteration — warm off-white molded shell, dark engraved labels ----
+   Shares every .skin-plastic rule above; only the colour vars change. The label
+   text flips dark and the emboss becomes a light highlight (letterpress look).
+   The recessed LCD stays dark so the cyan readouts remain legible. */
+#phone.skin-plastic.plastic-cream {
+  --shell:      #e9e0cc;   /* warm cream */
+  --shell-hi:   #f9f4e8;   /* top-lit highlight (near white) */
+  --shell-lo:   #d2c4a6;   /* lower edge shade (tan) */
+  --shell-edge: #9d8760;   /* deep seam / groove shadow */
+  --pl-txt:     #4b4230;   /* dark warm label text */
+  --pl-txt-dim: rgba(75,66,48,0.62);
+  --pl-txt-mid: rgba(75,66,48,0.80);
+  --pl-emboss:  rgba(255,255,255,0.7);   /* light highlight below dark text = engraved */
 }

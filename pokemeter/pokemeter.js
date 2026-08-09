@@ -509,18 +509,26 @@
   };
 
   // ---------------------------------------------------------------- skin ----
-  // "hud" = the cyan HUD; "plastic" = a molded single-overshell device. The
-  // plastic colors live in CSS vars (--shell*) so they're easy to customize later.
+  // The header switch is a ONE-WAY cycle through the shell iterations:
+  //   hud → plastic-red → plastic-cream → (wrap) → hud …
+  // "hud" = the cyan HUD; the plastic skins share the molded-overshell CSS
+  // (.skin-plastic) and differ only in a set of --shell*/--pl-txt* colour vars,
+  // so a new iteration is just one more entry here + a colour block in CSS.
   const SKIN_KEY = "pokemeter-skin";
+  const SKINS = ["hud", "plastic-red", "plastic-cream"];
   let skin = "hud";
   const applySkin = (next, animate = true) => {
-    skin = next === "plastic" ? "plastic" : "hud";
-    $("#phone").classList.toggle("skin-plastic", skin === "plastic");
-    $("#skinToggle").setAttribute("aria-pressed", skin === "plastic" ? "true" : "false");
+    skin = SKINS.includes(next) ? next : "hud";
+    const phone = $("#phone");
+    phone.classList.toggle("skin-plastic", skin !== "hud");
+    phone.classList.toggle("plastic-cream", skin === "plastic-cream");
+    // aria-pressed reads "a non-default shell is active" for this cycling switch
+    $("#skinToggle").setAttribute("aria-pressed", skin !== "hud" ? "true" : "false");
     if (view === "home") layoutRail();
     try { localStorage.setItem(SKIN_KEY, skin); } catch {}
     if (animate) sfx.select();
   };
+  const cycleSkin = () => applySkin(SKINS[(SKINS.indexOf(skin) + 1) % SKINS.length]);
 
   const selectSlot = (i) => {
     if (party[i] == null) return;
@@ -636,10 +644,10 @@
       applyView(view === "home" ? "team" : "home");
     });
 
-    // skin toggle: HUD <-> plastic overshell
+    // skin switch: one-way cycle through the shell iterations
     $("#skinToggle").addEventListener("click", () => {
       firstTouchUnlock();
-      applySkin(skin === "plastic" ? "hud" : "plastic");
+      cycleSkin();
     });
 
     // home: tap the coverage tile to expand the full matrix; other tiles flip
@@ -715,8 +723,12 @@
     clockTick();
     // restore last skin + view (no animation on cold boot)
     let savedSkin = "hud";
-    try { savedSkin = localStorage.getItem(SKIN_KEY) === "plastic" ? "plastic" : "hud"; } catch {}
-    if (savedSkin === "plastic") applySkin("plastic", false);
+    try {
+      const s = localStorage.getItem(SKIN_KEY);
+      savedSkin = s === "plastic" ? "plastic-red"        // migrate the old binary value
+                : SKINS.includes(s) ? s : "hud";
+    } catch {}
+    if (savedSkin !== "hud") applySkin(savedSkin, false);
     let savedView = "team";
     try { savedView = localStorage.getItem(VIEW_KEY) === "home" ? "home" : "team"; } catch {}
     if (savedView === "home") applyView("home", false);
