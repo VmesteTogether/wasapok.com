@@ -751,7 +751,7 @@ body.standalone .fit-toggle { display: none; }
 .cov-cell.nt-neg  { border-color: rgba(224,64,47,0.5);  background: rgba(224,64,47,0.10); }
 .cov-cell.nt-even { border-color: var(--hair-soft); }
 .cov-cell.nt-pos  { border-color: rgba(79,191,95,0.42); background: rgba(79,191,95,0.09); }
-.cov-t { font-family: var(--f-mono); font-size: 8px; font-weight: 700; letter-spacing: .3px; color: #fff;
+.cov-t { font-family: var(--f-disp); font-size: 9px; font-weight: 700; letter-spacing: .4px; color: #fff;
   padding: 1px 4px; border-radius: 2px; text-shadow: 0 1px 1px rgba(0,0,0,.5); }
 .cov-net { font-family: var(--f-mono); font-size: 10px; letter-spacing: .3px; color: var(--txt-2); }
 .cov-cell.nt-neg .cov-net { color: #ff7a5f; font-weight: 700; }
@@ -802,7 +802,7 @@ table.cov tbody tr { border-top: 1px solid rgba(120,160,175,0.05); }
 /* the two clean breaks between the exposed / neutral / secure blocks */
 table.cov tbody tr.cov-div td { border-top: 2px solid rgba(53,230,255,0.38); padding-top: 4px; }
 .cov-rt { width: 40px; text-align: left; }
-.cov-t { display: inline-block; font-family: var(--f-mono); font-size: 8px; font-weight: 700; color: #fff;
+.cov-t { display: inline-block; font-family: var(--f-disp); font-size: 9px; font-weight: 700; letter-spacing: .4px; color: #fff;
   padding: 2px 4px; border-radius: 2px; text-shadow: 0 1px 1px rgba(0,0,0,.5); }
 table.cov td { font-size: 10px; letter-spacing: -0.3px; }
 td.cx4  { color: #ff5a4d; font-weight: 700; background: rgba(224,64,47,0.22); }
