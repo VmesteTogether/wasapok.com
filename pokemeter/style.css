@@ -208,8 +208,11 @@ body { display: flex; align-items: center; justify-content: center; }
   padding: 1.5px;
   clip-path: polygon(var(--chamfer) 0, 100% 0, 100% calc(100% - var(--chamfer)),
     calc(100% - var(--chamfer)) 100%, 0 100%, 0 var(--chamfer));
-  background: linear-gradient(160deg, var(--hair), rgba(53,230,255,0.05));
-  transition: transform 0.12s cubic-bezier(0.32,0.72,0,1), filter 0.2s;
+  /* the LIP — a beveled machined edge: bright top-left highlight fading to a
+     dark bottom-right shade so the chamfered rim catches light */
+  background: linear-gradient(138deg, rgba(120,236,255,.5) 0%, rgba(53,230,255,.13) 27%,
+    rgba(28,66,78,.42) 66%, rgba(6,12,18,.62) 100%);
+  transition: transform 0.2s cubic-bezier(.34,1.45,.5,1), filter 0.2s, background 0.25s;
   animation: capIn 0.5s cubic-bezier(0.2,0.8,0.2,1) both;
 }
 /* staggered boot-in per slot */
@@ -219,14 +222,16 @@ body { display: flex; align-items: center; justify-content: center; }
 @keyframes capIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 
 .cap-in {
-  position: absolute; inset: 1.5px;
+  position: absolute; inset: 2px;
   clip-path: polygon(var(--chamfer) 0, 100% 0, 100% calc(100% - var(--chamfer)),
     calc(100% - var(--chamfer)) 100%, 0 100%, 0 var(--chamfer));
   background: linear-gradient(165deg, var(--plate-2), var(--plate));
+  /* recessed below the lip: a crisp dark inner edge + a faint bright inner rim */
+  box-shadow: inset 0 1px 1px rgba(0,0,0,.5), inset 0 0 0 1px rgba(150,225,245,.05);
   display: flex; flex-direction: column; align-items: center; justify-content: center;
   overflow: hidden;
 }
-.cap:active { transform: scale(0.94); filter: brightness(1.15); }
+.cap:active { transform: scale(0.94); filter: brightness(1.2) drop-shadow(0 0 7px rgba(53,230,255,.4)); }
 
 /* slot index tag, top-left */
 .cap-idx {
@@ -247,8 +252,8 @@ body { display: flex; align-items: center; justify-content: center; }
 .cap.empty .cap-in { animation: emptyPulse 3.2s ease-in-out infinite; }
 .cap:nth-child(even).empty .cap-in { animation-delay: 1.6s; }
 @keyframes emptyPulse {
-  0%,100% { box-shadow: inset 0 0 0 rgba(53,230,255,0); }
-  50%     { box-shadow: inset 0 0 12px rgba(53,230,255,0.12); }
+  0%,100% { box-shadow: inset 0 1px 1px rgba(0,0,0,.5); }
+  50%     { box-shadow: inset 0 1px 1px rgba(0,0,0,.5), inset 0 0 12px rgba(53,230,255,0.12); }
 }
 
 /* filled state: specimen sprite + mini name/type */
@@ -256,9 +261,14 @@ body { display: flex; align-items: center; justify-content: center; }
   width: 46px; height: 40px; object-fit: contain; image-rendering: pixelated;
   margin-top: 4px;
   filter: drop-shadow(0 3px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(53,230,255,0.28));
-  animation: unitIn 0.4s cubic-bezier(0.2,0.8,0.2,1) both;
+  animation: unitIn 0.44s cubic-bezier(.3,.9,.4,1) both;
 }
-@keyframes unitIn { from { opacity: 0; transform: translateY(4px) scale(0.85); } to { opacity: 1; transform: none; } }
+/* a gentle pop for cap sprites; the console specimen gets a bigger bounce below */
+@keyframes unitIn {
+  0%   { opacity: 0; transform: translateY(4px) scale(.84); }
+  65%  { opacity: 1; transform: translateY(0) scale(1.06); }
+  100% { transform: scale(1); }
+}
 .cap-name {
   max-width: 100%; padding: 0 2px;
   font-size: 8.5px; font-weight: 600; letter-spacing: 0.3px; color: var(--txt);
@@ -268,10 +278,15 @@ body { display: flex; align-items: center; justify-content: center; }
 .cap-typedots { display: flex; gap: 2px; margin-top: 2px; }
 .cap-typedots i { width: 5px; height: 5px; border-radius: 1px; display: block; }
 
-.cap.filled { background: linear-gradient(160deg, rgba(53,230,255,0.55), rgba(53,230,255,0.12)); }
-.cap.filled .cap-in { box-shadow: inset 0 0 16px rgba(53,230,255,0.08); }
-.cap.active { background: linear-gradient(160deg, var(--cyan), var(--cyan-dim)); }
-.cap.active .cap-in { box-shadow: inset 0 0 20px rgba(53,230,255,0.18); }
+/* filled: the lip energises — a brighter beveled cyan rim */
+.cap.filled { background: linear-gradient(138deg, rgba(150,246,255,.9) 0%, rgba(53,230,255,.42) 30%,
+  rgba(53,230,255,.12) 62%, rgba(16,60,72,.6) 100%); }
+.cap.filled .cap-in { box-shadow: inset 0 1px 1px rgba(0,0,0,.45), inset 0 0 16px rgba(53,230,255,0.10); }
+/* active (selected): a bright glowing lip that lifts off the strip */
+.cap.active { background: linear-gradient(138deg, rgba(196,251,255,1) 0%, var(--cyan) 32%,
+  var(--cyan-dim) 70%, rgba(24,84,98,.95) 100%);
+  filter: drop-shadow(0 0 7px rgba(53,230,255,.5)); }
+.cap.active .cap-in { box-shadow: inset 0 1px 1px rgba(0,0,0,.4), inset 0 0 22px rgba(53,230,255,0.22); }
 
 /* tiny clear (x) on filled cap */
 .cap-x {
@@ -343,7 +358,13 @@ body { display: flex; align-items: center; justify-content: center; }
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(53,230,255,0.06) 3px 4px);
 }
 .specimen img { width: 92px; height: 92px; object-fit: contain; image-rendering: pixelated;
-  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.7)); animation: unitIn 0.4s ease both; }
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.7)); animation: specimenIn 0.55s cubic-bezier(.3,1,.4,1) both; }
+@keyframes specimenIn {
+  0%   { opacity: 0; transform: translateY(8px) scale(.5); }
+  55%  { opacity: 1; transform: translateY(0) scale(1.14); }
+  78%  { transform: scale(.96); }
+  100% { transform: scale(1); }
+}
 
 .unit-meta { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
 .unit-dex { font-family: var(--f-mono); font-size: 11px; letter-spacing: 1px; color: var(--cyan-dim); }
@@ -359,9 +380,9 @@ body { display: flex; align-items: center; justify-content: center; }
   color: var(--cyan); font-family: var(--f-mono); font-size: 10px; letter-spacing: 1.5px;
   padding: 6px 12px;
   clip-path: polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px);
-  transition: background 0.15s, transform 0.1s;
+  transition: background 0.15s, transform 0.2s cubic-bezier(.34,1.42,.5,1);
 }
-.swap-btn:active { background: rgba(53,230,255,0.16); transform: scale(0.96); }
+.swap-btn:active { background: rgba(53,230,255,0.16); transform: scale(0.93); }
 
 /* type chip — chamfered */
 .tchip {
@@ -392,7 +413,7 @@ body { display: flex; align-items: center; justify-content: center; }
   position: absolute; top: 0; left: 0; bottom: 0; z-index: 1; width: 0;
   background: linear-gradient(90deg, var(--cyan-dim), var(--cyan));
   box-shadow: 0 0 8px rgba(53,230,255,0.5);
-  transition: width 0.6s cubic-bezier(0.2,0.8,0.2,1);
+  transition: width 0.68s cubic-bezier(.1,.85,.24,1);
 }
 .stat-row.bst { margin-top: 2px; grid-template-columns: 34px 1fr auto; }
 .stat-row.bst .stat-lbl { color: var(--cyan); }
@@ -491,9 +512,9 @@ body { display: flex; align-items: center; justify-content: center; }
   background: linear-gradient(180deg, rgba(22,32,42,0.5), rgba(11,16,21,0.5));
   border: 1px solid var(--hair-soft);
   clip-path: polygon(7px 0,100% 0,100% calc(100% - 7px),calc(100% - 7px) 100%,0 100%,0 7px);
-  transition: border-color 0.12s, background 0.12s, transform 0.1s;
+  transition: border-color 0.12s, background 0.12s, transform 0.2s cubic-bezier(.34,1.4,.5,1);
 }
-.res-row:active { transform: scale(0.985); border-color: var(--cyan); background: rgba(53,230,255,0.08); }
+.res-row:active { transform: scale(0.96); border-color: var(--cyan); background: rgba(53,230,255,0.08); }
 .res-sprite {
   width: 52px; height: 46px; flex: 0 0 auto; object-fit: contain; image-rendering: pixelated;
   filter: drop-shadow(0 2px 3px rgba(0,0,0,0.6));
@@ -648,6 +669,16 @@ body.standalone .fit-toggle { display: none; }
   animation: screenEnter .40s cubic-bezier(.22,1,.36,1) .28s both;
 }
 
+/* the persistent "screen" ghost — a single blank panel that morphs its geometry
+   between each view's screen while the content cross-fades. Copies the leaving
+   screen's look (bg/bezel/radius) at capture time; JS animates left/top/width/
+   height/border-radius so the morph is distortion-free (real geometry, no scale). */
+#phone .screen-ghost {
+  position: absolute; z-index: 8; display: none; opacity: 0;
+  box-sizing: border-box; overflow: hidden; pointer-events: none;
+  will-change: left, top, width, height;
+}
+
 /* ---------- HOME view layout: rail on the right, tiles fill the left -------- */
 .home { display: none; }
 #phone.view-home .console { display: none; }
@@ -693,9 +724,9 @@ body.standalone .fit-toggle { display: none; }
   border: 1px solid var(--hair);
   background: linear-gradient(158deg, rgba(29,43,55,.65), rgba(11,17,23,.8));
   clip-path: polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);
-  transition: transform .12s cubic-bezier(.32,.72,0,1), border-color .2s, box-shadow .2s;
+  transition: transform .22s cubic-bezier(.34,1.45,.5,1), border-color .2s, box-shadow .2s;
 }
-.hero:active { transform: scale(.975); }
+.hero:active { transform: scale(.95); filter: brightness(1.08); }
 .hero.focus { border-color: var(--cyan); box-shadow: var(--glow), inset 0 0 26px rgba(53,230,255,.12); }
 .hero-accent {                                   /* type-tinted glow behind the sprite */
   position: absolute; inset: 0 0 44% 0; z-index: 0; opacity: .2; filter: blur(15px); pointer-events: none;
@@ -741,8 +772,8 @@ body.standalone .fit-toggle { display: none; }
 .mslot { position: relative; overflow: hidden; cursor: pointer;
   min-height: 42px; padding: 5px 7px; display: flex; flex-direction: column; justify-content: center; gap: 2px;
   border: 1px solid var(--hair-soft); border-radius: 7px; background: rgba(53,230,255,.045);
-  transition: border-color .15s, background .15s, transform .1s; }
-.mslot:active { transform: scale(.96); }
+  transition: border-color .15s, background .15s, transform .2s cubic-bezier(.34,1.42,.5,1); }
+.mslot:active { transform: scale(.92); filter: brightness(1.1); }
 .mslot.filled { border-color: var(--hair); background: rgba(53,230,255,.07); }
 .mslot.empty { align-items: center; justify-content: center; border-style: dashed; }
 .mslot-top { display: flex; align-items: center; gap: 4px; }
@@ -935,6 +966,8 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   .htile-3d, .rmeter-fill, .vf-chev, .matrix, .matrix-panel { transition: none; }
   .cap-in.reorient-flip { animation: none; }
   .console.screen-enter, #phone.view-home .home.screen-enter { animation: none; }
+  .cap-sprite, .specimen img { animation: none; opacity: 1; }
+  #phone.skin-plastic .console::before, #phone.skin-plastic.view-home .home::before { animation: none; }
 }
 
 /* ---------- skin toggle button (HUD look) ---------------------------------- */
@@ -1095,7 +1128,9 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   z-index: 4; pointer-events: none;
   background: var(--cyan);
   box-shadow: 0 0 7px 1px rgba(53,230,255,.85), inset 0 0 2px rgba(255,255,255,.7);
+  animation: ledPulse 2.6s ease-in-out infinite;   /* the device breathes — "it's on" */
 }
+@keyframes ledPulse { 0%,100% { opacity: 1; } 50% { opacity: .5; } }
 #phone.skin-plastic .htile-face {
   clip-path: none; border-radius: 9px; border: 1px solid rgba(255,255,255,.08);
   background: linear-gradient(180deg, rgba(255,255,255,.055), rgba(255,255,255,.015));
@@ -1204,11 +1239,18 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   border-right-color: var(--lip-lo);
   border-bottom-color: var(--lip-lo);
 }
+/* beveled molded lip (top-lit) rather than a flat band, + a soft gloss line */
 #phone.skin-plastic.poke .cap,
 #phone.skin-plastic.poke .hero {
-  border: 2.5px solid var(--lip);
+  border-style: solid; border-width: 2.5px;
+  border-top-color: var(--lip-hi);
+  border-left-color: var(--lip);
+  border-right-color: var(--lip-lo);
+  border-bottom-color: var(--lip-lo);
 }
-#phone.skin-plastic.poke .cap.empty { border-color: var(--lip-lo); }
+#phone.skin-plastic.poke .cap { box-shadow: 0 3px 4px rgba(0,0,0,.30), inset 0 1px 0 rgba(255,255,255,.35),
+  inset 0 0 0 1px rgba(0,0,0,.12); }
+#phone.skin-plastic.poke .cap.empty { border-top-color: var(--lip); border-color: var(--lip-lo); }
 #phone.skin-plastic.poke .viewflip,
 #phone.skin-plastic.poke .swap-btn,
 #phone.skin-plastic.poke .search-close,

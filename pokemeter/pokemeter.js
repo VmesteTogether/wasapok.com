@@ -144,28 +144,74 @@
   let genFilter = 0;     // 0 = ALL, else 1..9
 
   // ---------------------------------------------------------------- audio ---
-  let actx = null;
+  // A small tactile synth: shaped two-part voices (soft triangles through a
+  // lowpass, with pitch glides) plus a noise-transient "click" so every tap has
+  // a satisfying physical attack. Kept quiet + a touch randomised so repeats
+  // never feel robotic.
+  let actx = null, master = null;
   const ensureAudio = () => {
-    if (!actx) { try { actx = new (window.AudioContext || window.webkitAudioContext)(); } catch { actx = null; } }
+    if (!actx) {
+      try {
+        actx = new (window.AudioContext || window.webkitAudioContext)();
+        master = actx.createGain(); master.gain.value = 0.85; master.connect(actx.destination);
+      } catch { actx = null; }
+    }
     if (actx && actx.state === "suspended") actx.resume().catch(() => {});
     return actx;
   };
-  const blip = (freq = 660, dur = 0.07, type = "square", vol = 0.05) => {
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  // one shaped oscillator voice (freq glide f0->f1, gain env, lowpass)
+  const voice = (f0, f1, dur, { type = "triangle", vol = 0.05, when = 0, glide = 0.55, cut = 4200, detune = 0 } = {}) => {
     const c = ensureAudio(); if (!c) return;
-    const o = c.createOscillator(), g = c.createGain();
-    o.type = type; o.frequency.value = freq;
-    g.gain.setValueAtTime(0, c.currentTime);
-    g.gain.linearRampToValueAtTime(vol, c.currentTime + 0.005);
-    g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
-    o.connect(g).connect(c.destination);
-    o.start(); o.stop(c.currentTime + dur + 0.02);
+    const t = c.currentTime + when;
+    const o = c.createOscillator(), g = c.createGain(), lp = c.createBiquadFilter();
+    o.type = type; o.detune.value = detune;
+    o.frequency.setValueAtTime(f0, t);
+    if (f1 && f1 !== f0) o.frequency.exponentialRampToValueAtTime(f1, t + dur * glide);
+    lp.type = "lowpass"; lp.frequency.value = cut; lp.Q.value = 0.7;
+    g.gain.setValueAtTime(0, t);
+    g.gain.linearRampToValueAtTime(vol, t + 0.006);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(lp).connect(g).connect(master || c.destination);
+    o.start(t); o.stop(t + dur + 0.03);
+  };
+  // a tiny filtered-noise transient — the "click" of a physical press
+  const click = (vol = 0.03, dur = 0.02, when = 0) => {
+    const c = ensureAudio(); if (!c) return;
+    const t = c.currentTime + when, n = c.createBufferSource();
+    const buf = c.createBuffer(1, Math.max(1, Math.ceil(c.sampleRate * dur)), c.sampleRate);
+    const d = buf.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (1 - i / d.length);
+    n.buffer = buf;
+    const g = c.createGain(), hp = c.createBiquadFilter();
+    hp.type = "highpass"; hp.frequency.value = 1500;
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    n.connect(hp).connect(g).connect(master || c.destination);
+    n.start(t); n.stop(t + dur + 0.01);
   };
   const sfx = {
-    open:   () => blip(520, 0.06, "square", 0.045),
-    select: () => blip(720, 0.06, "square", 0.05),
-    add:    () => { blip(880, 0.06, "square", 0.05); setTimeout(() => blip(1180, 0.09, "square", 0.05), 55); },
-    clear:  () => blip(300, 0.10, "sawtooth", 0.04),
-    tick:   () => blip(1040, 0.03, "square", 0.03),
+    open:   () => { click(0.018); voice(360, 560, 0.15, { vol: 0.05, cut: 3200 }); },
+    select: () => { const f = rnd(650, 700); click(0.024); voice(f, f * 1.5, 0.11, { vol: 0.055, cut: 5200 }); },
+    // add / confirm: a bright rising C–G–C arpeggio with a sparkle tail
+    add:    () => { click(0.03);
+                    voice(523, 523, 0.10, { vol: 0.06 });
+                    voice(784, 784, 0.13, { vol: 0.055, when: 0.06 });
+                    voice(1046, 1150, 0.18, { type: "sine", vol: 0.042, when: 0.12, cut: 6500 }); },
+    clear:  () => { click(0.02, 0.03); voice(380, 180, 0.17, { type: "sawtooth", vol: 0.045, cut: 1700 }); },
+    tick:   () => { click(0.02, 0.014); voice(1180, 1180, 0.028, { type: "square", vol: 0.022, cut: 6000 }); },
+  };
+  // ease-out count-up for satisfying number reveals (respects reduced-motion)
+  const countUp = (el, to, dur = 520) => {
+    if (!el) return;
+    const target = Math.round(to);
+    if (prefersReduced) { el.textContent = target; return; }
+    const start = performance.now(), ease = p => 1 - Math.pow(1 - p, 3);
+    const step = now => {
+      const p = Math.min(1, (now - start) / dur);
+      el.textContent = Math.round(target * ease(p));
+      if (p < 1) requestAnimationFrame(step); else el.textContent = target;
+    };
+    requestAnimationFrame(step);
   };
 
   // ------------------------------------------------- motion / parallax ------
@@ -269,7 +315,7 @@
     `<div class="stat-row">
        <span class="stat-lbl">${lbl}</span>
        <div class="stat-bar"><div class="stat-fill" data-w="${Math.min(100, v / max * 100).toFixed(1)}"></div></div>
-       <span class="stat-val">${v}</span>
+       <span class="stat-val" data-v="${v}">0</span>
      </div>`;
 
   const renderConsole = () => {
@@ -301,14 +347,19 @@
            <div class="stat-row bst">
              <span class="stat-lbl">BST</span>
              <div class="stat-bar"><div class="stat-fill" data-w="${Math.min(100, u.bst / 720 * 100).toFixed(1)}"></div></div>
-             <span class="stat-val">${u.bst}</span>
+             <span class="stat-val" data-v="${u.bst}">0</span>
            </div>
            <div class="stat-track-note">BASE STATS // ANALYSIS MODULE PENDING &mdash; v0.1</div>
          </div>
        </div>`;
-    // sweep the gauges in from 0
+    // cascade the gauges in from 0 and count the numbers up alongside them
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      el.querySelectorAll(".stat-fill").forEach(f => { f.style.width = f.dataset.w + "%"; });
+      el.querySelectorAll(".stat-fill").forEach((f, i) => {
+        f.style.transitionDelay = (i * 55) + "ms";
+        f.style.width = f.dataset.w + "%";
+      });
+      el.querySelectorAll(".stat-val").forEach((s, i) =>
+        setTimeout(() => countUp(s, +s.dataset.v, 460), prefersReduced ? 0 : i * 55));
     }));
   };
 
@@ -316,6 +367,7 @@
   const VIEW_KEY = "pokemeter-view-v1";
   const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let view = "team";
+  let viewBusy = false;               // a view transition is animating — ignore new switches
   let squadFocus = 0;                 // which SQUAD hero tile is focused (its moves fill the bar)
   const VIEWS = ["team", "home", "squad"];
   // the flip button is a one-way cycle; it shows the mode you'll advance to next
@@ -495,16 +547,14 @@
   // SQUAD transition: the six hero tiles DEAL IN one-by-one (scale+rise) and the
   // move bar rises after them — an "assembling the battle squad" feel. On exit the
   // tiles collapse out, then a callback swaps to the next view.
+  // hero tiles deal in/out; the move bar (the SQUAD "screen") is handled by the
+  // morphing screen ghost, so it isn't animated here.
   const DEAL_EASE_IN = "cubic-bezier(.2,.9,.3,1)", DEAL_EASE_OUT = "cubic-bezier(.4,0,.6,1)";
-  const dealSquadIn = () => {
+  const dealSquadTilesIn = () => {
     if (prefersReduced) return;
-    const tiles = [...$("#squadGrid").children];
-    tiles.forEach((t, i) => t.animate(
+    [...$("#squadGrid").children].forEach((t, i) => t.animate(
       [{ opacity: 0, transform: "scale(.86) translateY(12px)" }, { opacity: 1, transform: "none" }],
       { duration: 300, delay: i * 46, easing: DEAL_EASE_IN, fill: "backwards" }));
-    $("#moveBar").animate(
-      [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }],
-      { duration: 340, delay: tiles.length * 26, easing: DEAL_EASE_IN, fill: "backwards" });
   };
   const dealSquadOut = (done) => {
     if (prefersReduced) { done(); return; }
@@ -512,10 +562,64 @@
     tiles.forEach((t, i) => t.animate(
       [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(.9) translateY(8px)" }],
       { duration: 210, delay: i * 30, easing: DEAL_EASE_OUT, fill: "forwards" }));
-    $("#moveBar").animate(
-      [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(14px)" }],
-      { duration: 190, easing: DEAL_EASE_OUT, fill: "forwards" });
     setTimeout(done, 210 + (tiles.length - 1) * 30 + 20);
+  };
+
+  // -------------------------------------------------- morphing screen -------
+  // Each view's "screen": team = the readout console, home = the diagnostic
+  // cockpit, squad = the bottom move bar. A single blank ghost persists across
+  // the switch and morphs its geometry from one to the next.
+  const SCREEN_SEL = { team: "#console", home: "#home", squad: "#moveBar" };
+  const SCREEN_EL = v => $(SCREEN_SEL[v]);
+  const LOOK_PROPS = ["backgroundColor", "backgroundImage", "backgroundSize", "backgroundPosition",
+    "boxShadow", "borderStyle", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
+    "borderTopColor", "borderRightColor", "borderBottomColor", "borderLeftColor", "borderRadius"];
+  let screenGhost = null, morphToken = 0;
+  const beginScreenMorph = (prev) => {
+    if (prefersReduced) return null;
+    const phone = $("#phone"), fromEl = SCREEN_EL(prev);
+    if (!phone || !fromEl) return null;
+    const pr = phone.getBoundingClientRect(), fr = fromEl.getBoundingClientRect();
+    if (fr.width < 4 || fr.height < 4) return null;
+    if (!screenGhost) { screenGhost = document.createElement("div"); screenGhost.className = "screen-ghost"; phone.appendChild(screenGhost); }
+    const g = screenGhost, cs = getComputedStyle(fromEl), tok = ++morphToken;
+    LOOK_PROPS.forEach(p => { g.style[p] = cs.getPropertyValue(p.replace(/[A-Z]/g, m => "-" + m.toLowerCase())); });
+    g.style.transition = "none";
+    g.style.left = (fr.left - pr.left) + "px"; g.style.top = (fr.top - pr.top) + "px";
+    g.style.width = fr.width + "px"; g.style.height = fr.height + "px";
+    g.style.display = "block"; g.style.opacity = "0";
+    void g.offsetWidth;
+    return {
+      // fade the leaving screen out to the blank ghost, then continue
+      blank(cb) {
+        g.style.transition = "opacity .14s ease"; g.style.opacity = "1";
+        setTimeout(() => { if (tok === morphToken) cb(); }, 120);
+      },
+      // morph the ghost to the incoming screen's geometry, then fade it in
+      run(next) {
+        const toEl = SCREEN_EL(next);
+        if (!toEl) { g.style.display = "none"; return; }
+        const pr2 = phone.getBoundingClientRect(), tr = toEl.getBoundingClientRect();
+        toEl.style.opacity = "0";
+        requestAnimationFrame(() => requestAnimationFrame(() => {
+          if (tok !== morphToken) return;
+          const D = ".42s cubic-bezier(.55,0,.15,1)";
+          g.style.transition = `left ${D}, top ${D}, width ${D}, height ${D}, border-radius ${D}`;
+          g.style.left = (tr.left - pr2.left) + "px"; g.style.top = (tr.top - pr2.top) + "px";
+          g.style.width = tr.width + "px"; g.style.height = tr.height + "px";
+          g.style.borderRadius = getComputedStyle(toEl).borderRadius;
+        }));
+        setTimeout(() => {
+          if (tok !== morphToken) return;
+          toEl.style.transition = "opacity .2s ease"; toEl.style.opacity = "1";
+          g.style.transition = "opacity .2s ease"; g.style.opacity = "0";
+          setTimeout(() => {
+            if (tok !== morphToken) return;
+            g.style.display = "none"; toEl.style.transition = ""; toEl.style.opacity = "";
+          }, 210);
+        }, 440);
+      },
+    };
   };
 
   // reorient the six caps between the top strip and the right rail as a two-phase
@@ -591,12 +695,16 @@
 
   const applyView = (next, animate = true) => {
     if (next === view || !VIEWS.includes(next)) return;
+    if (viewBusy && animate) return;                 // ignore switches mid-transition
     const prev = view;
+    if (animate) { viewBusy = true; setTimeout(() => { viewBusy = false; }, prev === "squad" ? 1150 : 980); }
 
-    const doSwap = () => {
+    // swap the view + run the piece animations; `morph` (if present) carries the
+    // persistent screen from the old geometry to the new one.
+    const commit = (morph) => {
       const caps = [...$("#loadout").querySelectorAll(".cap")];
-      // the cap "stack & deal" reorient only runs for the team<->home pair; SQUAD
-      // has its own hero tiles that deal in/out instead.
+      // the cap "stack & deal" reorient runs for the team<->home pair; SQUAD has
+      // its own hero tiles that deal in/out; the SCREEN always morphs (via `morph`).
       const useReorient = animate && ((prev === "team" && next === "home") || (prev === "home" && next === "team"));
       const first = useReorient ? caps.map(c => c.getBoundingClientRect()) : null;
       view = next;
@@ -611,15 +719,20 @@
       try { localStorage.setItem(VIEW_KEY, view); } catch {}
       if (animate) {
         if (useReorient) reorient(caps, first);
-        if (view === "squad") dealSquadIn();
-        else revealScreen(view === "home" ? $("#home") : $("#console"));
-        if (prev !== "squad") sfx.open();       // squad-exit plays its sfx up front
+        if (view === "squad") dealSquadTilesIn();
+        if (morph) morph.run(next);
+        else revealScreen(SCREEN_EL(view));      // fallback (reduced-motion / capture failed)
       }
     };
 
-    // leaving SQUAD with animation: collapse the tiles out first, then swap
-    if (animate && prev === "squad") { sfx.open(); dealSquadOut(doSwap); }
-    else doSwap();
+    if (!animate) { commit(null); return; }
+
+    sfx.open();
+    const morph = beginScreenMorph(prev);        // capture + place the ghost over the leaving screen
+    const start = () => (morph ? morph.blank(() => commit(morph)) : commit(null));
+    // leaving SQUAD: collapse the hero tiles out first, then blank + swap + morph
+    if (prev === "squad") dealSquadOut(start);
+    else start();
   };
 
   // ---------------------------------------------------------------- skin ----
