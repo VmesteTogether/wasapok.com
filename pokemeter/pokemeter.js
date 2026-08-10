@@ -492,6 +492,32 @@
     el.addEventListener("animationend", () => el.classList.remove("screen-enter"), { once: true });
   };
 
+  // SQUAD transition: the six hero tiles DEAL IN one-by-one (scale+rise) and the
+  // move bar rises after them — an "assembling the battle squad" feel. On exit the
+  // tiles collapse out, then a callback swaps to the next view.
+  const DEAL_EASE_IN = "cubic-bezier(.2,.9,.3,1)", DEAL_EASE_OUT = "cubic-bezier(.4,0,.6,1)";
+  const dealSquadIn = () => {
+    if (prefersReduced) return;
+    const tiles = [...$("#squadGrid").children];
+    tiles.forEach((t, i) => t.animate(
+      [{ opacity: 0, transform: "scale(.86) translateY(12px)" }, { opacity: 1, transform: "none" }],
+      { duration: 300, delay: i * 46, easing: DEAL_EASE_IN, fill: "backwards" }));
+    $("#moveBar").animate(
+      [{ opacity: 0, transform: "translateY(16px)" }, { opacity: 1, transform: "none" }],
+      { duration: 340, delay: tiles.length * 26, easing: DEAL_EASE_IN, fill: "backwards" });
+  };
+  const dealSquadOut = (done) => {
+    if (prefersReduced) { done(); return; }
+    const tiles = [...$("#squadGrid").children];
+    tiles.forEach((t, i) => t.animate(
+      [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "scale(.9) translateY(8px)" }],
+      { duration: 210, delay: i * 30, easing: DEAL_EASE_OUT, fill: "forwards" }));
+    $("#moveBar").animate(
+      [{ opacity: 1, transform: "none" }, { opacity: 0, transform: "translateY(14px)" }],
+      { duration: 190, easing: DEAL_EASE_OUT, fill: "forwards" });
+    setTimeout(done, 210 + (tiles.length - 1) * 30 + 20);
+  };
+
   // reorient the six caps between the top strip and the right rail as a two-phase
   // MECHANISM instead of a diagonal flight:
   //   (1) GATHER — every cap slides to the shared top-right corner into a fanned stack
@@ -566,26 +592,34 @@
   const applyView = (next, animate = true) => {
     if (next === view || !VIEWS.includes(next)) return;
     const prev = view;
-    const caps = [...$("#loadout").querySelectorAll(".cap")];
-    // the cap "stack & deal" reorient only runs for the team<->home pair; SQUAD has
-    // its own hero tiles, so any transition touching squad is a plain screen reveal.
-    const useReorient = animate && ((prev === "team" && next === "home") || (prev === "home" && next === "team"));
-    const first = useReorient ? caps.map(c => c.getBoundingClientRect()) : null;
-    view = next;
-    const phone = $("#phone");
-    phone.classList.toggle("view-home", view === "home");
-    phone.classList.toggle("view-squad", view === "squad");
-    updateFlipLabel();
-    $("#viewFlip").setAttribute("aria-pressed", view !== "team" ? "true" : "false");
-    if (view === "home") renderHome();
-    if (view === "squad") renderSquad();
-    layoutRail();
-    try { localStorage.setItem(VIEW_KEY, view); } catch {}
-    if (animate) {
-      if (useReorient) reorient(caps, first);
-      revealScreen(view === "home" ? $("#home") : view === "squad" ? $("#squad") : $("#console"));
-      sfx.open();
-    }
+
+    const doSwap = () => {
+      const caps = [...$("#loadout").querySelectorAll(".cap")];
+      // the cap "stack & deal" reorient only runs for the team<->home pair; SQUAD
+      // has its own hero tiles that deal in/out instead.
+      const useReorient = animate && ((prev === "team" && next === "home") || (prev === "home" && next === "team"));
+      const first = useReorient ? caps.map(c => c.getBoundingClientRect()) : null;
+      view = next;
+      const phone = $("#phone");
+      phone.classList.toggle("view-home", view === "home");
+      phone.classList.toggle("view-squad", view === "squad");
+      updateFlipLabel();
+      $("#viewFlip").setAttribute("aria-pressed", view !== "team" ? "true" : "false");
+      if (view === "home") renderHome();
+      if (view === "squad") renderSquad();
+      layoutRail();
+      try { localStorage.setItem(VIEW_KEY, view); } catch {}
+      if (animate) {
+        if (useReorient) reorient(caps, first);
+        if (view === "squad") dealSquadIn();
+        else revealScreen(view === "home" ? $("#home") : $("#console"));
+        if (prev !== "squad") sfx.open();       // squad-exit plays its sfx up front
+      }
+    };
+
+    // leaving SQUAD with animation: collapse the tiles out first, then swap
+    if (animate && prev === "squad") { sfx.open(); dealSquadOut(doSwap); }
+    else doSwap();
   };
 
   // ---------------------------------------------------------------- skin ----
