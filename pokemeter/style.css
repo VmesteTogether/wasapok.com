@@ -635,15 +635,16 @@ body.standalone .fit-toggle { display: none; }
    and on the home->team exit the loadout otherwise drops below the console. */
 #phone.reorienting .cap { z-index: 30; }
 
-/* (B) the incoming screen doesn't snap in — it holds hidden for a beat (so the
-   caps are already underway) then rises + fades in, landing WITH them. */
+/* (B) the incoming screen doesn't snap in — it holds hidden through the caps'
+   GATHER (~.31s) then rises + fades in as they DEAL out, so nothing is ever
+   revealed under the flying caps and the panel lands with them. */
 @keyframes screenEnter {
   from { opacity: 0; transform: translateY(9px) scale(.985); }
   to   { opacity: 1; transform: none; }
 }
 .console.screen-enter,
 #phone.view-home .home.screen-enter {
-  animation: screenEnter .34s cubic-bezier(.22,1,.36,1) .15s both;
+  animation: screenEnter .40s cubic-bezier(.22,1,.36,1) .28s both;
 }
 
 /* ---------- HOME view layout: rail on the right, tiles fill the left -------- */
