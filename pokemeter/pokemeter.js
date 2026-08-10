@@ -464,9 +464,21 @@
   const openMatrix = () => { renderMatrix(); const el = $("#matrix"); el.classList.add("open"); el.setAttribute("aria-hidden", "false"); sfx.open(); };
   const closeMatrix = () => { const el = $("#matrix"); el.classList.remove("open"); el.setAttribute("aria-hidden", "true"); };
 
+  // reveal the incoming screen (console or home) with a short delayed rise+fade
+  // so it lands WITH the flying caps instead of snapping in ahead of them
+  const revealScreen = (el) => {
+    if (!el || prefersReduced) return;
+    el.classList.remove("screen-enter");
+    void el.offsetWidth;                       // reflow so the animation restarts
+    el.classList.add("screen-enter");
+    el.addEventListener("animationend", () => el.classList.remove("screen-enter"), { once: true });
+  };
+
   // FLIP the six caps between the top strip and the right rail
   const reorient = (caps, first) => {
     if (!first || prefersReduced) return;
+    const phone = $("#phone");
+    phone.classList.add("reorienting");        // (A) lift caps above the panel in flight
     const last = caps.map(c => c.getBoundingClientRect());
     caps.forEach((c, i) => {
       const f = first[i], l = last[i];
@@ -479,10 +491,13 @@
       c.style.transform = "";
       const inner = c.querySelector(".cap-in"); if (inner) inner.classList.add("reorient-flip");
     }));
-    setTimeout(() => caps.forEach(c => {
-      c.style.transition = c.style.transform = c.style.transformOrigin = "";
-      const inner = c.querySelector(".cap-in"); if (inner) inner.classList.remove("reorient-flip");
-    }), 620 + caps.length * 35);
+    setTimeout(() => {
+      caps.forEach(c => {
+        c.style.transition = c.style.transform = c.style.transformOrigin = "";
+        const inner = c.querySelector(".cap-in"); if (inner) inner.classList.remove("reorient-flip");
+      });
+      phone.classList.remove("reorienting");
+    }, 620 + caps.length * 35);
   };
 
   // pin the right rail to exactly cover the .home region (top/height are dynamic
@@ -505,7 +520,11 @@
     if (view === "home") renderHome();
     layoutRail();
     try { localStorage.setItem(VIEW_KEY, view); } catch {}
-    if (animate) { reorient(caps, first); sfx.open(); }
+    if (animate) {
+      reorient(caps, first);
+      revealScreen(view === "home" ? $("#home") : $("#console"));
+      sfx.open();
+    }
   };
 
   // ---------------------------------------------------------------- skin ----

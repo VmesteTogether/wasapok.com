@@ -630,6 +630,22 @@ body.standalone .fit-toggle { display: none; }
 .cap-in.reorient-flip { animation: reorientFlip .5s cubic-bezier(.22,1,.36,1); }
 @keyframes reorientFlip { from { transform: rotateX(-58deg); } to { transform: rotateX(0); } }
 
+/* (A) while the caps are in flight, lift them above the panel so they never
+   slip UNDER the screen — the rail's normal stacking only holds once settled,
+   and on the home->team exit the loadout otherwise drops below the console. */
+#phone.reorienting .cap { z-index: 30; }
+
+/* (B) the incoming screen doesn't snap in — it holds hidden for a beat (so the
+   caps are already underway) then rises + fades in, landing WITH them. */
+@keyframes screenEnter {
+  from { opacity: 0; transform: translateY(9px) scale(.985); }
+  to   { opacity: 1; transform: none; }
+}
+.console.screen-enter,
+#phone.view-home .home.screen-enter {
+  animation: screenEnter .34s cubic-bezier(.22,1,.36,1) .15s both;
+}
+
 /* ---------- HOME view layout: rail on the right, tiles fill the left -------- */
 .home { display: none; }
 #phone.view-home .console { display: none; }
@@ -824,6 +840,7 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 @media (prefers-reduced-motion: reduce) {
   .htile-3d, .rmeter-fill, .vf-chev, .matrix, .matrix-panel { transition: none; }
   .cap-in.reorient-flip { animation: none; }
+  .console.screen-enter, #phone.view-home .home.screen-enter { animation: none; }
 }
 
 /* ---------- skin toggle button (HUD look) ---------------------------------- */
