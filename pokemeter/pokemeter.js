@@ -126,7 +126,7 @@
     { min: 0,  label: "OUTFITTING",   sub: "early days — add and adjust" },
   ];
   const readiness = (A) => {
-    if (!A.count) return { label: "AWAITING SQUAD", sub: "file a unit to begin", score: A.score, items: 0 };
+    if (!A.count) return { label: "AWAITING PARTY", sub: "file a unit to begin", score: A.score, items: 0 };
     const tier = READ_TIERS.find(t => A.score >= t.min);
     const items = A.exposed.length + A.walled.length + A.vacant.length;
     return { label: tier.label, sub: tier.sub, score: A.score, items };
@@ -134,7 +134,11 @@
 
   let DEX = [];
   const byId = new Map();
+  let MOVES = [];                                   // move catalog {id,name,type,key} for SQUAD
+  const moveById = new Map();
   let party = [null, null, null, null, null, null];
+  let partyMoves = [[null,null,null,null],[null,null,null,null],[null,null,null,null],
+                    [null,null,null,null],[null,null,null,null],[null,null,null,null]]; // 4 move ids per slot
   let activeSlot = -1;   // slot whose readout is shown in the console
   let targetSlot = -1;   // slot currently being filled from search
   let genFilter = 0;     // 0 = ALL, else 1..9
@@ -312,6 +316,20 @@
   const VIEW_KEY = "pokemeter-view-v1";
   const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   let view = "team";
+  let squadFocus = 0;                 // which SQUAD hero tile is focused (its moves fill the bar)
+  const VIEWS = ["team", "home", "squad"];
+  // the flip button is a one-way cycle; it shows the mode you'll advance to next
+  const VIEW_META = {
+    team:  { label: "TEAM",  sub: "UNIT&nbsp;LOADOUT" },
+    home:  { label: "HOME",  sub: "PARTY&nbsp;DIAGNOSTIC" },
+    squad: { label: "SQUAD", sub: "BATTLE&nbsp;LOADOUT" },
+  };
+  const nextView = () => VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length];
+  const updateFlipLabel = () => {
+    const m = VIEW_META[nextView()];
+    $("#vfLabel").textContent = m.label;
+    $("#vfSub").innerHTML = m.sub;
+  };
   const teamUnits = () => party.filter(x => x != null).map(id => byId.get(id));
 
   const chips = (arr, mod) => arr.length
@@ -334,7 +352,7 @@
   });
 
   const priorityLine = (A) => {
-    if (!A.count) return "file your squad to begin";
+    if (!A.count) return "file your party to begin";
     if (A.exposed.length) return `patch the <b>${A.exposed[0].t}</b> weak point`;
     if (A.vacant.length)  return `staff a <b>${A.vacant[0].name}</b>`;
     if (A.walled.length)  return `find an answer to <b>${A.walled[0]}</b>`;
@@ -366,7 +384,7 @@
       el.innerHTML =
         `<div class="home-empty">
            <div class="ce-ring"></div>
-           <p>NO SQUAD ON FILE<br><b>FLIP TO TEAM</b> AND FILE A UNIT</p>
+           <p>NO PARTY ON FILE<br><b>FLIP TO TEAM</b> AND FILE A UNIT</p>
          </div>`;
       return;
     }
@@ -376,7 +394,7 @@
 
     // READINESS — qualitative front, opt-in /100 on the back
     const readTile = tile("t-read span2",
-      `<div class="rt-head"><span class="rt-kicker">SQUAD READINESS</span><span class="ht-flip">TAP · INDEX</span></div>
+      `<div class="rt-head"><span class="rt-kicker">PARTY READINESS</span><span class="ht-flip">TAP · INDEX</span></div>
        <div class="rt-tier">${R.label}</div>
        <div class="rt-sub">${R.sub}</div>
        <div class="rmeter"><div class="rmeter-fill" data-w="${R.score}"></div></div>
@@ -442,7 +460,7 @@
   const renderMatrix = () => {
     const units = teamUnits();
     const body = $("#matrixBody");
-    if (!units.length) { body.innerHTML = `<div class="home-empty"><p>NO SQUAD ON FILE</p></div>`; return; }
+    if (!units.length) { body.innerHTML = `<div class="home-empty"><p>NO PARTY ON FILE</p></div>`; return; }
     const A = analyzeTeam(units);
     const head = `<tr><th class="cov-corner">VS</th>${units.map(u =>
       `<th><img class="cov-sprite" src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt=""></th>`).join("")}<th class="cov-neth">W/R</th></tr>`;
@@ -546,20 +564,26 @@
   };
 
   const applyView = (next, animate = true) => {
-    if (next === view) return;
+    if (next === view || !VIEWS.includes(next)) return;
+    const prev = view;
     const caps = [...$("#loadout").querySelectorAll(".cap")];
-    const first = animate ? caps.map(c => c.getBoundingClientRect()) : null;
+    // the cap "stack & deal" reorient only runs for the team<->home pair; SQUAD has
+    // its own hero tiles, so any transition touching squad is a plain screen reveal.
+    const useReorient = animate && ((prev === "team" && next === "home") || (prev === "home" && next === "team"));
+    const first = useReorient ? caps.map(c => c.getBoundingClientRect()) : null;
     view = next;
-    $("#phone").classList.toggle("view-home", view === "home");
-    $("#vfLabel").textContent = view === "home" ? "TEAM" : "HOME";
-    $("#vfSub").innerHTML = view === "home" ? "UNIT&nbsp;LOADOUT" : "SQUAD&nbsp;DIAGNOSTIC";
-    $("#viewFlip").setAttribute("aria-pressed", view === "home" ? "true" : "false");
+    const phone = $("#phone");
+    phone.classList.toggle("view-home", view === "home");
+    phone.classList.toggle("view-squad", view === "squad");
+    updateFlipLabel();
+    $("#viewFlip").setAttribute("aria-pressed", view !== "team" ? "true" : "false");
     if (view === "home") renderHome();
+    if (view === "squad") renderSquad();
     layoutRail();
     try { localStorage.setItem(VIEW_KEY, view); } catch {}
     if (animate) {
-      reorient(caps, first);
-      revealScreen(view === "home" ? $("#home") : $("#console"));
+      if (useReorient) reorient(caps, first);
+      revealScreen(view === "home" ? $("#home") : view === "squad" ? $("#squad") : $("#console"));
       sfx.open();
     }
   };
@@ -586,6 +610,108 @@
   };
   const cycleSkin = () => applySkin(SKINS[(SKINS.indexOf(skin) + 1) % SKINS.length]);
 
+  // ---------------------------------------------------- SQUAD view + moves ----
+  // Six "hero" tiles (2x3). Tap a tile to FOCUS it; the full-width move bar edits
+  // that unit's four moves, picked from data/moves.json (names + types).
+  const MOVES_KEY = "pokemeter-moves-v1";
+  const saveMoves = () => { try { localStorage.setItem(MOVES_KEY, JSON.stringify(partyMoves)); } catch {} };
+  const loadMoves = () => {
+    try {
+      const raw = JSON.parse(localStorage.getItem(MOVES_KEY));
+      if (Array.isArray(raw)) for (let i = 0; i < 6; i++)
+        partyMoves[i] = Array.isArray(raw[i])
+          ? [0,1,2,3].map(k => moveById.has(raw[i][k]) ? raw[i][k] : null)
+          : [null,null,null,null];
+    } catch {}
+  };
+  const resetSlotMoves = (i) => { partyMoves[i] = [null, null, null, null]; saveMoves(); };
+  const moveFillPips = (i) => (partyMoves[i] || [])
+    .map((m, k) => `<i class="mvpip ${m != null ? "on" : ""}"></i>`).join("") || "";
+
+  const renderSquad = () => {
+    const grid = $("#squadGrid");
+    if (party[squadFocus] == null) { const f = party.findIndex(x => x != null); squadFocus = f < 0 ? 0 : f; }
+    grid.innerHTML = party.map((id, i) => {
+      const u = id != null ? byId.get(id) : null;
+      const cls = ["hero", u ? "filled" : "empty", i === squadFocus && u ? "focus" : ""].join(" ").trim();
+      if (!u) return `<div class="${cls}" data-hi="${i}"><span class="hero-idx">0${i+1}</span>
+                        <div class="hero-empty"><span class="he-plus">+</span><span>EMPTY</span></div></div>`;
+      return `<div class="${cls}" data-hi="${i}" tabindex="0">
+                <span class="hero-accent t-${u.t1}"></span>
+                <span class="hero-idx">0${i+1}</span>
+                <div class="hero-art"><img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="${u.name}"></div>
+                <div class="hero-foot">
+                  <div class="hero-name">${u.name}</div>
+                  <div class="hero-row"><span class="hero-types">${typeDots(u)}</span><span class="hero-mv">${moveFillPips(i)}</span></div>
+                </div>
+              </div>`;
+    }).join("");
+    renderMoveBar();
+  };
+
+  const renderMoveBar = () => {
+    const bar = $("#moveBar");
+    const id = party[squadFocus];
+    const u = id != null ? byId.get(id) : null;
+    if (!u) { bar.innerHTML = `<div class="mb-empty">NO UNIT IN FOCUS &middot; <b>TAP A TILE</b></div>`; return; }
+    const mv = partyMoves[squadFocus] || [null,null,null,null];
+    bar.innerHTML =
+      `<div class="mb-head"><span class="mb-idx">0${squadFocus+1}</span><span class="mb-unit">${u.name}</span><span class="mb-lbl">MOVE&nbsp;LOADOUT</span></div>
+       <div class="mb-slots">${[0,1,2,3].map(k => {
+         const m = mv[k] != null ? moveById.get(mv[k]) : null;
+         return m
+           ? `<div class="mslot filled" data-mv="${k}"><span class="mslot-top"><span class="mslot-k">${k+1}</span><i class="mslot-dot t-${m.type}"></i></span><span class="mslot-name">${m.name}</span><button class="mslot-x" data-mvx="${k}" aria-label="Clear move ${k+1}">&times;</button></div>`
+           : `<div class="mslot empty" data-mv="${k}"><span class="mslot-k">${k+1}</span><span class="mslot-add">+ SET</span></div>`;
+       }).join("")}</div>`;
+  };
+
+  // ---- move picker overlay (reuses the .search screen) ----
+  let moveTarget = -1;
+  const MOVE_CAP = 60;
+  const openMovePick = (k) => {
+    if (party[squadFocus] == null) return;
+    moveTarget = k;
+    $("#movepickSlot").textContent = "MOVE 0" + (k + 1);
+    const input = $("#moveInput");
+    input.value = ""; $("#moveClear").classList.remove("show");
+    renderMoveResults("");
+    const el = $("#movepick"); el.classList.add("open"); el.setAttribute("aria-hidden", "false");
+    sfx.open();
+    setTimeout(() => input.focus(), 340);
+  };
+  const closeMovePick = () => {
+    const el = $("#movepick"); el.classList.remove("open"); el.setAttribute("aria-hidden", "true");
+    moveTarget = -1;
+  };
+  const renderMoveResults = (q) => {
+    const nq = norm(q);
+    const own = new Set((partyMoves[squadFocus] || []).filter((x, k) => x != null && k !== moveTarget));
+    let list = MOVES.filter(m => !nq || m.key.includes(nq));
+    const total = list.length;
+    if (nq) list.sort((a, b) => (b.key.startsWith(nq) - a.key.startsWith(nq)) || a.name.localeCompare(b.name));
+    const shown = list.slice(0, MOVE_CAP);
+    const res = $("#moveResults");
+    if (!total) { res.innerHTML = `<div class="results-foot" style="padding-top:34px">NO MOVES MATCH QUERY</div>`; $("#moveResultsFoot").textContent = ""; return; }
+    res.innerHTML = shown.map(m =>
+      `<div class="res-row mv-row${own.has(m.id) ? " dup" : ""}" data-mvid="${m.id}">
+         <span class="mv-typedot t-${m.type}"></span>
+         <div class="res-body"><div class="res-name">${m.name}</div>
+           <div class="res-sub"><span class="tchip t-${m.type}">${m.type}</span>${own.has(m.id) ? `<span class="mv-dupflag">ALREADY SET</span>` : ""}</div>
+         </div>
+       </div>`).join("");
+    res.scrollTop = 0;
+    $("#moveResultsFoot").innerHTML = `SHOWING <b>${shown.length}</b> / <b>${total}</b> MOVES`;
+  };
+  const assignMove = (moveId) => {
+    if (moveTarget < 0 || party[squadFocus] == null) return;
+    partyMoves[squadFocus][moveTarget] = moveId;
+    saveMoves(); renderSquad(); closeMovePick(); sfx.add();
+  };
+  const clearMove = (k) => {
+    if (party[squadFocus] == null) return;
+    partyMoves[squadFocus][k] = null; saveMoves(); renderSquad(); sfx.clear();
+  };
+
   const selectSlot = (i) => {
     if (party[i] == null) return;
     activeSlot = i;
@@ -595,16 +721,20 @@
   };
 
   const clearSlot = (i) => {
-    party[i] = null; saveParty();
+    party[i] = null; saveParty(); resetSlotMoves(i);
     if (activeSlot === i) activeSlot = party.findIndex(x => x != null);
     renderLoadout(); renderConsole(); updateCount(); refreshDiagnostic();
+    if (view === "squad") renderSquad();
     sfx.clear();
   };
 
   const assignSlot = (i, id) => {
+    const changed = party[i] !== id;
     party[i] = id; saveParty();
+    if (changed) resetSlotMoves(i);          // a new unit starts with an empty move loadout
     activeSlot = i;
     renderLoadout(); renderConsole(); updateCount(); refreshDiagnostic();
+    if (view === "squad") { squadFocus = i; renderSquad(); }
     closeSearch();
     sfx.add();
   };
@@ -694,10 +824,41 @@
       if (s) { firstTouchUnlock(); openSearch(+s.dataset.swap); }
     });
 
-    // view toggle: flip TEAM <-> HOME
+    // view flip: one-way cycle TEAM -> HOME -> SQUAD -> TEAM
     $("#viewFlip").addEventListener("click", () => {
       firstTouchUnlock();
-      applyView(view === "home" ? "team" : "home");
+      applyView(nextView());
+    });
+
+    // squad: tap a hero tile to focus it (empty tile -> add a unit there)
+    $("#squadGrid").addEventListener("click", e => {
+      firstTouchUnlock();
+      const h = e.target.closest(".hero"); if (!h) return;
+      const i = +h.dataset.hi;
+      if (party[i] == null) { openSearch(i); return; }
+      if (i !== squadFocus) { squadFocus = i; renderSquad(); sfx.select(); }
+    });
+    // squad move bar: set a move (opens picker) / clear a move (x)
+    $("#moveBar").addEventListener("click", e => {
+      firstTouchUnlock();
+      const x = e.target.closest(".mslot-x");
+      if (x) { e.stopPropagation(); clearMove(+x.dataset.mvx); return; }
+      const s = e.target.closest(".mslot"); if (!s) return;
+      openMovePick(+s.dataset.mv);
+    });
+    // move picker overlay
+    $("#movepickClose").addEventListener("click", closeMovePick);
+    $("#movepick").addEventListener("click", e => { if (e.target === $("#movepick")) closeMovePick(); });
+    const mInput = $("#moveInput");
+    mInput.addEventListener("input", () => {
+      $("#moveClear").classList.toggle("show", mInput.value.length > 0);
+      renderMoveResults(mInput.value);
+    });
+    $("#moveClear").addEventListener("click", () => {
+      mInput.value = ""; $("#moveClear").classList.remove("show"); renderMoveResults(""); mInput.focus();
+    });
+    $("#moveResults").addEventListener("click", e => {
+      const r = e.target.closest(".mv-row"); if (r) assignMove(+r.dataset.mvid);
     });
 
     // skin switch: one-way cycle through the shell iterations
@@ -768,7 +929,13 @@
       byId.set(id, u);
       return u;
     });
+    // move catalog for the SQUAD move picker (non-fatal if missing)
+    try {
+      const mraw = await (await fetch("data/moves.json")).json();
+      MOVES = mraw.map(r => { const [id, name, type] = r; const m = { id, name, type, key: norm(name) }; moveById.set(id, m); return m; });
+    } catch {}
     loadParty();
+    loadMoves();
     buildGenChips();
     renderLoadout();
     renderConsole();
@@ -785,9 +952,10 @@
                 : SKINS.includes(s) ? s : "hud";
     } catch {}
     if (savedSkin !== "hud") applySkin(savedSkin, false);
+    updateFlipLabel();
     let savedView = "team";
-    try { savedView = localStorage.getItem(VIEW_KEY) === "home" ? "home" : "team"; } catch {}
-    if (savedView === "home") applyView("home", false);
+    try { const v = localStorage.getItem(VIEW_KEY); savedView = VIEWS.includes(v) ? v : "team"; } catch {}
+    if (savedView !== "team") applyView(savedView, false);
   }
 
   boot();

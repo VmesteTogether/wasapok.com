@@ -70,7 +70,7 @@
       <span class="vf-ico" aria-hidden="true"></span>
       <span class="vf-core">
         <span class="vf-label" id="vfLabel">HOME</span>
-        <span class="vf-sub" id="vfSub">SQUAD&nbsp;DIAGNOSTIC</span>
+        <span class="vf-sub" id="vfSub">PARTY&nbsp;DIAGNOSTIC</span>
       </span>
       <span class="vf-status" id="vfStatus" aria-hidden="true"></span>
       <span class="vf-chev" aria-hidden="true">&rsaquo;</span>
@@ -82,8 +82,14 @@
     <!-- per-unit readout console (TEAM view) -->
     <section class="console" id="console" aria-live="polite"></section>
 
-    <!-- squad diagnostic cockpit (HOME view) -->
-    <section class="home" id="home" aria-label="Squad diagnostic"></section>
+    <!-- party diagnostic cockpit (HOME view) -->
+    <section class="home" id="home" aria-label="Party diagnostic"></section>
+
+    <!-- SQUAD view: six hero tiles (2x3) + a full-width move-loadout bar -->
+    <section class="squad" id="squad" aria-label="Squad — hero units and move loadout">
+      <div class="squad-grid" id="squadGrid"></div>
+      <div class="movebar" id="moveBar" aria-label="Move loadout for the focused unit"></div>
+    </section>
 
     <!-- drawn home indicator — browser preview only, hidden in standalone -->
     <div class="home-indicator"></div>
@@ -92,7 +98,7 @@
     <div class="matrix overlay" id="matrix" aria-hidden="true">
       <div class="matrix-panel">
         <div class="matrix-head">
-          <div class="matrix-title">DEFENSIVE&nbsp;COVERAGE <span class="matrix-sub">EFFECTIVENESS&nbsp;VS&nbsp;SQUAD</span></div>
+          <div class="matrix-title">DEFENSIVE&nbsp;COVERAGE <span class="matrix-sub">EFFECTIVENESS&nbsp;VS&nbsp;PARTY</span></div>
           <button class="matrix-close" id="matrixClose" type="button">COLLAPSE <span class="mx">&times;</span></button>
         </div>
         <div class="matrix-body" id="matrixBody"></div>
@@ -120,6 +126,23 @@
         <div class="gen-filter" id="genFilter" aria-label="Filter by generation"></div>
         <div class="results" id="results"></div>
         <div class="results-foot" id="resultsFoot"></div>
+      </div>
+    </div>
+
+    <!-- move picker overlay (reuses the search screen; opened from the SQUAD move bar) -->
+    <div class="search overlay movepick" id="movepick" aria-hidden="true">
+      <div class="search-panel">
+        <div class="search-head">
+          <button class="search-close" id="movepickClose" type="button"><span class="chev">&lsaquo;</span> ABORT</button>
+          <div class="search-title">SET&nbsp;MOVE <b id="movepickSlot">MOVE&nbsp;1</b></div>
+        </div>
+        <div class="search-inputwrap">
+          <span class="si-glyph" aria-hidden="true"></span>
+          <input id="moveInput" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="SEARCH MOVES">
+          <button class="si-clear" id="moveClear" type="button" aria-label="Clear">&times;</button>
+        </div>
+        <div class="results" id="moveResults"></div>
+        <div class="results-foot" id="moveResultsFoot"></div>
       </div>
     </div>
 

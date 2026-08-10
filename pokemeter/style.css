@@ -643,7 +643,8 @@ body.standalone .fit-toggle { display: none; }
   to   { opacity: 1; transform: none; }
 }
 .console.screen-enter,
-#phone.view-home .home.screen-enter {
+#phone.view-home .home.screen-enter,
+#phone.view-squad .squad.screen-enter {
   animation: screenEnter .40s cubic-bezier(.22,1,.36,1) .28s both;
 }
 
@@ -669,6 +670,98 @@ body.standalone .fit-toggle { display: none; }
 #phone.view-home .loadout .cap-sprite { width: 38px; height: 32px; margin-top: 0; }
 #phone.view-home .loadout .cap-plus { font-size: 20px; }
 #phone.view-home .loadout .cap-idx { font-size: 7px; }
+
+/* ---------- SQUAD view: six hero tiles (2x3) + move loadout bar ------------- */
+.squad { display: none; }
+#phone.view-squad .console,
+#phone.view-squad .home,
+#phone.view-squad .loadout { display: none; }
+#phone.view-squad .squad {
+  display: flex; flex-direction: column; gap: 10px;
+  flex: 1 1 auto; min-height: 0; overflow: hidden;
+  margin: 6px 12px 12px;
+}
+.squad-grid {
+  flex: 1 1 auto; min-height: 0;
+  display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: repeat(3, 1fr); gap: 9px;
+}
+
+/* a hero tile — the "unit card" of this mode */
+.hero {
+  position: relative; overflow: hidden; cursor: pointer;
+  display: flex; flex-direction: column; isolation: isolate;
+  border: 1px solid var(--hair);
+  background: linear-gradient(158deg, rgba(29,43,55,.65), rgba(11,17,23,.8));
+  clip-path: polygon(11px 0,100% 0,100% calc(100% - 11px),calc(100% - 11px) 100%,0 100%,0 11px);
+  transition: transform .12s cubic-bezier(.32,.72,0,1), border-color .2s, box-shadow .2s;
+}
+.hero:active { transform: scale(.975); }
+.hero.focus { border-color: var(--cyan); box-shadow: var(--glow), inset 0 0 26px rgba(53,230,255,.12); }
+.hero-accent {                                   /* type-tinted glow behind the sprite */
+  position: absolute; inset: 0 0 44% 0; z-index: 0; opacity: .2; filter: blur(15px); pointer-events: none;
+}
+.hero-idx { position: absolute; top: 6px; left: 8px; z-index: 2;
+  font-family: var(--f-mono); font-size: 9px; letter-spacing: 1px; color: var(--txt-2); }
+.hero.focus .hero-idx { color: var(--cyan); text-shadow: 0 0 6px rgba(53,230,255,.6); }
+.hero-art { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0;
+  display: flex; align-items: center; justify-content: center; padding: 8px 6px 2px; }
+.hero-art img { max-width: 82%; max-height: 100%; object-fit: contain;
+  image-rendering: pixelated; filter: drop-shadow(0 3px 7px rgba(0,0,0,.55)); }
+.hero-foot { position: relative; z-index: 1; flex: 0 0 auto; padding: 5px 9px 8px;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.32)); }
+.hero-name { font-family: var(--f-disp); font-weight: 600; font-size: 12.5px; letter-spacing: .4px;
+  color: var(--txt); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hero-row { display: flex; align-items: center; justify-content: space-between; margin-top: 4px; }
+.hero-types { display: inline-flex; gap: 3px; }
+.hero-types i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
+.hero-mv { display: inline-flex; gap: 3px; }
+.mvpip { width: 5px; height: 5px; border-radius: 50%; display: inline-block; background: rgba(120,160,175,.28); }
+.mvpip.on { background: var(--cyan); box-shadow: 0 0 5px rgba(53,230,255,.7); }
+.hero.empty { align-items: center; justify-content: center; cursor: pointer;
+  border-style: dashed; border-color: var(--hair-soft); background: rgba(10,15,20,.4); }
+.hero-empty { display: flex; flex-direction: column; align-items: center; gap: 3px;
+  font-family: var(--f-mono); font-size: 10px; letter-spacing: 1.5px; color: var(--txt-3); }
+.he-plus { font-size: 26px; line-height: 1; color: var(--cyan-dim); }
+
+/* the move-loadout bar — full width, short; edits the FOCUSED unit's 4 moves */
+.movebar { flex: 0 0 auto; }
+#phone.view-squad .movebar {
+  border: 1px solid var(--hair); border-radius: 10px; padding: 7px 9px 8px;
+  background: linear-gradient(180deg, rgba(22,32,42,.72), rgba(11,16,21,.82));
+}
+.mb-head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px;
+  font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1.3px; }
+.mb-idx { color: var(--bg); background: var(--cyan); padding: 1px 5px; border-radius: 3px; font-weight: 700; }
+.mb-unit { color: var(--txt); font-weight: 700; letter-spacing: .8px; }
+.mb-lbl { margin-left: auto; color: var(--txt-3); }
+.mb-empty { text-align: center; padding: 14px 8px; font-family: var(--f-mono);
+  font-size: 11px; letter-spacing: 1px; color: var(--txt-3); }
+.mb-empty b { color: var(--cyan); }
+.mb-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.mslot { position: relative; overflow: hidden; cursor: pointer;
+  min-height: 42px; padding: 5px 7px; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  border: 1px solid var(--hair-soft); border-radius: 7px; background: rgba(53,230,255,.045);
+  transition: border-color .15s, background .15s, transform .1s; }
+.mslot:active { transform: scale(.96); }
+.mslot.filled { border-color: var(--hair); background: rgba(53,230,255,.07); }
+.mslot.empty { align-items: center; justify-content: center; border-style: dashed; }
+.mslot-top { display: flex; align-items: center; gap: 4px; }
+.mslot-k { font-family: var(--f-mono); font-size: 8px; letter-spacing: .5px; color: var(--txt-3); }
+.mslot-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.mslot-name { font-family: var(--f-disp); font-size: 10.5px; font-weight: 500; letter-spacing: .2px;
+  color: var(--txt); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.mslot-add { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1px; color: var(--cyan-dim); }
+.mslot-x { position: absolute; top: 2px; right: 3px; width: 15px; height: 15px; padding: 0;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+  background: none; border: none; color: var(--txt-3); font-size: 13px; line-height: 1; }
+.mslot-x:hover { color: var(--amber); }
+
+/* move-picker rows (reuse .search .results shell; type square stands in for sprite) */
+.mv-typedot { width: 34px; height: 34px; flex: 0 0 auto; border-radius: 8px;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,.14); }
+.mv-row.dup { opacity: .58; }
+.mv-dupflag { font-family: var(--f-mono); font-size: 8.5px; letter-spacing: 1px; color: var(--amber);
+  border: 1px solid rgba(255,182,74,.4); border-radius: 3px; padding: 1px 4px; }
 
 /* ---------- tile cockpit ---------------------------------------------------- */
 .home-grid { display: grid; grid-template-columns: 1fr; gap: 8px; }
@@ -1022,6 +1115,42 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   background: linear-gradient(180deg, var(--shell-hi), var(--shell-lo));
   box-shadow: inset 0 1px 0 rgba(255,255,255,.5), 0 2px 3px rgba(0,0,0,.3);
 }
+
+/* SQUAD in plastic: the six hero tiles are MOLDED PLASTIC units (like the caps);
+   the sprite sits in a subtly-inset panel; the move bar is the recessed screen. */
+#phone.skin-plastic .hero {
+  clip-path: none; border: none; border-radius: 13px;
+  background: linear-gradient(180deg, var(--shell-hi), var(--shell) 52%, var(--shell-lo));
+  box-shadow: 0 3px 4px rgba(0,0,0,.30), 0 1px 0 var(--shell-hi),
+    inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 5px rgba(0,0,0,.22);
+}
+#phone.skin-plastic .hero:active { transform: translateY(1.5px);
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.4), inset 0 3px 7px rgba(0,0,0,.32); }
+#phone.skin-plastic .hero.focus {
+  box-shadow: 0 3px 4px rgba(0,0,0,.30), 0 0 0 2px var(--cyan),
+    inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 14px rgba(53,230,255,.18); }
+#phone.skin-plastic .hero.empty {
+  background: linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.03));
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.32); }
+#phone.skin-plastic .hero-accent { display: none; }              /* type glow won't read on plastic */
+#phone.skin-plastic .hero-art {
+  margin: 5px 5px 0; border-radius: 9px;
+  background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.05) 55%, rgba(0,0,0,.10));
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.22); }
+#phone.skin-plastic .hero-foot { background: linear-gradient(180deg, transparent, rgba(0,0,0,.16)); }
+#phone.skin-plastic .hero-name { color: var(--pl-txt); text-shadow: 0 1px 0 var(--pl-emboss); }
+#phone.skin-plastic .hero-idx { color: var(--pl-txt-mid); }
+#phone.skin-plastic .hero.focus .hero-idx { color: var(--cyan); }
+#phone.skin-plastic .mvpip { background: rgba(0,0,0,.28); }
+
+/* the move-loadout bar is the recessed "screen" where moves are set */
+#phone.skin-plastic .movebar {
+  clip-path: none; border: none; border-radius: 12px;
+  background: linear-gradient(180deg, var(--screen-2), var(--screen));
+  box-shadow: inset 0 3px 9px rgba(0,0,0,.6), inset 0 -1px 0 rgba(255,255,255,.08), 0 1px 0 var(--shell-hi);
+}
+#phone.skin-plastic .mslot { border-color: rgba(53,230,255,.14); background: rgba(53,230,255,.05); }
+#phone.skin-plastic .mslot.filled { background: rgba(53,230,255,.08); }
 
 /* ---- CREAM iteration — warm off-white molded shell, dark engraved labels ----
    Shares every .skin-plastic rule above; only the colour vars change. The label
