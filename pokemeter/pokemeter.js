@@ -497,41 +497,59 @@
     // stack / pivot corner = the target slot nearest the top-right:
     //   rail (home) -> the TOP cap (0);  strip (team) -> the RIGHT cap (n-1)
     const anchor = view === "home" ? 0 : n - 1;
+    const toStrip = view !== "home";               // home -> team: the direction to smooth out
     const cx = last[anchor].left, cy = last[anchor].top;
 
-    const DG = 250, GST = 12, DD = 260, DST = 52;   // gather (near-together) / deal (one-by-one)
+    const DG = 250, GST = 12;
+    let maxDealEnd = 0;
     const gatherAnims = caps.map((c, i) => {
       const f = first[i], l = last[i], dist = Math.abs(i - anchor), fan = dist * 2;
       c.style.transformOrigin = "top left";
-      c.__dist = dist;
       const startT = `translate(${(f.left - l.left).toFixed(1)}px, ${(f.top - l.top).toFixed(1)}px) scale(${(f.width / l.width) || 1}, ${(f.height / l.height) || 1})`;
       // fanned stack leans toward the deal axis (down for the rail, left for the strip)
       c.__cornerT = view === "home"
         ? `translate(${(cx - l.left).toFixed(1)}px, ${(cy - l.top + fan).toFixed(1)}px) scale(1)`
         : `translate(${(cx - l.left - fan).toFixed(1)}px, ${(cy - l.top).toFixed(1)}px) scale(1)`;
+      // DEAL timing per cap. team->home (rail) keeps the uniform staggered snap that
+      // already reads well. home->team (strip) was the twitchy one — its cards used to
+      // sit alone at the corner then whip across the open top (far caps covering the
+      // most ground in the same time). Fix: deal the BIGGEST traveller FIRST and scale
+      // each cap's duration to its distance, so every card glides at ~one constant
+      // speed and none sits idle before a fast dash.
+      const distPx = Math.hypot(cx - l.left, cy - l.top);
+      if (toStrip) {
+        c.__dealDelay = i * 36;                                 // far cap (01) leaves first
+        c.__dealDur   = Math.max(160, Math.min(440, distPx));   // ~1px/ms -> constant glide
+        c.__dealEase  = "cubic-bezier(.3,.6,.25,1)";
+      } else {
+        c.__dealDelay = dist * 52;
+        c.__dealDur   = 260;
+        c.__dealEase  = "cubic-bezier(.2,.85,.3,1)";
+      }
+      maxDealEnd = Math.max(maxDealEnd, c.__dealDelay + c.__dealDur);
       const a = c.animate([{ transform: startT }, { transform: c.__cornerT }],
         { duration: DG, delay: i * GST, easing: "cubic-bezier(.5,0,.4,1)", fill: "both" });
       c.__anims.push(a);
       return a;
     });
 
-    // once the whole stack has gathered, deal each cap out to its slot in turn
+    // once the whole stack has gathered, deal each cap out to its slot
     Promise.all(gatherAnims.map(a => a.finished)).then(() => {
       if (token !== reorientToken) return;
       caps.forEach(c => {
         const d = c.animate([{ transform: c.__cornerT }, { transform: "none" }],
-          { duration: DD, delay: c.__dist * DST, easing: "cubic-bezier(.2,.85,.3,1)", fill: "both" });
+          { duration: c.__dealDur, delay: c.__dealDelay, easing: c.__dealEase, fill: "both" });
         c.__anims.push(d);
       });
     }).catch(() => {});
 
-    const total = DG + (n - 1) * GST + DD + (n - 1) * DST + 90;
+    const total = (n - 1) * GST + DG + maxDealEnd + 90;
     reorientTimer = setTimeout(() => {
       if (token !== reorientToken) return;
       caps.forEach(c => {
         (c.__anims || []).forEach(a => a.cancel());
         c.__anims = []; c.style.transform = c.style.transformOrigin = "";
-        delete c.__cornerT; delete c.__dist;
+        delete c.__cornerT; delete c.__dealDelay; delete c.__dealDur; delete c.__dealEase;
       });
       phone.classList.remove("reorienting");
     }, total);
