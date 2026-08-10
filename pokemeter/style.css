@@ -965,6 +965,11 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   --pl-txt-dim: rgba(255,248,242,0.62);   /* sub / secondary shell text */
   --pl-txt-mid: rgba(255,248,242,0.78);   /* cap index · clear · chevron */
   --pl-emboss:  var(--shell-edge);        /* label emboss (dark under light text) */
+  /* accent (lip / rim / bezel) colour — defaults to the shell so mono themes are
+     unchanged; the .poke themes override it for a two-tone Poke-Ball look */
+  --lip-hi: var(--shell-hi);
+  --lip:    var(--shell);
+  --lip-lo: var(--shell-lo);
   /* the shell surface — a top light source; the glint tracks device tilt (--px/--py) */
   background: radial-gradient(150% 110% at calc(50% + var(--px)) calc(-6% + var(--py)),
     var(--shell-hi), var(--shell) 42%, var(--shell-lo) 100%);
@@ -1166,3 +1171,49 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   --pl-txt-mid: rgba(75,66,48,0.80);
   --pl-emboss:  rgba(255,255,255,0.7);   /* light highlight below dark text = engraved */
 }
+
+/* ---- GREEN SCREEN accent (cream shell) — a Game-Boy-green LCD instead of cyan.
+   Retints the whole cyan --* family so every screen readout / meter / LED / bloom
+   / focus ring goes green; the shell (cream, from .plastic-cream) is untouched. */
+#phone.skin-plastic.screen-green {
+  --cyan:      #5fe08a;
+  --cyan-dim:  #2f9d5a;
+  --cyan-deep: #0e3f22;
+  --scr-bloom: rgba(95,224,138,0.09);
+  --hair:      rgba(95,224,138,0.22);
+  --hair-soft: rgba(120,175,140,0.16);
+  --glow:      0 0 14px rgba(95,224,138,0.34);
+  --glow-soft: 0 0 8px rgba(95,224,138,0.20);
+}
+
+/* ---- POKE two-tone accent colours (used with .poke below) ------------------ */
+#phone.skin-plastic.lip-cream {          /* red shell + cream/white lips */
+  --lip-hi: #fbf6ea; --lip: #ece3d0; --lip-lo: #cdbfa2;
+}
+#phone.skin-plastic.lip-red {            /* cream shell + red lips */
+  --lip-hi: #ef7d75; --lip: #d94a43; --lip-lo: #b23a34;
+}
+/* .poke structure: the screen bezels + the capsule/tile/button lips take --lip.
+   Scoped to .poke so the mono themes (red / cream / green) are untouched. */
+#phone.skin-plastic.poke .console,
+#phone.skin-plastic.poke.view-home .home,
+#phone.skin-plastic.poke .search-panel,
+#phone.skin-plastic.poke .matrix-panel {
+  border-top-color: var(--lip-hi);
+  border-left-color: var(--lip);
+  border-right-color: var(--lip-lo);
+  border-bottom-color: var(--lip-lo);
+}
+#phone.skin-plastic.poke .cap,
+#phone.skin-plastic.poke .hero {
+  border: 2.5px solid var(--lip);
+}
+#phone.skin-plastic.poke .cap.empty { border-color: var(--lip-lo); }
+#phone.skin-plastic.poke .viewflip,
+#phone.skin-plastic.poke .swap-btn,
+#phone.skin-plastic.poke .search-close,
+#phone.skin-plastic.poke .matrix-close,
+#phone.skin-plastic.poke .skin-toggle {
+  border: 2px solid var(--lip);
+}
+#phone.skin-plastic.poke .movebar { border: 2.5px solid var(--lip); }

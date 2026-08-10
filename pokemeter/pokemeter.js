@@ -589,19 +589,31 @@
   };
 
   // ---------------------------------------------------------------- skin ----
-  // The header switch is a ONE-WAY cycle through the shell iterations:
-  //   hud → plastic-red → plastic-cream → (wrap) → hud …
-  // "hud" = the cyan HUD; the plastic skins share the molded-overshell CSS
-  // (.skin-plastic) and differ only in a set of --shell*/--pl-txt* colour vars,
-  // so a new iteration is just one more entry here + a colour block in CSS.
+  // The header switch is a ONE-WAY cycle through the shell iterations. Each skin
+  // maps to a set of CSS classes on #phone (composed from small pieces):
+  //   .skin-plastic  = the molded-overshell structure (red is the default colour)
+  //   .plastic-cream = cream shell colour vars
+  //   .screen-green  = green screen accent (overrides the cyan --* family)
+  //   .poke          = two-tone structure — screen bezels + capsule/tile lips take
+  //                    the accent colour --lip*  (.lip-cream / .lip-red set it)
+  // A new iteration = one SKINS entry + its class list + (maybe) a colour block.
   const SKIN_KEY = "pokemeter-skin";
-  const SKINS = ["hud", "plastic-red", "plastic-cream"];
+  const SKINS = ["hud", "plastic-red", "plastic-cream", "plastic-cream-green", "plastic-red-poke", "plastic-cream-poke"];
+  const SKIN_CLASS = {
+    "hud":                 [],
+    "plastic-red":         ["skin-plastic"],
+    "plastic-cream":       ["skin-plastic", "plastic-cream"],
+    "plastic-cream-green": ["skin-plastic", "plastic-cream", "screen-green"],
+    "plastic-red-poke":    ["skin-plastic", "poke", "lip-cream"],
+    "plastic-cream-poke":  ["skin-plastic", "plastic-cream", "poke", "lip-red"],
+  };
+  const ALL_SKIN_CLASSES = [...new Set(Object.values(SKIN_CLASS).flat())];
   let skin = "hud";
   const applySkin = (next, animate = true) => {
     skin = SKINS.includes(next) ? next : "hud";
     const phone = $("#phone");
-    phone.classList.toggle("skin-plastic", skin !== "hud");
-    phone.classList.toggle("plastic-cream", skin === "plastic-cream");
+    phone.classList.remove(...ALL_SKIN_CLASSES);
+    if (SKIN_CLASS[skin].length) phone.classList.add(...SKIN_CLASS[skin]);
     // aria-pressed reads "a non-default shell is active" for this cycling switch
     $("#skinToggle").setAttribute("aria-pressed", skin !== "hud" ? "true" : "false");
     if (view === "home") layoutRail();
