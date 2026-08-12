@@ -27,7 +27,6 @@
   --hair-soft: rgba(120, 160, 175, 0.14);
   --glow:      0 0 14px rgba(53, 230, 255, 0.32);
   --glow-soft: 0 0 8px rgba(53, 230, 255, 0.18);
-  --cap-glow:  rgba(53, 230, 255, 0.5);    /* sprite halo colour (retints per screen) */
 
   --chamfer:   9px;                  /* corner-cut size on cells */
   --f-disp:    "Chakra Petch", "Segoe UI", system-ui, sans-serif;
@@ -261,7 +260,7 @@ body { display: flex; align-items: center; justify-content: center; }
 .cap-sprite {
   width: 46px; height: 40px; object-fit: contain; image-rendering: pixelated;
   margin-top: 4px;
-  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 7px var(--cap-glow));
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,0.6)) drop-shadow(0 0 6px rgba(53,230,255,0.28));
   animation: unitIn 0.44s cubic-bezier(.3,.9,.4,1) both;
 }
 /* a gentle pop for cap sprites; the console specimen gets a bigger bounce below */
@@ -283,15 +282,11 @@ body { display: flex; align-items: center; justify-content: center; }
 .cap.filled { background: linear-gradient(138deg, rgba(150,246,255,.9) 0%, rgba(53,230,255,.42) 30%,
   rgba(53,230,255,.12) 62%, rgba(16,60,72,.6) 100%); }
 .cap.filled .cap-in { box-shadow: inset 0 1px 1px rgba(0,0,0,.45), inset 0 0 16px rgba(53,230,255,0.10); }
-/* active (selected): the CREATURE lights up — a blue halo hugging the sprite, NOT
-   a glow around the capsule outline. The rim only steps up modestly + an inner glow,
-   so selection still reads; the sprite halo below is the star. */
-.cap.active { background: linear-gradient(138deg, rgba(170,244,255,.92) 0%, rgba(53,230,255,.52) 34%,
-  rgba(53,230,255,.15) 68%, rgba(20,72,86,.82) 100%); }
+/* active (selected): a bright glowing lip that lifts off the strip */
+.cap.active { background: linear-gradient(138deg, rgba(196,251,255,1) 0%, var(--cyan) 32%,
+  var(--cyan-dim) 70%, rgba(24,84,98,.95) 100%);
+  filter: drop-shadow(0 0 7px rgba(53,230,255,.5)); }
 .cap.active .cap-in { box-shadow: inset 0 1px 1px rgba(0,0,0,.4), inset 0 0 22px rgba(53,230,255,0.22); }
-.cap.active .cap-sprite {
-  filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)) drop-shadow(0 0 12px var(--cap-glow))
-    drop-shadow(0 0 6px var(--cap-glow)) drop-shadow(0 0 3px var(--cap-glow)); }
 
 /* tiny clear (x) on filled cap */
 .cap-x {
@@ -732,12 +727,7 @@ body.standalone .fit-toggle { display: none; }
   transition: transform .22s cubic-bezier(.34,1.45,.5,1), border-color .2s, box-shadow .2s;
 }
 .hero:active { transform: scale(.95); filter: brightness(1.08); }
-/* focus = the CREATURE lights up (see .hero.focus .hero-art img); the tile keeps a
-   thin rim + inner glow as the affordance, NOT an outer ring/halo around the tile */
-.hero.focus { border-color: var(--cyan); box-shadow: inset 0 0 22px rgba(53,230,255,.14); }
-.hero.focus .hero-art img {
-  filter: drop-shadow(0 3px 7px rgba(0,0,0,.55)) drop-shadow(0 0 14px var(--cap-glow))
-    drop-shadow(0 0 7px var(--cap-glow)) drop-shadow(0 0 3px var(--cap-glow)); }
+.hero.focus { border-color: var(--cyan); box-shadow: var(--glow), inset 0 0 26px rgba(53,230,255,.12); }
 .hero-accent {                                   /* type-tinted glow behind the sprite */
   position: absolute; inset: 0 0 44% 0; z-index: 0; opacity: .2; filter: blur(15px); pointer-events: none;
 }
@@ -747,8 +737,7 @@ body.standalone .fit-toggle { display: none; }
 .hero-art { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 8px 6px 2px; }
 .hero-art img { max-width: 82%; max-height: 100%; object-fit: contain;
-  image-rendering: pixelated;
-  filter: drop-shadow(0 3px 7px rgba(0,0,0,.55)) drop-shadow(0 0 8px var(--cap-glow)); }
+  image-rendering: pixelated; filter: drop-shadow(0 3px 7px rgba(0,0,0,.55)); }
 .hero-foot { position: relative; z-index: 1; flex: 0 0 auto; padding: 5px 9px 8px;
   background: linear-gradient(180deg, transparent, rgba(0,0,0,.32)); }
 .hero-name { font-family: var(--f-disp); font-weight: 600; font-size: 12.5px; letter-spacing: .4px;
@@ -1205,8 +1194,8 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 1px 1px 0 rgba(255,255,255,.4),
     inset 0 3px 7px rgba(0,0,0,.34), inset -1px -1px 0 rgba(0,0,0,.22); }
 #phone.skin-plastic .hero.focus {
-  box-shadow: 0 4px 7px rgba(0,0,0,.34), 0 0 0 1px rgba(53,230,255,.45),
-    inset 1px 1px 0 rgba(255,255,255,.5), inset 0 0 16px rgba(53,230,255,.2),
+  box-shadow: 0 4px 7px rgba(0,0,0,.34), 0 0 0 2px var(--cyan),
+    inset 1px 1px 0 rgba(255,255,255,.5), inset 0 0 14px rgba(53,230,255,.18),
     inset -1px -1px 0 rgba(0,0,0,.26); }
 #phone.skin-plastic .hero.empty {
   background: linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.03));
@@ -1262,7 +1251,6 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   --hair-soft: rgba(120,175,140,0.16);
   --glow:      0 0 14px rgba(95,224,138,0.34);
   --glow-soft: 0 0 8px rgba(95,224,138,0.20);
-  --cap-glow:  rgba(95,224,138,0.5);
 }
 
 /* ---- POKE two-tone accent colours (used with .poke below) ------------------ */
