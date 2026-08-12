@@ -760,25 +760,38 @@ body.standalone .fit-toggle { display: none; }
   border: 1px solid var(--hair); border-radius: 10px; padding: 7px 9px 8px;
   background: linear-gradient(180deg, rgba(22,32,42,.72), rgba(11,16,21,.82));
 }
-.mb-head { display: flex; align-items: center; gap: 7px; margin-bottom: 6px;
+.mb-head { display: flex; align-items: center; gap: 7px; margin-bottom: 7px;
+  padding-bottom: 5px; border-bottom: 1px solid var(--hair);
+  box-shadow: 0 1px 0 rgba(255,255,255,.05);          /* engraved command-bar groove */
   font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1.3px; }
-.mb-idx { color: var(--bg); background: var(--cyan); padding: 1px 5px; border-radius: 3px; font-weight: 700; }
-.mb-unit { color: var(--txt); font-weight: 700; letter-spacing: .8px; }
+.mb-idx { color: var(--bg); background: var(--cyan); padding: 1px 5px; border-radius: 3px; font-weight: 700;
+  box-shadow: var(--glow-soft), inset 0 1px 0 rgba(255,255,255,.5); }   /* lit key legend */
+.mb-unit { color: var(--txt); font-weight: 700; letter-spacing: .8px; text-transform: uppercase;
+  text-shadow: 0 0 8px rgba(53,230,255,.18); }
 .mb-lbl { margin-left: auto; color: var(--txt-3); }
 .mb-empty { text-align: center; padding: 14px 8px; font-family: var(--f-mono);
   font-size: 11px; letter-spacing: 1px; color: var(--txt-3); }
 .mb-empty b { color: var(--cyan); }
 .mb-slots { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
 .mslot { position: relative; overflow: hidden; cursor: pointer;
-  min-height: 42px; padding: 5px 7px; display: flex; flex-direction: column; justify-content: center; gap: 2px;
-  border: 1px solid var(--hair-soft); border-radius: 7px; background: rgba(53,230,255,.045);
-  transition: border-color .15s, background .15s, transform .2s cubic-bezier(.34,1.42,.5,1); }
-.mslot:active { transform: scale(.92); filter: brightness(1.1); }
-.mslot.filled { border-color: var(--hair); background: rgba(53,230,255,.07); }
-.mslot.empty { align-items: center; justify-content: center; border-style: dashed; }
+  min-height: 43px; padding: 5px 7px; display: flex; flex-direction: column; justify-content: center; gap: 2px;
+  border: 1px solid var(--hair-soft); border-radius: 7px;
+  background: linear-gradient(180deg, rgba(70,92,108,.30), rgba(14,22,30,.55));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), inset 0 -3px 6px rgba(0,0,0,.34), 0 1px 1px rgba(0,0,0,.35);
+  transition: border-color .15s, background .15s, box-shadow .15s, transform .18s cubic-bezier(.34,1.42,.5,1); }
+.mslot:active { transform: translateY(1px) scale(.985); filter: brightness(1.06);
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.45); }
+.mslot.filled { border-color: var(--hair);
+  background: linear-gradient(180deg, rgba(53,230,255,.16), rgba(53,230,255,.03) 55%, rgba(6,12,16,.5));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.16), inset 0 0 11px rgba(53,230,255,.16),
+    inset 0 -3px 6px rgba(0,0,0,.32), 0 1px 1px rgba(0,0,0,.4); }
+.mslot.empty { align-items: center; justify-content: center; border-style: dashed;
+  background: linear-gradient(180deg, rgba(0,0,0,.10), rgba(0,0,0,.30));
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.40); }
 .mslot-top { display: flex; align-items: center; gap: 4px; }
 .mslot-k { font-family: var(--f-mono); font-size: 8px; letter-spacing: .5px; color: var(--txt-3); }
-.mslot-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block; }
+.mslot-dot { width: 9px; height: 9px; border-radius: 2px; display: inline-block;
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.45), 0 0 3px rgba(0,0,0,.5); }
 .mslot-name { font-family: var(--f-disp); font-size: 10.5px; font-weight: 500; letter-spacing: .2px;
   color: var(--txt); line-height: 1.15; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .mslot-add { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1px; color: var(--cyan-dim); }
@@ -1208,8 +1221,8 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic .mvpip { background: rgba(0,0,0,.28); }
 
 /* the move-loadout bar shares the plastic "screen" LIP + LCD + glass group above */
-#phone.skin-plastic .mslot { border-color: rgba(53,230,255,.14); background: rgba(53,230,255,.05); }
-#phone.skin-plastic .mslot.filled { background: rgba(53,230,255,.08); }
+/* mslot key depth (gradient + inner shadows) is inherited from the base .mslot rules —
+   they read on the plastic LCD too; no bg override here (it would flatten them). */
 
 /* ---- CREAM iteration — warm off-white molded shell, dark engraved labels ----
    Shares every .skin-plastic rule above; only the colour vars change. The label
