@@ -1161,23 +1161,45 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic .hero {
   clip-path: none; border: none; border-radius: 13px;
   background: linear-gradient(180deg, var(--shell-hi), var(--shell) 52%, var(--shell-lo));
-  box-shadow: 0 3px 4px rgba(0,0,0,.30), 0 1px 0 var(--shell-hi),
-    inset 0 1px 0 rgba(255,255,255,.5), inset 0 -3px 5px rgba(0,0,0,.22);
+  /* (2) machined molded edge — bright top-left catch, dark bottom-right, deeper drop */
+  box-shadow:
+    0 4px 7px rgba(0,0,0,.34), 0 1px 0 var(--shell-hi),
+    inset 1px 1px 0 rgba(255,255,255,.55), inset 0 2px 2px rgba(255,255,255,.22),
+    inset -1px -1px 0 rgba(0,0,0,.30), inset 0 -4px 6px rgba(0,0,0,.24);
 }
+/* (1) convex crown sheen — a domed top highlight so the molded frame reads lit-from-above */
+#phone.skin-plastic .hero::before {
+  content: ""; position: absolute; left: 0; right: 0; top: 0; height: 54%; z-index: 0;
+  pointer-events: none;
+  border-radius: 13px 13px 46px 46px / 13px 13px 26px 26px;
+  background: linear-gradient(180deg, rgba(255,255,255,.38), rgba(255,255,255,.06) 62%, transparent);
+}
+#phone.skin-plastic .hero.empty::before { display: none; }
 #phone.skin-plastic .hero:active { transform: translateY(1.5px);
-  box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 0 1px 0 rgba(255,255,255,.4), inset 0 3px 7px rgba(0,0,0,.32); }
+  box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 1px 1px 0 rgba(255,255,255,.4),
+    inset 0 3px 7px rgba(0,0,0,.34), inset -1px -1px 0 rgba(0,0,0,.22); }
 #phone.skin-plastic .hero.focus {
-  box-shadow: 0 3px 4px rgba(0,0,0,.30), 0 0 0 2px var(--cyan),
-    inset 0 1px 0 rgba(255,255,255,.5), inset 0 0 14px rgba(53,230,255,.18); }
+  box-shadow: 0 4px 7px rgba(0,0,0,.34), 0 0 0 2px var(--cyan),
+    inset 1px 1px 0 rgba(255,255,255,.5), inset 0 0 14px rgba(53,230,255,.18),
+    inset -1px -1px 0 rgba(0,0,0,.26); }
 #phone.skin-plastic .hero.empty {
   background: linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.03));
   box-shadow: inset 0 2px 5px rgba(0,0,0,.32); }
 #phone.skin-plastic .hero-accent { display: none; }              /* type glow won't read on plastic */
+/* (3) recessed glossy sprite well — dark inner shadow + a curved reflection near the top */
 #phone.skin-plastic .hero-art {
-  margin: 5px 5px 0; border-radius: 9px;
-  background: linear-gradient(180deg, rgba(255,255,255,.14), rgba(0,0,0,.05) 55%, rgba(0,0,0,.10));
-  box-shadow: inset 0 1px 1px rgba(255,255,255,.22); }
-#phone.skin-plastic .hero-foot { background: linear-gradient(180deg, transparent, rgba(0,0,0,.16)); }
+  position: relative; margin: 6px 6px 0; border-radius: 10px; overflow: hidden;
+  background: linear-gradient(180deg, rgba(0,0,0,.20), rgba(0,0,0,.04) 46%, rgba(0,0,0,.12));
+  box-shadow: inset 0 2px 5px rgba(0,0,0,.38), inset 0 -1px 0 rgba(255,255,255,.14); }
+#phone.skin-plastic .hero-art::after {
+  content: ""; position: absolute; left: 10%; right: 10%; top: 3px; height: 30%; z-index: 2;
+  pointer-events: none; border-radius: 50% / 62%;
+  background: linear-gradient(180deg, rgba(255,255,255,.20), transparent); }
+/* (4) engraved nameplate — recessed strip instead of the muddy dark wash (easy to rescind) */
+#phone.skin-plastic .hero-foot {
+  margin: 4px 6px 6px; border-radius: 8px; padding: 5px 8px 5px;
+  background: linear-gradient(180deg, rgba(0,0,0,.12), rgba(0,0,0,.04));
+  box-shadow: inset 0 1px 2px rgba(0,0,0,.24), inset 0 -1px 0 rgba(255,255,255,.18); }
 #phone.skin-plastic .hero-name { color: var(--pl-txt); text-shadow: 0 1px 0 var(--pl-emboss); }
 #phone.skin-plastic .hero-idx { color: var(--pl-txt-mid); }
 #phone.skin-plastic .hero.focus .hero-idx { color: var(--cyan); }

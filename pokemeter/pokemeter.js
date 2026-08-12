@@ -372,9 +372,9 @@
   const VIEWS = ["team", "home", "squad"];
   // the flip button is a one-way cycle; it shows the mode you'll advance to next
   const VIEW_META = {
-    team:  { label: "TEAM",  sub: "UNIT&nbsp;LOADOUT" },
+    team:  { label: "SQUAD", sub: "BATTLE&nbsp;LOADOUT" },
     home:  { label: "HOME",  sub: "PARTY&nbsp;DIAGNOSTIC" },
-    squad: { label: "SQUAD", sub: "BATTLE&nbsp;LOADOUT" },
+    squad: { label: "TEAM",  sub: "UNIT&nbsp;LOADOUT" },
   };
   const nextView = () => VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length];
   const updateFlipLabel = () => {
