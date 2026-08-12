@@ -1247,6 +1247,18 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic.lip-red {            /* cream shell + red lips */
   --lip-hi: #ef7d75; --lip: #d94a43; --lip-lo: #b23a34;
 }
+#phone.skin-plastic.lip-green {          /* green lips */
+  --lip-hi: #79d98f; --lip: #43ad5b; --lip-lo: #2f8446;
+}
+#phone.skin-plastic.lip-purple {         /* purple / lavender lips */
+  --lip-hi: #cdb4f2; --lip: #9a72d8; --lip-lo: #6f4ba8;
+}
+#phone.skin-plastic.lip-yellow {         /* yellow / marigold lips */
+  --lip-hi: #f6c95c; --lip: #e6a41f; --lip-lo: #b57a12;
+}
+#phone.skin-plastic.lip-blue {           /* blue lips */
+  --lip-hi: #7bb4ef; --lip: #3a7ad4; --lip-lo: #275aa4;
+}
 /* .poke structure: the screen bezels + the capsule/tile/button lips take --lip.
    Scoped to .poke so the mono themes (red / cream / green) are untouched. */
 #phone.skin-plastic.poke .console,

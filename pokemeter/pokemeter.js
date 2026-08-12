@@ -745,7 +745,9 @@
   //                    the accent colour --lip*  (.lip-cream / .lip-red set it)
   // A new iteration = one SKINS entry + its class list + (maybe) a colour block.
   const SKIN_KEY = "pokemeter-skin";
-  const SKINS = ["hud", "plastic-red", "plastic-cream", "plastic-cream-green", "plastic-red-poke", "plastic-cream-poke"];
+  const SKINS = ["hud", "plastic-red", "plastic-cream", "plastic-cream-green", "plastic-red-poke", "plastic-cream-poke",
+    "plastic-cream-green-poke-gscreen", "plastic-cream-green-poke-bscreen", "plastic-cream-purple-poke",
+    "plastic-cream-yellow-poke", "plastic-red-blue-poke"];
   const SKIN_CLASS = {
     "hud":                 [],
     "plastic-red":         ["skin-plastic"],
@@ -753,6 +755,15 @@
     "plastic-cream-green": ["skin-plastic", "plastic-cream", "screen-green"],
     "plastic-red-poke":    ["skin-plastic", "poke", "lip-cream"],
     "plastic-cream-poke":  ["skin-plastic", "plastic-cream", "poke", "lip-red"],
+    // cream shell + green lips, green screen then blue screen
+    "plastic-cream-green-poke-gscreen": ["skin-plastic", "plastic-cream", "poke", "lip-green", "screen-green"],
+    "plastic-cream-green-poke-bscreen": ["skin-plastic", "plastic-cream", "poke", "lip-green"],
+    // cream shell + purple/lavender lips
+    "plastic-cream-purple-poke":        ["skin-plastic", "plastic-cream", "poke", "lip-purple"],
+    // cream shell + yellow/marigold lips
+    "plastic-cream-yellow-poke":        ["skin-plastic", "plastic-cream", "poke", "lip-yellow"],
+    // red shell + blue lips
+    "plastic-red-blue-poke":            ["skin-plastic", "poke", "lip-blue"],
   };
   const ALL_SKIN_CLASSES = [...new Set(Object.values(SKIN_CLASS).flat())];
   let skin = "hud";
