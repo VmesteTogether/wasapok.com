@@ -1085,7 +1085,8 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic .console,
 #phone.skin-plastic.view-home .home,
 #phone.skin-plastic .search-panel,
-#phone.skin-plastic .matrix-panel {
+#phone.skin-plastic .matrix-panel,
+#phone.skin-plastic .movebar {
   position: relative;
   clip-path: none;
   border-style: solid; border-width: 6px;
@@ -1111,7 +1112,8 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic .console::after,
 #phone.skin-plastic.view-home .home::after,
 #phone.skin-plastic .search-panel::after,
-#phone.skin-plastic .matrix-panel::after {
+#phone.skin-plastic .matrix-panel::after,
+#phone.skin-plastic .movebar::after {
   content: ""; display: block; position: absolute; inset: 0;
   width: auto; height: auto; border: 0; border-radius: 10px;
   z-index: 3; pointer-events: none;
@@ -1205,12 +1207,7 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic .hero.focus .hero-idx { color: var(--cyan); }
 #phone.skin-plastic .mvpip { background: rgba(0,0,0,.28); }
 
-/* the move-loadout bar is the recessed "screen" where moves are set */
-#phone.skin-plastic .movebar {
-  clip-path: none; border: none; border-radius: 12px;
-  background: linear-gradient(180deg, var(--screen-2), var(--screen));
-  box-shadow: inset 0 3px 9px rgba(0,0,0,.6), inset 0 -1px 0 rgba(255,255,255,.08), 0 1px 0 var(--shell-hi);
-}
+/* the move-loadout bar shares the plastic "screen" LIP + LCD + glass group above */
 #phone.skin-plastic .mslot { border-color: rgba(53,230,255,.14); background: rgba(53,230,255,.05); }
 #phone.skin-plastic .mslot.filled { background: rgba(53,230,255,.08); }
 
@@ -1255,7 +1252,8 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic.poke .console,
 #phone.skin-plastic.poke.view-home .home,
 #phone.skin-plastic.poke .search-panel,
-#phone.skin-plastic.poke .matrix-panel {
+#phone.skin-plastic.poke .matrix-panel,
+#phone.skin-plastic.poke .movebar {
   border-top-color: var(--lip-hi);
   border-left-color: var(--lip);
   border-right-color: var(--lip-lo);
@@ -1280,4 +1278,4 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
 #phone.skin-plastic.poke .skin-toggle {
   border: 2px solid var(--lip);
 }
-#phone.skin-plastic.poke .movebar { border: 2.5px solid var(--lip); }
+/* .poke .movebar lip is retinted with the other screen bezels above */
