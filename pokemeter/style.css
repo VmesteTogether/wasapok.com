@@ -727,13 +727,18 @@ body.standalone .fit-toggle { display: none; }
   transition: transform .22s cubic-bezier(.34,1.45,.5,1), border-color .2s, box-shadow .2s;
 }
 .hero:active { transform: scale(.95); filter: brightness(1.08); }
-.hero.focus { border-color: var(--cyan); box-shadow: var(--glow), inset 0 0 26px rgba(53,230,255,.12); }
+/* SELECTED = a purposeful mounted frame in the tile's accent (--focus-col): the lip
+   colour in the Poke two-tone themes, the readout accent (--cyan) in HUD / mono shells */
+.hero.focus {
+  --focus-col: var(--cyan);
+  border-color: var(--focus-col);
+  box-shadow: inset 0 0 0 3px var(--focus-col), inset 0 0 0 6px rgba(0,0,0,.38); }
 .hero-accent {                                   /* type-tinted glow behind the sprite */
   position: absolute; inset: 0 0 44% 0; z-index: 0; opacity: .2; filter: blur(15px); pointer-events: none;
 }
 .hero-idx { position: absolute; top: 6px; left: 8px; z-index: 2;
   font-family: var(--f-mono); font-size: 9px; letter-spacing: 1px; color: var(--txt-2); }
-.hero.focus .hero-idx { color: var(--cyan); text-shadow: 0 0 6px rgba(53,230,255,.6); }
+.hero.focus .hero-idx { color: var(--focus-col); text-shadow: 0 1px 2px rgba(0,0,0,.6); }
 .hero-art { position: relative; z-index: 1; flex: 1 1 auto; min-height: 0;
   display: flex; align-items: center; justify-content: center; padding: 8px 6px 2px; }
 .hero-art img { max-width: 82%; max-height: 100%; object-fit: contain;
@@ -1194,9 +1199,12 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   box-shadow: 0 1px 2px rgba(0,0,0,.3), inset 1px 1px 0 rgba(255,255,255,.4),
     inset 0 3px 7px rgba(0,0,0,.34), inset -1px -1px 0 rgba(0,0,0,.22); }
 #phone.skin-plastic .hero.focus {
-  box-shadow: 0 4px 7px rgba(0,0,0,.34), 0 0 0 2px var(--cyan),
-    inset 1px 1px 0 rgba(255,255,255,.5), inset 0 0 14px rgba(53,230,255,.18),
-    inset -1px -1px 0 rgba(0,0,0,.26); }
+  box-shadow: 0 4px 7px rgba(0,0,0,.34),
+    inset 0 0 0 3px var(--focus-col), inset 0 0 0 6px rgba(0,0,0,.32),
+    inset 1px 1px 0 rgba(255,255,255,.4), inset -1px -1px 0 rgba(0,0,0,.26); }
+/* accent themes: use the lip's highlight tone so the selected frame pops from the
+   same-coloured resting lips (mono shells fall back to the readout accent from base) */
+#phone.skin-plastic.poke .hero.focus { --focus-col: var(--lip-hi); }
 #phone.skin-plastic .hero.empty {
   background: linear-gradient(180deg, rgba(0,0,0,.14), rgba(0,0,0,.03));
   box-shadow: inset 0 2px 5px rgba(0,0,0,.32); }
@@ -1217,7 +1225,7 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   box-shadow: inset 0 1px 2px rgba(0,0,0,.24), inset 0 -1px 0 rgba(255,255,255,.18); }
 #phone.skin-plastic .hero-name { color: var(--pl-txt); text-shadow: 0 1px 0 var(--pl-emboss); }
 #phone.skin-plastic .hero-idx { color: var(--pl-txt-mid); }
-#phone.skin-plastic .hero.focus .hero-idx { color: var(--cyan); }
+#phone.skin-plastic .hero.focus .hero-idx { color: var(--focus-col); }
 #phone.skin-plastic .mvpip { background: rgba(0,0,0,.28); }
 
 /* the move-loadout bar shares the plastic "screen" LIP + LCD + glass group above */
