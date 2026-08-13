@@ -369,12 +369,15 @@
   let view = "team";
   let viewBusy = false;               // a view transition is animating — ignore new switches
   let squadFocus = 0;                 // which SQUAD hero tile is focused (its moves fill the bar)
-  const VIEWS = ["team", "home", "squad"];
-  // the flip button is a one-way cycle; it shows the mode you'll advance to next
+  const VIEWS = ["team", "home", "squad", "sim"];
+  // one-way cycle; the flip shows the mode you'll advance to next. The label
+  // strings are offset by one so the button READS "HOME / TEAM / SQUAD / SIM" as
+  // you press through (team's meta carries SIM's label, sim's carries SQUAD's).
   const VIEW_META = {
-    team:  { label: "SQUAD", sub: "BATTLE&nbsp;LOADOUT" },
+    team:  { label: "SIM",   sub: "COMBAT&nbsp;PROJECTION" },
     home:  { label: "HOME",  sub: "PARTY&nbsp;DIAGNOSTIC" },
     squad: { label: "TEAM",  sub: "UNIT&nbsp;LOADOUT" },
+    sim:   { label: "SQUAD", sub: "BATTLE&nbsp;LOADOUT" },
   };
   const nextView = () => VIEWS[(VIEWS.indexOf(view) + 1) % VIEWS.length];
   const updateFlipLabel = () => {
@@ -569,7 +572,7 @@
   // Each view's "screen": team = the readout console, home = the diagnostic
   // cockpit, squad = the bottom move bar. A single blank ghost persists across
   // the switch and morphs its geometry from one to the next.
-  const SCREEN_SEL = { team: "#console", home: "#home", squad: "#moveBar" };
+  const SCREEN_SEL = { team: "#console", home: "#home", squad: "#moveBar", sim: "#sim" };
   const SCREEN_EL = v => $(SCREEN_SEL[v]);
   const LOOK_PROPS = ["backgroundColor", "backgroundImage", "backgroundSize", "backgroundPosition",
     "boxShadow", "borderStyle", "borderTopWidth", "borderRightWidth", "borderBottomWidth", "borderLeftWidth",
@@ -711,10 +714,12 @@
       const phone = $("#phone");
       phone.classList.toggle("view-home", view === "home");
       phone.classList.toggle("view-squad", view === "squad");
+      phone.classList.toggle("view-sim", view === "sim");
       updateFlipLabel();
       $("#viewFlip").setAttribute("aria-pressed", view !== "team" ? "true" : "false");
       if (view === "home") renderHome();
       if (view === "squad") renderSquad();
+      if (view === "sim") { simState = "deploy"; renderSim(); }   // always land on deploy, fresh eligibility
       layoutRail();
       try { localStorage.setItem(VIEW_KEY, view); } catch {}
       if (animate) {
@@ -882,6 +887,397 @@
     partyMoves[squadFocus][k] = null; saveMoves(); renderSquad(); sfx.clear();
   };
 
+  // ==========================================================================
+  // SIM — combat projection (the 4th mode). Two linked ideas share ONE engine:
+  //  (1) THEATER ELIGIBILITY — the set of games this exact squad can legally play
+  //      in (floor = max species / form / move generation).
+  //  (2) COMBAT SIM — 100 curated engagements in a chosen eligible theater; the
+  //      eligibility gate makes every matchup authentic.
+  // v1 battle model: a DETERMINISTIC chain of 1v1 matchups off the type chart +
+  // base stats — no turn engine, no move-power data. Fully reproducible, so a
+  // given squad vs a given theater always scores the same across the 100 seeded
+  // opponent teams. Moves only set WHERE you can fight (the floor), not the math.
+  // ==========================================================================
+  const SIM_KEY = "pokemeter-sim-theater-v1";
+  const SIM_N = 100;
+  const REGIONS = ["KANTO","JOHTO","HOENN","SINNOH","UNOVA","KALOS","ALOLA","GALAR","PALDEA"];
+
+  // move gen ≈ national move-id range (keeps the floor honest with no re-dump)
+  const MOVE_GEN_CAPS = [165, 251, 354, 467, 559, 621, 742, 826, 920];
+  const moveGen = id => { for (let i = 0; i < MOVE_GEN_CAPS.length; i++) if (id <= MOVE_GEN_CAPS[i]) return i + 1; return 9; };
+  // forms that debut later than their species raise the floor (ident suffix)
+  const FORM_RULES = [
+    [/-primal/, 6, "PRIMAL"], [/-mega/, 6, "MEGA"], [/-gmax/, 8, "GIGANTAMAX"],
+    [/-alola/, 7, "ALOLAN"], [/-galar/, 8, "GALARIAN"], [/-hisui/, 8, "HISUIAN"], [/-paldea/, 9, "PALDEAN"],
+  ];
+  const formInfo = ident => { for (const [re, g, tag] of FORM_RULES) if (re.test(ident)) return { g, tag }; return null; };
+  const unitFloor = u => { const f = formInfo(u.ident); return Math.max(u.gen, f ? f.g : 1); };
+
+  // which theaters (generations) this squad can play in + the binding constraint
+  const computeEligibility = () => {
+    let floor = 1, bind = null;
+    const raise = (g, kind, label, detail) => { if (g > floor) { floor = g; bind = { kind, label, detail }; } };
+    for (let i = 0; i < 6; i++) {
+      const id = party[i]; if (id == null) continue;
+      const u = byId.get(id);
+      raise(u.gen, "species", u.name, `debuts Gen ${ROMAN[u.gen - 1]}`);
+      const f = formInfo(u.ident);
+      if (f && f.g > u.gen) raise(f.g, "form", u.name, `${f.tag} form · Gen ${ROMAN[f.g - 1]}+`);
+      (partyMoves[i] || []).forEach(mid => {
+        if (mid == null) return;
+        const g = moveGen(mid), mv = moveById.get(mid);
+        raise(g, "move", mv ? mv.name : "MOVE", `on ${u.name} · Gen ${ROMAN[g - 1]} move`);
+      });
+    }
+    const eligible = [];
+    for (let g = floor; g <= 9; g++) eligible.push(g);
+    return { floor, eligible, bind, count: teamUnits().length };
+  };
+
+  // ---- battle model: 1v1 matchup chain, deterministic ----------------------
+  const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
+
+  // per-hit damage A→B: best STAB effectiveness × offense against the matching
+  // defense; returns ~0..62, and 0 when the defender is immune to all A's STABs
+  const duelDamage = (A, B) => {
+    const phys = A.stats[1] >= A.stats[3];
+    const off = phys ? A.stats[1] : A.stats[3];
+    const defv = phys ? B.stats[2] : B.stats[4];
+    const stabs = [A.t1, A.t2].filter(Boolean);
+    const eff = stabs.length ? Math.max(...stabs.map(t => effOn(t, B.t1, B.t2))) : 1;
+    const raw = off * eff * 1.3;                     // 1.3 ≈ STAB
+    return 62 * raw / (raw + defv * 1.8);
+  };
+  // resolve two teams as a 1v1 chain; attrition (hp) carries between duels
+  const battle = (teamA, teamB) => {
+    const A = teamA.map(m => ({ m, hp: m.stats[0] })), B = teamB.map(m => ({ m, hp: m.stats[0] }));
+    let ia = 0, ib = 0, guard = 0; const log = [];
+    while (ia < A.length && ib < B.length && guard++ < 300) {
+      const a = A[ia], b = B[ib];
+      const dab = duelDamage(a.m, b.m), dba = duelDamage(b.m, a.m);
+      if (dab <= 0 && dba <= 0) {                    // mutual immunity → bulk breaks the stalemate
+        if (a.m.bst >= b.m.bst) { log.push({ by: "A", att: a.m, fell: b.m }); ib++; }
+        else { log.push({ by: "B", att: b.m, fell: a.m }); ia++; }
+        continue;
+      }
+      const strike = (att, dfn, dmg, side, adv) => {
+        dfn.hp -= dmg;
+        if (dfn.hp <= 0) { log.push({ by: side, att: att.m, fell: dfn.m }); adv(); return true; }
+        return false;
+      };
+      const aFirst = a.m.stats[5] >= b.m.stats[5];
+      if (aFirst) { if (strike(a, b, dab, "A", () => ib++)) continue; strike(b, a, dba, "B", () => ia++); }
+      else        { if (strike(b, a, dba, "B", () => ia++)) continue; strike(a, b, dab, "A", () => ib++); }
+    }
+    return { win: ib >= B.length && ia < A.length, survA: A.length - ia, survB: B.length - ib, log };
+  };
+
+  // legendary / mythical / UB / paradox / treasure species (by national dex no.) —
+  // the "not a normal wild mon" tier. Pseudo-legends (Dragonite, Garchomp, …) are
+  // deliberately NOT here: they stay in the pool even with legendaries off.
+  const LEGENDARY = new Set([
+    144,145,146,150,151, 243,244,245,249,250,251,
+    377,378,379,380,381,382,383,384,385,386,
+    480,481,482,483,484,485,486,487,488,489,490,491,492,493,
+    494,638,639,640,641,642,643,644,645,646,647,648,649,
+    716,717,718,719,720,721,
+    772,773,785,786,787,788,789,790,791,792,793,794,795,796,797,798,799,800,801,802,803,804,805,806,807,808,809,
+    888,889,890,891,892,893,894,895,896,897,898,905,
+    984,985,986,987,988,989,990,991,992,993,994,995,
+    1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1014,1015,1016,1017,1020,1021,1022,1023,1024,1025,
+  ]);
+  // opponent species available by a gen: fully-evolved-ish foes (BST floor cuts
+  // out fodder) and no battle-only forms. Sampled ~uniformly so opponent teams are
+  // a fair cross-section. `legends` toggles the legendary/mythical tier in or out.
+  const oppPoolCache = {};
+  const opponentPool = (gen, legends) => {
+    const key = gen + (legends ? "L" : "");
+    return oppPoolCache[key] || (oppPoolCache[key] = DEX.filter(u =>
+      unitFloor(u) <= gen && u.bst >= 430 &&
+      !/-mega|-primal|-gmax|-totem|-eternamax|-ultra/.test(u.ident) &&
+      (legends || !LEGENDARY.has(u.dexno))));
+  };
+  const pickTeam = (pool, size, rnd) => {
+    const team = [], used = new Set(); let guard = 0;
+    while (team.length < size && guard++ < size * 60) {
+      const c = pool[(rnd() * pool.length) | 0];
+      if (c && !used.has(c.id)) { used.add(c.id); team.push(c); }
+    }
+    return team;
+  };
+
+  const DEBRIEF_WIN = [
+    (mvp, opp) => `<b>${mvp}</b> swept the back line after <b>${opp}</b> whiffed the lead.`,
+    (mvp) => `Traded down into <b>${mvp}</b>, then closed it out clean.`,
+    (mvp) => `Won the speed race — <b>${mvp}</b> mopped up the survivors.`,
+    (mvp, opp) => `<b>${mvp}</b> broke the <b>${opp}</b> wall and ran it back.`,
+  ];
+  const DEBRIEF_LOSS = [
+    (opp, t) => `<em>${opp}</em> outsped after the lead fell — no answer for <em>${t}</em>.`,
+    (opp, t) => `<em>${opp}</em> broke through; the <em>${t}</em> check went down early.`,
+    (opp) => `Lost the tempo — <em>${opp}</em> snowballed unchecked.`,
+    (opp, t) => `Walled by <em>${opp}</em> — couldn't punch past <em>${t}</em>.`,
+  ];
+  const makeDebriefFor = e => {
+    if (e.win) {
+      const tally = {}; e.log.filter(l => l.by === "A").forEach(l => tally[l.att.name] = (tally[l.att.name] || 0) + 1);
+      const mvp = Object.keys(tally).sort((x, y) => tally[y] - tally[x])[0] || e.you[0].name;
+      return DEBRIEF_WIN[e.i % DEBRIEF_WIN.length](mvp, e.opp0 || "the lead");
+    }
+    const theirs = e.log.filter(l => l.by === "B");
+    const oppMon = (theirs[theirs.length - 1] || {}).att;
+    return DEBRIEF_LOSS[e.i % DEBRIEF_LOSS.length](oppMon ? oppMon.name : e.opp0, oppMon ? oppMon.t1 : "coverage");
+  };
+
+  const SIM_TIERS = [
+    { min: 85, label: "DOMINANT",   sub: "the field can't answer this squad" },
+    { min: 65, label: "FAVORED",    sub: "wins the majority of engagements" },
+    { min: 45, label: "CONTESTED",  sub: "a coin-flip theater — sharpen the kit" },
+    { min: 25, label: "OUTMATCHED", sub: "losing ground — patch the gaps" },
+    { min: 0,  label: "OVERRUN",    sub: "this theater is hostile to the squad" },
+  ];
+  const simTier = pct => SIM_TIERS.find(t => pct >= t.min);
+
+  // run the full gauntlet (fixed per theater) + aggregate MVP / liability / threat
+  const runSim = gen => {
+    const you = teamUnits();
+    if (!you.length) return null;
+    const size = you.length, pool = opponentPool(gen, simLegends);
+    if (pool.length < size) return null;
+    const rnd = mulberry32((0x5E5E ^ Math.imul(gen, 0x9E3779B1)) >>> 0);
+    const engs = []; let wins = 0;
+    const koBy = {}, fellFirst = {}, threatBy = {}, typeOf = {};
+    for (let i = 0; i < SIM_N; i++) {
+      const opp = pickTeam(pool, size, rnd);
+      const r = battle(you, opp);
+      if (r.win) wins++;
+      r.log.forEach(l => {
+        typeOf[l.att.name] = l.att.t1; typeOf[l.fell.name] = l.fell.t1;
+        if (l.by === "A") koBy[l.att.name] = (koBy[l.att.name] || 0) + 1;
+        if (l.by === "B") threatBy[l.att.name] = (threatBy[l.att.name] || 0) + 1;
+      });
+      if (!r.win) { const firstOwn = r.log.find(l => l.by === "B");   // "fell first" is a defeat metric
+        if (firstOwn) fellFirst[firstOwn.fell.name] = (fellFirst[firstOwn.fell.name] || 0) + 1; }
+      engs.push({ i, win: r.win, survA: r.survA, survB: r.survB, size, you, opp, log: r.log,
+        opp0: opp[0] ? opp[0].name : "", debrief: "" });
+    }
+    engs.forEach(e => e.debrief = makeDebriefFor(e));
+    const top = o => Object.keys(o).sort((x, y) => o[y] - o[x])[0] || null;
+    const mvp = top(koBy), liability = top(fellFirst), threat = top(threatBy);
+    return { gen, size, wins, losses: SIM_N - wins, engs, typeOf, legends: simLegends,
+      mvp, mvpN: koBy[mvp] || 0, liability, liabilityN: fellFirst[liability] || 0,
+      threat, threatN: threatBy[threat] || 0 };
+  };
+
+  // ---- SIM view: state machine (deploy → running → results → inspect) ------
+  const LEG_KEY = "pokemeter-sim-legends-v1";
+  let simState = "deploy";
+  let simRun = null;
+  let simTheater = 0;               // selected gen (1..9)
+  let simLegends = (() => { try { return localStorage.getItem(LEG_KEY) !== "0"; } catch { return true; } })();  // legendaries in the opponent pool (default on)
+  let inspIdx = 0, inspLossOnly = false;
+
+  const initSimTheater = E => {
+    let saved = 0; try { saved = +localStorage.getItem(SIM_KEY) || 0; } catch {}
+    if (E.eligible.includes(saved)) simTheater = saved;
+    else if (!E.eligible.includes(simTheater)) simTheater = E.floor;
+  };
+
+  const simUnitCell = (u, i) =>
+    `<div class="sim-mcap"><span class="sim-mcap-idx">0${i + 1}</span>
+       <img class="sim-mcap-img" src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="">
+       <span class="sim-mcap-name">${u.name}</span></div>`;
+
+  const simDeployHTML = () => {
+    const you = teamUnits();
+    if (!you.length) return `<div class="sim-scr sim-empty"><div class="ce-ring"></div>
+      <p>NO SQUAD ON FILE<br><b>FILE UNITS</b> TO PROJECT COMBAT</p></div>`;
+    const E = computeEligibility();
+    initSimTheater(E);
+    const grid = REGIONS.map((name, idx) => {
+      const g = idx + 1, legal = g >= E.floor, sel = legal && g === simTheater;
+      const cls = ["sim-th", legal ? "legal" : "locked", sel ? "sel" : ""].join(" ").trim();
+      const lock = legal ? "" : `<span class="sim-th-lock">▮</span><span class="sim-th-req">≥ GEN ${E.floor}</span>`;
+      return `<button class="${cls}" data-th="${g}" data-legal="${legal ? 1 : 0}">
+        <span class="sim-th-g">GEN ${g}</span><span class="sim-th-n">${name}</span>${lock}</button>`;
+    }).join("");
+    const bindTxt = E.bind
+      ? `EARLIEST THEATER <b>${REGIONS[E.floor - 1]} · GEN ${E.floor}</b> — floor set by <b>${E.bind.label}</b> <i>(${E.bind.detail})</i>`
+      : `<b>ALL THEATERS OPEN</b> — this squad is legal in every region`;
+    return `<div class="sim-scr">
+      <div class="sim-kicker"><span>SIM // COMBAT PROJECTION</span><span class="sim-kicker-r">${you.length} UNIT${you.length > 1 ? "S" : ""}</span></div>
+      <div class="sim-team">${you.map(simUnitCell).join("")}</div>
+      <div class="sim-elig">
+        <div class="sim-elig-head"><h3>SELECT THEATER</h3><span class="sim-elig-cnt">${E.eligible.length} / 9 ELIGIBLE</span></div>
+        <div class="sim-th-grid">${grid}</div>
+        <div class="sim-elig-note"><span class="sim-note-ic">▲</span><span>${bindTxt}</span></div>
+      </div>
+      <div class="sim-deploy-foot">
+        <button class="sim-legtog ${simLegends ? "on" : ""}" data-act="legtog" aria-pressed="${simLegends}">
+          <span class="sim-legtog-l"><span class="sim-leg-ico">&#9733;</span>LEGENDARY OPPONENTS</span>
+          <span class="sim-switch"><span class="sim-switch-knob"></span></span>
+        </button>
+        <div class="sim-deploy-action">
+          <div class="sim-dep-meta"><span class="sim-dep-n">${SIM_N}</span><span class="sim-dep-l">ENGAGEMENTS · ${REGIONS[simTheater - 1]}</span></div>
+          <button class="sim-run-btn sim-key" data-act="run">RUN SIM ▸</button>
+        </div>
+      </div>
+    </div>`;
+  };
+
+  const simRunningHTML = () => `<div class="sim-scr sim-run">
+      <div class="sim-run-tl">RUNNING ENGAGEMENTS</div>
+      <div class="sim-run-th">THEATER · ${REGIONS[simRun.gen - 1]}</div>
+      <div class="sim-run-big"><span id="simRunNum">000</span><small>/${SIM_N}</small></div>
+      <div class="sim-rbar"><div class="sim-rbar-fill" id="simRbar"></div></div>
+      <div class="sim-run-tally">
+        <div class="sim-rt w"><span class="n" id="simRunW">0</span><span class="l">WON</span></div>
+        <div class="sim-rt l"><span class="n" id="simRunL">0</span><span class="l">LOST</span></div>
+      </div>
+      <div class="sim-run-scroll" id="simRunScroll">&nbsp;</div></div>`;
+
+  const startRunAnim = () => {
+    const run = simRun;
+    if (!run) { simState = "deploy"; renderSim(); return; }
+    if (prefersReduced) { simState = "results"; renderSim(); return; }
+    const num = $("#simRunNum"), bar = $("#simRbar"), w = $("#simRunW"), l = $("#simRunL"), scr = $("#simRunScroll");
+    let n = 0, wc = 0, lc = 0; const t0 = performance.now(), dur = 1500;
+    const frame = t => {
+      if (view !== "sim" || simState !== "running") return;      // cycled away → abort
+      const p = Math.min(1, (t - t0) / dur), target = (p * SIM_N) | 0;
+      while (n < target) { n++; if (run.engs[n - 1].win) wc++; else lc++; }
+      if (num) num.textContent = String(n).padStart(3, "0");
+      if (w) w.textContent = wc; if (l) l.textContent = lc;
+      if (bar) bar.style.width = (p * 100) + "%";
+      if (scr && n > 0) { const e = run.engs[n - 1]; scr.innerHTML = `ENG ${String(n).padStart(3, "0")} · <b>${e.win ? "WON" : "LOST"}</b> vs ${e.opp0}`; }
+      if (p < 1) requestAnimationFrame(frame);
+      else setTimeout(() => { if (view === "sim" && simState === "running") { simState = "results"; renderSim(); } }, 240);
+    };
+    requestAnimationFrame(frame);
+  };
+
+  const simResultsHTML = () => {
+    const r = simRun, pct = Math.round(r.wins / SIM_N * 100), tier = simTier(pct);
+    const co = (lbl, name, extra) => name
+      ? `<div class="sim-callout"><span class="sim-co-l">${lbl}</span><span class="sim-co-pip t-${r.typeOf[name] || "none"}"></span><b>${name}</b> <i>${extra}</i></div>` : "";
+    return `<div class="sim-scr sim-results">
+      <div class="sim-res-body">
+        <div class="sim-res-k">PROJECTION COMPLETE · ${REGIONS[r.gen - 1]} THEATER${r.legends ? "" : " · NO LEGENDS"}</div>
+        <div class="sim-res-score">${r.wins}<small> /${SIM_N} WON</small></div>
+        <div class="sim-res-tier">${tier.label}</div>
+        <div class="sim-res-sub">${tier.sub}</div>
+        <div class="rmeter"><div class="rmeter-fill" data-w="${pct}"></div></div>
+        <div class="sim-res-split">
+          <div class="sim-rs w"><div class="rn">${r.wins}</div><div class="rl">VICTORIES</div></div>
+          <div class="sim-rs l"><div class="rn">${r.losses}</div><div class="rl">DEFEATS</div></div>
+        </div>
+        <div class="sim-res-callouts">
+          ${co("MVP", r.mvp, `${r.mvpN} KOs across the run`)}
+          ${co("FELL FIRST", r.liability, `led ${r.liabilityN} of ${r.losses || 0} defeats`)}
+          ${co("THREAT", r.threat, `${r.threatN} KOs on your squad`)}
+        </div>
+      </div>
+      <div class="sim-res-foot">
+        <button class="sim-btn-primary sim-key" data-act="review">REVIEW ENGAGEMENTS ▸</button>
+        <button class="sim-btn-2 sim-key" data-act="reconf">↺ THEATER</button>
+      </div></div>`;
+  };
+  const afterResults = () => requestAnimationFrame(() => requestAnimationFrame(() => {
+    const f = $("#sim .rmeter-fill"); if (f) f.style.width = f.dataset.w + "%";
+  }));
+
+  const inspList = () => inspLossOnly ? simRun.engs.filter(e => !e.win).map(e => e.i) : simRun.engs.map(e => e.i);
+  const simTokRow = (list, fainted) => list.map((u, i) =>
+    `<div class="sim-tok ${i < fainted ? "ko" : ""}"><img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="">
+       <span class="sim-tok-dex">${String(u.id).padStart(3, "0")}</span></div>`).join("");
+
+  const simInspectHTML = () => {
+    const list = inspList();
+    if (!list.includes(inspIdx)) inspIdx = list.length ? list[0] : 0;
+    const e = simRun.engs[inspIdx], pos = list.indexOf(inspIdx) + 1, R = REGIONS[simRun.gen - 1];
+    return `<div class="sim-scr sim-inspect">
+      <div class="sim-insp-head">
+        <button class="sim-nav sim-key" data-act="prev" aria-label="Previous engagement">&lsaquo;</button>
+        <div class="sim-insp-count">
+          <div class="ic-n">ENGAGEMENT <b>${String(inspIdx + 1).padStart(3, "0")}</b>/${SIM_N}</div>
+          <div class="ic-s">${inspLossOnly ? `DEFEAT ${pos} / ${list.length}` : "STEP WITH ◂ ▸"}</div>
+        </div>
+        <button class="sim-nav sim-key" data-act="next" aria-label="Next engagement">&rsaquo;</button>
+        <button class="sim-insp-close sim-key" data-act="closeinsp" aria-label="Close">&times;</button>
+      </div>
+      <div class="sim-insp-body">
+      <div class="sim-verdict ${e.win ? "won" : "lost"}">
+        <span class="sim-vtag">${e.win ? "WON" : "LOST"}</span>
+        <span class="sim-vsub">${R} THEATER<br>${e.survA} OF ${e.size} SURVIVING</span>
+      </div>
+      <div class="sim-side">
+        <div class="sim-side-lbl ours"><span>YOUR SQUAD</span><span>${e.survA}/${e.size} STANDING</span></div>
+        <div class="sim-tokrow">${simTokRow(e.you, e.size - e.survA)}</div>
+      </div>
+      <div class="sim-side">
+        <div class="sim-side-lbl theirs"><span>HOSTILE · ${R}</span><span>${e.survB}/${e.size} STANDING</span></div>
+        <div class="sim-tokrow">${simTokRow(e.opp, e.size - e.survB)}</div>
+      </div>
+      <div class="sim-why">
+        <div class="sim-why-k">AFTER-ACTION DEBRIEF</div>
+        <div class="sim-why-txt">${e.debrief}</div>
+      </div>
+      </div>
+      <div class="sim-insp-foot">
+        <button class="sim-loss-tog sim-key ${inspLossOnly ? "on" : ""}" data-act="lossonly"><span class="box"></span>LOSSES ONLY</button>
+        <span class="sim-insp-hint">TAP <b>◂ ▸</b> TO STEP</span>
+      </div></div>`;
+  };
+
+  const renderSim = () => {
+    const el = $("#sim"); if (!el) return;
+    if (simState === "running") { el.innerHTML = simRunningHTML(); startRunAnim(); }
+    else if (simState === "results") { el.innerHTML = simResultsHTML(); afterResults(); }
+    else if (simState === "inspect") el.innerHTML = simInspectHTML();
+    else el.innerHTML = simDeployHTML();
+    const scr = el.querySelector(".sim-scr");
+    if (scr && !prefersReduced) { scr.classList.remove("sim-in"); void scr.offsetWidth; scr.classList.add("sim-in"); }
+  };
+
+  const simClick = ev => {
+    firstTouchUnlock();
+    const th = ev.target.closest(".sim-th");
+    if (th) {
+      if (th.dataset.legal !== "1") { sfx.tick(); return; }
+      simTheater = +th.dataset.th; try { localStorage.setItem(SIM_KEY, simTheater); } catch {}
+      sfx.select(); renderSim(); return;
+    }
+    const btn = ev.target.closest("[data-act]"); if (!btn) return;
+    switch (btn.dataset.act) {
+      case "legtog":
+        simLegends = !simLegends;
+        try { localStorage.setItem(LEG_KEY, simLegends ? "1" : "0"); } catch {}
+        sfx.tick(); renderSim(); break;
+      case "run":
+        simRun = runSim(simTheater);
+        if (!simRun) { sfx.clear(); return; }
+        simState = "running"; sfx.add(); renderSim(); break;
+      case "review":
+        inspLossOnly = false;
+        inspIdx = (simRun.engs.find(e => !e.win) || simRun.engs[0]).i;   // open on a loss to show the "why"
+        simState = "inspect"; sfx.open(); renderSim(); break;
+      case "reconf":
+        simState = "deploy"; sfx.open(); renderSim(); break;
+      case "closeinsp":
+        simState = "results"; sfx.open(); renderSim(); break;
+      case "prev": case "next": {
+        const list = inspList(); let p = list.indexOf(inspIdx);
+        if (p < 0) p = 0;
+        p = (p + (btn.dataset.act === "next" ? 1 : -1) + list.length) % list.length;
+        inspIdx = list[p]; sfx.tick(); renderSim(); break;
+      }
+      case "lossonly":
+        if (!inspLossOnly && !simRun.engs.some(e => !e.win)) { sfx.tick(); return; }  // nothing to filter to
+        inspLossOnly = !inspLossOnly;
+        sfx.select(); renderSim(); break;
+    }
+  };
+
   const selectSlot = (i) => {
     if (party[i] == null) return;
     activeSlot = i;
@@ -1016,6 +1412,9 @@
       const s = e.target.closest(".mslot"); if (!s) return;
       openMovePick(+s.dataset.mv);
     });
+    // sim view: theater select + run / review / step / filter (all delegated)
+    $("#sim").addEventListener("click", simClick);
+
     // move picker overlay
     $("#movepickClose").addEventListener("click", closeMovePick);
     $("#movepick").addEventListener("click", e => { if (e.target === $("#movepick")) closeMovePick(); });
