@@ -894,12 +894,12 @@
   //      in (floor = max species / form / move generation).
   //  (2) COMBAT SIM — 100 curated engagements in a chosen eligible theater; the
   //      eligibility gate makes every matchup authentic.
-  // v1 battle model: a DETERMINISTIC chain of 1v1 matchups off the type chart +
-  // base stats — no turn engine, no move-power data. Fully reproducible, so a
-  // given squad vs a given theater always scores the same across the 100 seeded
-  // opponent teams. A unit's assigned MOVES drive its attacking coverage (see
-  // coverageTypes/duelDamage); moves also set the eligibility floor. Per-move
-  // POWER + physical/special category remain v2 (needs a moves.json re-dump).
+  // battle model: a DETERMINISTIC chain of 1v1 matchups off the type chart + base
+  // stats + REAL move data — base power + physical/special category (moves.json,
+  // enriched from Showdown). No turn engine, but move choice (power, category,
+  // coverage, STAB) feeds the damage (see coverageAttacks/duelDamage); moves also
+  // set the eligibility floor. Fully reproducible: a given squad vs a given theater
+  // always scores the same across the 100 seeded opponent teams.
   // ==========================================================================
   const SIM_KEY = "pokemeter-sim-theater-v1";
   const SIM_N = 100;
@@ -940,32 +940,35 @@
   // ---- battle model: 1v1 matchup chain, deterministic ----------------------
   const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
-  // a fighter's COVERAGE = the types it can attack with. If the unit has a moveset
-  // (from SQUAD), coverage = its move types — so the moves you pick actually decide
-  // what it threatens. With no moves set it falls back to its STAB types, so teams
-  // you haven't touched behave exactly as before. (Per-move POWER + physical/special
-  // category still need the moves.json re-dump — that's the v2 depth.)
-  const coverageTypes = (u, moveIds) => {
-    const ts = [];
-    (moveIds || []).forEach(mid => { const m = mid != null ? moveById.get(mid) : null; if (m && !ts.includes(m.type)) ts.push(m.type); });
-    return ts.length ? ts : [u.t1, u.t2].filter(Boolean);
+  // a fighter's ATTACKS = its damaging moves as {type, power, cat}. moves.json now
+  // carries real base power + physical/special category (Showdown data), so move
+  // CHOICE — power, category, coverage, STAB — all feed the damage. Status moves are
+  // skipped; with no damaging move set (or a wild foe with no moveset) it falls back
+  // to ~90 BP STAB in the mon's dominant category, so untouched teams still fight.
+  const coverageAttacks = (u, moveIds) => {
+    const atk = [];
+    (moveIds || []).forEach(mid => {
+      const m = mid != null ? moveById.get(mid) : null;
+      if (m && m.power > 0 && (m.cat === "P" || m.cat === "S")) atk.push({ type: m.type, power: m.power, cat: m.cat });
+    });
+    if (atk.length) return atk;
+    const cat = u.stats[1] >= u.stats[3] ? "P" : "S";
+    return [u.t1, u.t2].filter(Boolean).map(t => ({ type: t, power: 90, cat }));
   };
 
-  // per-hit damage fA→fB: the fighter's BEST coverage type this turn (effectiveness
-  // × STAB when the move type matches its own typing) against the matching defense.
-  // Returns ~0..62; 0 when every coverage type is walled/immune. Attacker offense is
-  // its dominant stat (atk vs spa); the opponent defends with the matching stat.
+  // per-hit damage fA→fB: the fighter's BEST attack this turn, using the real damage
+  // shape (base power × off/def, then ×type-effectiveness ×STAB) at a nominal L50.
+  // Physical moves hit Def with Atk; special moves hit SpD with SpA. 0 vs immunity.
   const duelDamage = (fA, fB) => {
-    const A = fA.u, B = fB.u;
-    const phys = A.stats[1] >= A.stats[3];
-    const off = phys ? A.stats[1] : A.stats[3];
-    const defv = phys ? B.stats[2] : B.stats[4];
-    const own = [A.t1, A.t2];
+    const A = fA.u, B = fB.u, own = [A.t1, A.t2];
     let best = 0;
-    for (const t of fA.cov) {
-      const eff = effOn(t, B.t1, B.t2);
-      const raw = off * eff * (own.includes(t) ? 1.5 : 1);   // STAB on own-type moves
-      const dmg = 62 * raw / (raw + defv * 1.8);
+    for (const mv of fA.attacks) {
+      const eff = effOn(mv.type, B.t1, B.t2);
+      if (eff === 0) continue;
+      const off = mv.cat === "P" ? A.stats[1] : A.stats[3];
+      const def = mv.cat === "P" ? B.stats[2] : B.stats[4];
+      const stab = own.includes(mv.type) ? 1.5 : 1;
+      const dmg = ((22 * mv.power * off / def) / 50 + 2) * eff * stab;
       if (dmg > best) best = dmg;
     }
     return best;
@@ -973,7 +976,7 @@
   // resolve two teams (fighter arrays) as a 1v1 chain; attrition (hp) carries between
   // duels. Each duel picks the best coverage move each side has vs the current foe.
   const battle = (teamA, teamB) => {
-    const A = teamA.map(f => ({ f, hp: f.u.stats[0] })), B = teamB.map(f => ({ f, hp: f.u.stats[0] }));
+    const A = teamA.map(f => ({ f, hp: f.u.stats[0] * 2 })), B = teamB.map(f => ({ f, hp: f.u.stats[0] * 2 }));   // ~L50 HP pool
     let ia = 0, ib = 0, guard = 0; const log = [];
     while (ia < A.length && ib < B.length && guard++ < 300) {
       const a = A[ia], b = B[ib];
@@ -1068,7 +1071,7 @@
     const you = [], youF = [];
     for (let i = 0; i < 6; i++) {
       const id = party[i]; if (id == null) continue;
-      const u = byId.get(id); you.push(u); youF.push({ u, cov: coverageTypes(u, partyMoves[i]) });
+      const u = byId.get(id); you.push(u); youF.push({ u, attacks: coverageAttacks(u, partyMoves[i]) });
     }
     if (!you.length) return null;
     const size = you.length, pool = opponentPool(gen, simLegends);
@@ -1077,8 +1080,8 @@
     const engs = []; let wins = 0;
     const koBy = {}, fellFirst = {}, threatBy = {}, typeOf = {};
     for (let i = 0; i < SIM_N; i++) {
-      const opp = pickTeam(pool, size, rnd);                                    // wild foes: no moveset → STAB coverage
-      const r = battle(youF, opp.map(u => ({ u, cov: [u.t1, u.t2].filter(Boolean) })));
+      const opp = pickTeam(pool, size, rnd);                                    // wild foes: no moveset → STAB fallback
+      const r = battle(youF, opp.map(u => ({ u, attacks: coverageAttacks(u, null) })));
       if (r.win) wins++;
       r.log.forEach(l => {
         typeOf[l.att.name] = l.att.t1; typeOf[l.fell.name] = l.fell.t1;
@@ -1558,7 +1561,7 @@
     // move catalog for the SQUAD move picker (non-fatal if missing)
     try {
       const mraw = await (await fetch("data/moves.json")).json();
-      MOVES = mraw.map(r => { const [id, name, type] = r; const m = { id, name, type, key: norm(name) }; moveById.set(id, m); return m; });
+      MOVES = mraw.map(r => { const [id, name, type, power, cat] = r; const m = { id, name, type, key: norm(name), power: power || 0, cat: cat || "N" }; moveById.set(id, m); return m; });
     } catch {}
     // per-region native-catch dex for the SIM theater readouts (non-fatal if missing)
     try {
