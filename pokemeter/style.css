@@ -1399,14 +1399,41 @@ body.standalone #phone.view-sim .simview {
   border-color: var(--cyan); box-shadow: var(--glow-soft), inset 0 0 14px rgba(53,230,255,0.14); }
 .sim-th.sel .sim-th-n { color: var(--cyan); text-shadow: 0 0 8px rgba(53,230,255,0.5); }
 .sim-th.sel .sim-th-g { color: var(--cyan-dim); }
-.sim-th.locked { cursor: not-allowed; opacity: .7; background: repeating-linear-gradient(135deg, rgba(255,182,74,0.05) 0 6px, transparent 6px 12px); }
+/* off-limits region: dim + hatched, but STILL selectable (runs non-canonically) */
+.sim-th.locked { cursor: pointer; opacity: .68; background: repeating-linear-gradient(135deg, rgba(255,182,74,0.05) 0 6px, transparent 6px 12px); }
 .sim-th.locked .sim-th-n { color: var(--txt-3); }
 .sim-th-lock { position: absolute; top: 6px; right: 7px; color: var(--amber); opacity: .85; font-size: 9px; }
 .sim-th-req { display: block; font-family: var(--f-mono); font-size: 7px; letter-spacing: .5px; color: var(--amber); margin-top: 3px; opacity: .9; }
+/* selected off-limits region → amber "hypothetical" selection (overrides .sel/.locked) */
+.sim-th.warn { opacity: 1; background: linear-gradient(150deg, rgba(255,182,74,0.22), rgba(255,182,74,0.05));
+  border-color: var(--amber); box-shadow: 0 0 8px rgba(255,182,74,0.25), inset 0 0 14px rgba(255,182,74,0.12); }
+.sim-th.warn .sim-th-n { color: var(--amber); text-shadow: 0 0 8px rgba(255,182,74,0.5); }
+.sim-th.warn .sim-th-g { color: var(--amber); opacity: .8; }
+.sim-th.warn .sim-th-lock { opacity: 1; }
+/* per-cell native-catch badge (bottom-left) */
+.sim-th-nat { position: absolute; left: 7px; bottom: 6px; font-family: var(--f-mono); font-size: 7.5px;
+  letter-spacing: .3px; color: var(--txt-3); }
+.sim-th-nat.full { color: var(--cyan); text-shadow: var(--glow-soft); }
+.sim-th-nat.none { color: var(--loss-dim); }
+.sim-th.sel .sim-th-nat { color: var(--cyan); }
+.sim-th.sel .sim-th-nat.none { color: var(--loss); }
+.sim-th.warn .sim-th-nat { color: var(--amber); }
+/* native-catch summary line for the selected region (under the grid) */
+.sim-native { margin-top: 9px; display: flex; align-items: center; gap: 9px; font-family: var(--f-mono);
+  font-size: 9px; letter-spacing: .4px; color: var(--txt-2); }
+.sim-native .sn-k { flex: 0 0 auto; color: var(--cyan-dim); letter-spacing: 1px; }
+.sim-native.full .sn-k { color: var(--cyan); text-shadow: var(--glow-soft); }
+.sim-native .sn-v { color: var(--txt-2); }
+.sim-native .sn-v b { color: var(--txt); }
 .sim-elig-note { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--hair-soft); font-family: var(--f-mono); font-size: 9px; line-height: 1.55; letter-spacing: .2px; color: var(--amber); display: flex; gap: 7px; }
 .sim-note-ic { flex: 0 0 auto; }
 .sim-elig-note b { color: var(--txt); }
 .sim-elig-note i { color: var(--txt-2); font-style: normal; }
+/* non-canonical warning banner (boxed amber, clearly "this can't really exist") */
+.sim-elig-note.warn { margin-top: 9px; padding: 8px 10px; color: var(--amber);
+  border: 1px solid rgba(255,182,74,0.42); background: rgba(255,182,74,0.07);
+  clip-path: polygon(6px 0,100% 0,100% calc(100% - 6px),calc(100% - 6px) 100%,0 100%,0 6px); }
+.sim-elig-note.warn b { color: var(--amber); }
 
 /* ---- deploy foot ---- */
 .sim-deploy-foot { flex: 0 0 auto; display: flex; flex-direction: column; gap: 9px; margin-top: 11px; border-top: 1px solid var(--hair-soft); padding-top: 10px; }
@@ -1438,6 +1465,7 @@ body.standalone #phone.view-sim .simview {
   clip-path: polygon(8px 0,100% 0,100% calc(100% - 8px),calc(100% - 8px) 100%,0 100%,0 8px);
   transition: transform .16s cubic-bezier(.34,1.4,.5,1), filter .16s; }
 .sim-run-btn:active { transform: scale(.95); filter: brightness(1.15); }
+.sim-run-btn.warn { color: #241a05; background: linear-gradient(150deg, #ffe0a0, var(--amber) 45%, #c77f1e); box-shadow: 0 0 14px rgba(255,182,74,0.4), inset 0 1px 0 rgba(255,255,255,0.5); }
 
 /* ---- RUNNING ---- */
 .sim-run { align-items: stretch; justify-content: center; text-align: center; }
@@ -1461,6 +1489,7 @@ body.standalone #phone.view-sim .simview {
 /* ---- RESULTS ---- */
 .sim-res-body { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; justify-content: center; }
 .sim-res-k { font-family: var(--f-mono); font-size: 9px; letter-spacing: 2px; color: var(--cyan-dim); }
+.sim-res-k.warn { color: var(--amber); }
 .sim-res-score { font-family: var(--f-disp); font-size: 60px; font-weight: 700; color: var(--cyan); line-height: .85; text-shadow: var(--glow); margin-top: 8px; font-variant-numeric: tabular-nums; }
 .sim-res-score small { font-size: 19px; color: var(--txt-2); font-weight: 400; letter-spacing: 1px; }
 .sim-res-tier { font-family: var(--f-disp); font-size: 21px; font-weight: 700; letter-spacing: 2px; color: var(--txt); margin-top: 7px; }

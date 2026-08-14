@@ -136,6 +136,7 @@
   const byId = new Map();
   let MOVES = [];                                   // move catalog {id,name,type,key} for SQUAD
   const moveById = new Map();
+  let NATIVE_DEX = {}, NATIVE_LOADED = false;       // per-region (gen 1..9) Set of natively-obtainable national dex nos
   let party = [null, null, null, null, null, null];
   let partyMoves = [[null,null,null,null],[null,null,null,null],[null,null,null,null],
                     [null,null,null,null],[null,null,null,null],[null,null,null,null]]; // 4 move ids per slot
@@ -896,7 +897,9 @@
   // v1 battle model: a DETERMINISTIC chain of 1v1 matchups off the type chart +
   // base stats — no turn engine, no move-power data. Fully reproducible, so a
   // given squad vs a given theater always scores the same across the 100 seeded
-  // opponent teams. Moves only set WHERE you can fight (the floor), not the math.
+  // opponent teams. A unit's assigned MOVES drive its attacking coverage (see
+  // coverageTypes/duelDamage); moves also set the eligibility floor. Per-move
+  // POWER + physical/special category remain v2 (needs a moves.json re-dump).
   // ==========================================================================
   const SIM_KEY = "pokemeter-sim-theater-v1";
   const SIM_N = 100;
@@ -937,35 +940,55 @@
   // ---- battle model: 1v1 matchup chain, deterministic ----------------------
   const mulberry32 = a => () => { a |= 0; a = a + 0x6D2B79F5 | 0; let t = Math.imul(a ^ a >>> 15, 1 | a); t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t; return ((t ^ t >>> 14) >>> 0) / 4294967296; };
 
-  // per-hit damage A→B: best STAB effectiveness × offense against the matching
-  // defense; returns ~0..62, and 0 when the defender is immune to all A's STABs
-  const duelDamage = (A, B) => {
+  // a fighter's COVERAGE = the types it can attack with. If the unit has a moveset
+  // (from SQUAD), coverage = its move types — so the moves you pick actually decide
+  // what it threatens. With no moves set it falls back to its STAB types, so teams
+  // you haven't touched behave exactly as before. (Per-move POWER + physical/special
+  // category still need the moves.json re-dump — that's the v2 depth.)
+  const coverageTypes = (u, moveIds) => {
+    const ts = [];
+    (moveIds || []).forEach(mid => { const m = mid != null ? moveById.get(mid) : null; if (m && !ts.includes(m.type)) ts.push(m.type); });
+    return ts.length ? ts : [u.t1, u.t2].filter(Boolean);
+  };
+
+  // per-hit damage fA→fB: the fighter's BEST coverage type this turn (effectiveness
+  // × STAB when the move type matches its own typing) against the matching defense.
+  // Returns ~0..62; 0 when every coverage type is walled/immune. Attacker offense is
+  // its dominant stat (atk vs spa); the opponent defends with the matching stat.
+  const duelDamage = (fA, fB) => {
+    const A = fA.u, B = fB.u;
     const phys = A.stats[1] >= A.stats[3];
     const off = phys ? A.stats[1] : A.stats[3];
     const defv = phys ? B.stats[2] : B.stats[4];
-    const stabs = [A.t1, A.t2].filter(Boolean);
-    const eff = stabs.length ? Math.max(...stabs.map(t => effOn(t, B.t1, B.t2))) : 1;
-    const raw = off * eff * 1.3;                     // 1.3 ≈ STAB
-    return 62 * raw / (raw + defv * 1.8);
+    const own = [A.t1, A.t2];
+    let best = 0;
+    for (const t of fA.cov) {
+      const eff = effOn(t, B.t1, B.t2);
+      const raw = off * eff * (own.includes(t) ? 1.5 : 1);   // STAB on own-type moves
+      const dmg = 62 * raw / (raw + defv * 1.8);
+      if (dmg > best) best = dmg;
+    }
+    return best;
   };
-  // resolve two teams as a 1v1 chain; attrition (hp) carries between duels
+  // resolve two teams (fighter arrays) as a 1v1 chain; attrition (hp) carries between
+  // duels. Each duel picks the best coverage move each side has vs the current foe.
   const battle = (teamA, teamB) => {
-    const A = teamA.map(m => ({ m, hp: m.stats[0] })), B = teamB.map(m => ({ m, hp: m.stats[0] }));
+    const A = teamA.map(f => ({ f, hp: f.u.stats[0] })), B = teamB.map(f => ({ f, hp: f.u.stats[0] }));
     let ia = 0, ib = 0, guard = 0; const log = [];
     while (ia < A.length && ib < B.length && guard++ < 300) {
       const a = A[ia], b = B[ib];
-      const dab = duelDamage(a.m, b.m), dba = duelDamage(b.m, a.m);
+      const dab = duelDamage(a.f, b.f), dba = duelDamage(b.f, a.f);
       if (dab <= 0 && dba <= 0) {                    // mutual immunity → bulk breaks the stalemate
-        if (a.m.bst >= b.m.bst) { log.push({ by: "A", att: a.m, fell: b.m }); ib++; }
-        else { log.push({ by: "B", att: b.m, fell: a.m }); ia++; }
+        if (a.f.u.bst >= b.f.u.bst) { log.push({ by: "A", att: a.f.u, fell: b.f.u }); ib++; }
+        else { log.push({ by: "B", att: b.f.u, fell: a.f.u }); ia++; }
         continue;
       }
       const strike = (att, dfn, dmg, side, adv) => {
         dfn.hp -= dmg;
-        if (dfn.hp <= 0) { log.push({ by: side, att: att.m, fell: dfn.m }); adv(); return true; }
+        if (dfn.hp <= 0) { log.push({ by: side, att: att.f.u, fell: dfn.f.u }); adv(); return true; }
         return false;
       };
-      const aFirst = a.m.stats[5] >= b.m.stats[5];
+      const aFirst = a.f.u.stats[5] >= b.f.u.stats[5];
       if (aFirst) { if (strike(a, b, dab, "A", () => ib++)) continue; strike(b, a, dba, "B", () => ia++); }
       else        { if (strike(b, a, dba, "B", () => ia++)) continue; strike(a, b, dab, "A", () => ib++); }
     }
@@ -1040,7 +1063,13 @@
 
   // run the full gauntlet (fixed per theater) + aggregate MVP / liability / threat
   const runSim = gen => {
-    const you = teamUnits();
+    // build the squad in slot order so each unit lines up with its moveset; `you`
+    // holds the units (for display), `youF` the fighters (unit + move coverage)
+    const you = [], youF = [];
+    for (let i = 0; i < 6; i++) {
+      const id = party[i]; if (id == null) continue;
+      const u = byId.get(id); you.push(u); youF.push({ u, cov: coverageTypes(u, partyMoves[i]) });
+    }
     if (!you.length) return null;
     const size = you.length, pool = opponentPool(gen, simLegends);
     if (pool.length < size) return null;
@@ -1048,8 +1077,8 @@
     const engs = []; let wins = 0;
     const koBy = {}, fellFirst = {}, threatBy = {}, typeOf = {};
     for (let i = 0; i < SIM_N; i++) {
-      const opp = pickTeam(pool, size, rnd);
-      const r = battle(you, opp);
+      const opp = pickTeam(pool, size, rnd);                                    // wild foes: no moveset → STAB coverage
+      const r = battle(youF, opp.map(u => ({ u, cov: [u.t1, u.t2].filter(Boolean) })));
       if (r.win) wins++;
       r.log.forEach(l => {
         typeOf[l.att.name] = l.att.t1; typeOf[l.fell.name] = l.fell.t1;
@@ -1065,6 +1094,7 @@
     const top = o => Object.keys(o).sort((x, y) => o[y] - o[x])[0] || null;
     const mvp = top(koBy), liability = top(fellFirst), threat = top(threatBy);
     return { gen, size, wins, losses: SIM_N - wins, engs, typeOf, legends: simLegends,
+      nonCanon: gen < computeEligibility().floor,
       mvp, mvpN: koBy[mvp] || 0, liability, liabilityN: fellFirst[liability] || 0,
       threat, threatN: threatBy[threat] || 0 };
   };
@@ -1078,9 +1108,32 @@
   let inspIdx = 0, inspLossOnly = false;
 
   const initSimTheater = E => {
+    // any region 1..9 is selectable now (off-limits ones run as NON-CANONICAL);
+    // a stored explicit pick is honored, otherwise default to the earliest legal
     let saved = 0; try { saved = +localStorage.getItem(SIM_KEY) || 0; } catch {}
-    if (E.eligible.includes(saved)) simTheater = saved;
-    else if (!E.eligible.includes(simTheater)) simTheater = E.floor;
+    if (saved >= 1 && saved <= 9) simTheater = saved;
+    else if (simTheater < 1 || simTheater > 9) simTheater = E.floor;
+  };
+
+  // NATIVE CATCHABILITY — can you catch a species in a region's own games, without
+  // transferring? Uses each region's Pokédex (data/nativedex.json, built from PokeAPI:
+  // the union of that region's games). Species-level (a regional form counts as its
+  // base species). Separate axis from ELIGIBILITY: a squad can be native-catchable in
+  // a region yet still non-canonical there (e.g. a move that region's era didn't have).
+  const nativeIn = (u, gen) => NATIVE_LOADED && !!NATIVE_DEX[gen] && NATIVE_DEX[gen].has(u.dexno);
+  const nativeBadge = (units, gen) => {
+    if (!NATIVE_LOADED) return "";
+    const n = units.filter(u => nativeIn(u, gen)).length, t = units.length;
+    const cls = n === 0 ? "none" : n === t ? "full" : "";
+    return `<span class="sim-th-nat ${cls}">&#9670;${n}/${t}</span>`;
+  };
+  const nativeLine = (units, gen) => {
+    if (!NATIVE_LOADED || !units.length) return "";
+    const region = REGIONS[gen - 1], missing = units.filter(u => !nativeIn(u, gen)), n = units.length - missing.length;
+    if (!missing.length)
+      return `<div class="sim-native full"><span class="sn-k">&#9670; NATIVE</span><span class="sn-v">catch all ${units.length} in ${region}</span></div>`;
+    const names = missing.map(u => u.name).slice(0, 3).join(", ") + (missing.length > 3 ? ` +${missing.length - 3}` : "");
+    return `<div class="sim-native"><span class="sn-k">&#9670; NATIVE ${n}/${units.length}</span><span class="sn-v">${region} can't catch <b>${names}</b></span></div>`;
   };
 
   const simUnitCell = (u, i) =>
@@ -1094,23 +1147,28 @@
       <p>NO SQUAD ON FILE<br><b>FILE UNITS</b> TO PROJECT COMBAT</p></div>`;
     const E = computeEligibility();
     initSimTheater(E);
+    const nonCanon = simTheater < E.floor;                 // an off-limits region is selected
     const grid = REGIONS.map((name, idx) => {
-      const g = idx + 1, legal = g >= E.floor, sel = legal && g === simTheater;
-      const cls = ["sim-th", legal ? "legal" : "locked", sel ? "sel" : ""].join(" ").trim();
-      const lock = legal ? "" : `<span class="sim-th-lock">▮</span><span class="sim-th-req">≥ GEN ${E.floor}</span>`;
-      return `<button class="${cls}" data-th="${g}" data-legal="${legal ? 1 : 0}">
-        <span class="sim-th-g">GEN ${g}</span><span class="sim-th-n">${name}</span>${lock}</button>`;
+      const g = idx + 1, legal = g >= E.floor, sel = g === simTheater;
+      const cls = ["sim-th", legal ? "legal" : "locked", sel ? "sel" : "", sel && !legal ? "warn" : ""]
+        .filter(Boolean).join(" ");
+      const lock = legal ? "" : `<span class="sim-th-lock" title="off-limits — squad can't legally exist here">▮</span>`;
+      return `<button class="${cls}" data-th="${g}">
+        <span class="sim-th-g">GEN ${g}</span><span class="sim-th-n">${name}</span>${nativeBadge(you, g)}${lock}</button>`;
     }).join("");
-    const bindTxt = E.bind
-      ? `EARLIEST THEATER <b>${REGIONS[E.floor - 1]} · GEN ${E.floor}</b> — floor set by <b>${E.bind.label}</b> <i>(${E.bind.detail})</i>`
-      : `<b>ALL THEATERS OPEN</b> — this squad is legal in every region`;
+    const note = nonCanon
+      ? `<div class="sim-elig-note warn"><span class="sim-note-ic">&#9888;</span><span><b>NON-CANONICAL · ${REGIONS[simTheater - 1]}</b> — this squad can't legally exist here${E.bind ? ` (<b>${E.bind.label}</b> ${E.bind.detail})` : ""}. Running a hypothetical.</span></div>`
+      : `<div class="sim-elig-note"><span class="sim-note-ic">&#9650;</span><span>${E.bind
+          ? `EARLIEST THEATER <b>${REGIONS[E.floor - 1]} · GEN ${E.floor}</b> — floor set by <b>${E.bind.label}</b> <i>(${E.bind.detail})</i>`
+          : `<b>ALL THEATERS OPEN</b> — this squad is legal in every region`}</span></div>`;
     return `<div class="sim-scr">
       <div class="sim-kicker"><span>SIM // COMBAT PROJECTION</span><span class="sim-kicker-r">${you.length} UNIT${you.length > 1 ? "S" : ""}</span></div>
       <div class="sim-team">${you.map(simUnitCell).join("")}</div>
       <div class="sim-elig">
         <div class="sim-elig-head"><h3>SELECT THEATER</h3><span class="sim-elig-cnt">${E.eligible.length} / 9 ELIGIBLE</span></div>
         <div class="sim-th-grid">${grid}</div>
-        <div class="sim-elig-note"><span class="sim-note-ic">▲</span><span>${bindTxt}</span></div>
+        ${nativeLine(you, simTheater)}
+        ${note}
       </div>
       <div class="sim-deploy-foot">
         <button class="sim-legtog ${simLegends ? "on" : ""}" data-act="legtog" aria-pressed="${simLegends}">
@@ -1118,8 +1176,8 @@
           <span class="sim-switch"><span class="sim-switch-knob"></span></span>
         </button>
         <div class="sim-deploy-action">
-          <div class="sim-dep-meta"><span class="sim-dep-n">${SIM_N}</span><span class="sim-dep-l">ENGAGEMENTS · ${REGIONS[simTheater - 1]}</span></div>
-          <button class="sim-run-btn sim-key" data-act="run">RUN SIM ▸</button>
+          <div class="sim-dep-meta"><span class="sim-dep-n">${SIM_N}</span><span class="sim-dep-l">${nonCanon ? "HYPOTHETICAL" : "ENGAGEMENTS"} · ${REGIONS[simTheater - 1]}</span></div>
+          <button class="sim-run-btn sim-key${nonCanon ? " warn" : ""}" data-act="run">RUN SIM ▸</button>
         </div>
       </div>
     </div>`;
@@ -1162,7 +1220,7 @@
       ? `<div class="sim-callout"><span class="sim-co-l">${lbl}</span><span class="sim-co-pip t-${r.typeOf[name] || "none"}"></span><b>${name}</b> <i>${extra}</i></div>` : "";
     return `<div class="sim-scr sim-results">
       <div class="sim-res-body">
-        <div class="sim-res-k">PROJECTION COMPLETE · ${REGIONS[r.gen - 1]} THEATER${r.legends ? "" : " · NO LEGENDS"}</div>
+        <div class="sim-res-k${r.nonCanon ? " warn" : ""}">${r.nonCanon ? "NON-CANONICAL" : "PROJECTION COMPLETE"} · ${REGIONS[r.gen - 1]} THEATER${r.legends ? "" : " · NO LEGENDS"}</div>
         <div class="sim-res-score">${r.wins}<small> /${SIM_N} WON</small></div>
         <div class="sim-res-tier">${tier.label}</div>
         <div class="sim-res-sub">${tier.sub}</div>
@@ -1242,8 +1300,7 @@
   const simClick = ev => {
     firstTouchUnlock();
     const th = ev.target.closest(".sim-th");
-    if (th) {
-      if (th.dataset.legal !== "1") { sfx.tick(); return; }
+    if (th) {                                        // any region is selectable; off-limits ones run non-canonically
       simTheater = +th.dataset.th; try { localStorage.setItem(SIM_KEY, simTheater); } catch {}
       sfx.select(); renderSim(); return;
     }
@@ -1502,6 +1559,12 @@
     try {
       const mraw = await (await fetch("data/moves.json")).json();
       MOVES = mraw.map(r => { const [id, name, type] = r; const m = { id, name, type, key: norm(name) }; moveById.set(id, m); return m; });
+    } catch {}
+    // per-region native-catch dex for the SIM theater readouts (non-fatal if missing)
+    try {
+      const nd = await (await fetch("data/nativedex.json")).json();
+      for (let g = 1; g <= 9; g++) NATIVE_DEX[g] = new Set(nd[g] || nd[String(g)] || []);
+      NATIVE_LOADED = true;
     } catch {}
     loadParty();
     loadMoves();
