@@ -320,6 +320,39 @@
        <span class="stat-val" data-v="${v}">0</span>
      </div>`;
 
+  // ---- per-unit defensive type profile (damage this unit TAKES by attacking type)
+  // reuses the same 18x18 CHART/effOn that drives the party coverage matrix, applied
+  // to one unit's typing. Groups by multiplier so the readout stays compact (no-scroll).
+  const MULT_TXT = { 4: "×4", 2: "×2", 0.5: "½", 0.25: "¼", 0: "×0" };
+  const effGroups = (u) => {
+    const weak = [], resist = [], immune = [];
+    for (const atk of TYPES) {
+      const m = effOn(atk, u.t1, u.t2);
+      if (m > 1) weak.push([atk, m]);
+      else if (m === 0) immune.push([atk, m]);
+      else if (m < 1) resist.push([atk, m]);
+    }
+    weak.sort((a, b) => b[1] - a[1]);      // x4 before x2
+    resist.sort((a, b) => a[1] - b[1]);    // 1/4 before 1/2
+    return { weak, resist, immune };
+  };
+  const echip = ([t, m]) =>
+    `<span class="tchip echip t-${t}">${TYPE_ABBR[t]}${m === 0 ? "" : `<b class="emul">${MULT_TXT[m]}</b>`}</span>`;
+  const effRow = (lbl, cls, arr) =>
+    `<div class="eff-row">
+       <span class="eff-lbl ${cls}">${lbl}</span>
+       <div class="eff-chips">${arr.length ? arr.map(echip).join("") : `<span class="eff-none">—</span>`}</div>
+     </div>`;
+  const effBlock = (u) => {
+    const g = effGroups(u);
+    return `<div class="eff">
+        <div class="eff-head">DEFENSIVE&nbsp;PROFILE <span class="eff-sub">DAMAGE&nbsp;TAKEN&nbsp;BY&nbsp;TYPE</span></div>
+        ${effRow("WEAK", "weak", g.weak)}
+        ${effRow("RESIST", "resist", g.resist)}
+        ${effRow("IMMUNE", "immune", g.immune)}
+      </div>`;
+  };
+
   const renderConsole = () => {
     const el = $("#console");
     const id = activeSlot >= 0 ? party[activeSlot] : null;
@@ -351,8 +384,8 @@
              <div class="stat-bar"><div class="stat-fill" data-w="${Math.min(100, u.bst / 720 * 100).toFixed(1)}"></div></div>
              <span class="stat-val" data-v="${u.bst}">0</span>
            </div>
-           <div class="stat-track-note">BASE STATS // ANALYSIS MODULE PENDING &mdash; v0.1</div>
          </div>
+         ${effBlock(u)}
        </div>`;
     // cascade the gauges in from 0 and count the numbers up alongside them
     requestAnimationFrame(() => requestAnimationFrame(() => {
@@ -362,6 +395,9 @@
       });
       el.querySelectorAll(".stat-val").forEach((s, i) =>
         setTimeout(() => countUp(s, +s.dataset.v, 460), prefersReduced ? 0 : i * 55));
+      // deal the defensive-profile chips in after the gauges have started
+      if (!prefersReduced)
+        el.querySelectorAll(".echip").forEach((c, i) => { c.style.animationDelay = (150 + i * 24) + "ms"; });
     }));
   };
 

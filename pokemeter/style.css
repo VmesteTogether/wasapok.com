@@ -343,13 +343,14 @@ body { display: flex; align-items: center; justify-content: center; }
 .con-empty b { color: var(--cyan); }
 
 /* unit readout */
-.unit { display: flex; flex-direction: column; gap: 14px; animation: fadeUp 0.3s ease both; }
+.unit { display: flex; flex-direction: column; gap: 16px; min-height: 100%;
+  justify-content: center; animation: fadeUp 0.3s ease both; }
 @keyframes fadeUp { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
 .unit-top { display: flex; gap: 14px; align-items: stretch; }
 
 /* specimen cell — bracketed, scanlined frame for the sprite */
 .specimen {
-  flex: 0 0 auto; width: 108px; height: 108px; position: relative;
+  flex: 0 0 auto; width: 122px; height: 122px; position: relative;
   background: radial-gradient(120% 120% at 50% 30%, rgba(53,230,255,0.10), rgba(6,9,12,0.9));
   border: 1px solid var(--hair);
   clip-path: polygon(12px 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%, 0 12px);
@@ -359,7 +360,7 @@ body { display: flex; align-items: center; justify-content: center; }
   content: ""; position: absolute; inset: 0; pointer-events: none;
   background: repeating-linear-gradient(0deg, transparent 0 3px, rgba(53,230,255,0.06) 3px 4px);
 }
-.specimen img { width: 92px; height: 92px; object-fit: contain; image-rendering: pixelated;
+.specimen img { width: 104px; height: 104px; object-fit: contain; image-rendering: pixelated;
   filter: drop-shadow(0 4px 6px rgba(0,0,0,0.7)); animation: specimenIn 0.55s cubic-bezier(.3,1,.4,1) both; }
 @keyframes specimenIn {
   0%   { opacity: 0; transform: translateY(8px) scale(.5); }
@@ -396,12 +397,12 @@ body { display: flex; align-items: center; justify-content: center; }
 }
 
 /* stat gauges */
-.stats { display: flex; flex-direction: column; gap: 7px; }
+.stats { display: flex; flex-direction: column; gap: 10px; }
 .stat-row { display: grid; grid-template-columns: 34px 1fr 30px; align-items: center; gap: 8px; }
-.stat-lbl { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1px; color: var(--txt-2); }
-.stat-val { font-family: var(--f-mono); font-size: 11px; color: var(--cyan); text-align: right; }
+.stat-lbl { font-family: var(--f-mono); font-size: 10px; letter-spacing: 1px; color: var(--txt-2); }
+.stat-val { font-family: var(--f-mono); font-size: 12px; color: var(--cyan); text-align: right; }
 .stat-bar {
-  position: relative; height: 9px;
+  position: relative; height: 13px;
   background: rgba(255,255,255,0.05);
   border: 1px solid var(--hair-soft);
   /* segmented: repeating notches so it reads as a discrete gauge */
@@ -419,11 +420,30 @@ body { display: flex; align-items: center; justify-content: center; }
 }
 .stat-row.bst { margin-top: 2px; grid-template-columns: 34px 1fr auto; }
 .stat-row.bst .stat-lbl { color: var(--cyan); }
-.stat-row.bst .stat-val { font-size: 13px; color: var(--txt); }
-.stat-track-note {
-  font-family: var(--f-mono); font-size: 8px; letter-spacing: 1px; color: var(--txt-3);
-  text-align: center; margin-top: 4px;
+.stat-row.bst .stat-val { font-size: 14px; color: var(--txt); }
+/* per-unit defensive type profile — weak / resist / immune, grouped & compact.
+   Reuses the .tchip type-coloured chips; semantic red/green match the coverage matrix. */
+.eff { display: flex; flex-direction: column; gap: 8px; margin-top: 2px; }
+.eff-head {
+  display: flex; align-items: baseline; gap: 8px;
+  font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1.5px; color: var(--cyan-dim);
+  padding-bottom: 6px; border-bottom: 1px solid var(--hair-soft);
 }
+.eff-sub { font-size: 8px; letter-spacing: 1px; color: var(--txt-3); margin-left: auto; }
+.eff-row { display: grid; grid-template-columns: 48px 1fr; align-items: start; gap: 8px; min-height: 18px; }
+.eff-lbl { font-family: var(--f-mono); font-size: 9.5px; letter-spacing: 1px; padding-top: 4px; }
+.eff-lbl.weak   { color: #ff7a5f; }
+.eff-lbl.resist { color: #62d67a; }
+.eff-lbl.immune { color: var(--txt-2); }
+.eff-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.echip {
+  display: inline-flex; align-items: center;
+  font-size: 9.5px; padding: 4px 8px;
+  animation: echipIn 0.28s cubic-bezier(.34,1.4,.5,1) both;
+}
+.echip .emul { font-size: 10px; font-weight: 700; margin-left: 3px; letter-spacing: 0; }
+.eff-none { font-family: var(--f-mono); font-size: 12px; color: var(--txt-3); padding-top: 3px; }
+@keyframes echipIn { from { opacity: 0; transform: translateY(4px) scale(.9); } to { opacity: 1; transform: none; } }
 
 /* ---------- tactical search overlay ---------------------------------------- */
 .search {
@@ -987,6 +1007,7 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   .cap-in.reorient-flip { animation: none; }
   .console.screen-enter, #phone.view-home .home.screen-enter { animation: none; }
   .cap-sprite, .specimen img { animation: none; opacity: 1; }
+  .echip { animation: none; }
   #phone.skin-plastic .console::before, #phone.skin-plastic.view-home .home::before,
   #phone.skin-plastic.view-sim #sim::before { animation: none; }
 }
