@@ -137,6 +137,7 @@
   let MOVES = [];                                   // move catalog {id,name,type,key} for SQUAD
   const moveById = new Map();
   let NATIVE_DEX = {}, NATIVE_LOADED = false;       // per-region (gen 1..9) Set of natively-obtainable national dex nos
+  const LEARN = {}; let LEARN_LOADED = false;       // per-dex-id Set of learnable move ids (real learnsets, w/ prevo inheritance)
   let party = [null, null, null, null, null, null];
   let partyMoves = [[null,null,null,null],[null,null,null,null],[null,null,null,null],
                     [null,null,null,null],[null,null,null,null],[null,null,null,null]]; // 4 move ids per slot
@@ -849,6 +850,8 @@
     moveTarget = k;
     $("#movepickSlot").textContent = "MOVE 0" + (k + 1);
     const input = $("#moveInput");
+    const fu = byId.get(party[squadFocus]);
+    input.placeholder = fu ? `SEARCH ${fu.name.toUpperCase()} MOVES` : "SEARCH MOVES";
     input.value = ""; $("#moveClear").classList.remove("show");
     renderMoveResults("");
     const el = $("#movepick"); el.classList.add("open"); el.setAttribute("aria-hidden", "false");
@@ -862,12 +865,15 @@
   const renderMoveResults = (q) => {
     const nq = norm(q);
     const own = new Set((partyMoves[squadFocus] || []).filter((x, k) => x != null && k !== moveTarget));
-    let list = MOVES.filter(m => !nq || m.key.includes(nq));
+    const pid = party[squadFocus];
+    const learn = (LEARN_LOADED && pid != null) ? LEARN[pid] : null;    // learnable move ids (undefined/null → allow all)
+    const pool = learn ? MOVES.filter(m => learn.has(m.id)) : MOVES;    // restrict to what this unit can actually learn
+    let list = pool.filter(m => !nq || m.key.includes(nq));
     const total = list.length;
     if (nq) list.sort((a, b) => (b.key.startsWith(nq) - a.key.startsWith(nq)) || a.name.localeCompare(b.name));
     const shown = list.slice(0, MOVE_CAP);
     const res = $("#moveResults");
-    if (!total) { res.innerHTML = `<div class="results-foot" style="padding-top:34px">NO MOVES MATCH QUERY</div>`; $("#moveResultsFoot").textContent = ""; return; }
+    if (!total) { res.innerHTML = `<div class="results-foot" style="padding-top:34px">${learn ? "NOT IN THIS UNIT'S LEARNSET" : "NO MOVES MATCH QUERY"}</div>`; $("#moveResultsFoot").textContent = ""; return; }
     res.innerHTML = shown.map(m =>
       `<div class="res-row mv-row${own.has(m.id) ? " dup" : ""}" data-mvid="${m.id}">
          <span class="mv-typedot t-${m.type}"></span>
@@ -876,7 +882,7 @@
          </div>
        </div>`).join("");
     res.scrollTop = 0;
-    $("#moveResultsFoot").innerHTML = `SHOWING <b>${shown.length}</b> / <b>${total}</b> MOVES`;
+    $("#moveResultsFoot").innerHTML = `SHOWING <b>${shown.length}</b> / <b>${total}</b>${learn ? " LEARNABLE" : ""} MOVES`;
   };
   const assignMove = (moveId) => {
     if (moveTarget < 0 || party[squadFocus] == null) return;
@@ -1568,6 +1574,13 @@
       const nd = await (await fetch("data/nativedex.json")).json();
       for (let g = 1; g <= 9; g++) NATIVE_DEX[g] = new Set(nd[g] || nd[String(g)] || []);
       NATIVE_LOADED = true;
+    } catch {}
+    // real per-species learnsets (with prevo inheritance) so the move picker only
+    // offers moves a unit can actually learn (non-fatal — missing → all moves allowed)
+    try {
+      const lraw = await (await fetch("data/learnsets.json")).json();
+      for (const k in lraw) LEARN[k] = new Set(lraw[k]);
+      LEARN_LOADED = true;
     } catch {}
     loadParty();
     loadMoves();
