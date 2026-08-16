@@ -144,6 +144,8 @@
   let activeSlot = -1;   // slot whose readout is shown in the console
   let targetSlot = -1;   // slot currently being filled from search
   let genFilter = 0;     // 0 = ALL, else 1..9
+  let dragActive = false;  // a slot drag-reorder is in progress (pauses parallax)
+  let justDragged = false; // suppress the click that follows a drag (so it isn't a tap)
 
   // ---------------------------------------------------------------- audio ---
   // A small tactile synth: shaped two-part voices (soft triangles through a
@@ -252,6 +254,7 @@
 
     // desktop: pointer drives the base target
     phone.addEventListener("pointermove", e => {
+      if (dragActive) return;                    // hold the grid still while dragging a slot
       const r = phone.getBoundingClientRect();
       bx = ((e.clientX - r.left) / r.width  - 0.5) * 2 * MAX;
       by = ((e.clientY - r.top)  / r.height - 0.5) * 2 * MAX;
@@ -1404,6 +1407,102 @@
     sfx.add();
   };
 
+  // -------------------------------------------------- drag-reorder slots ----
+  // Pick up a filled slot and drop it on another to SWAP. party[] and partyMoves[]
+  // swap in LOCKSTEP, so a unit's moveset (and everything derived from it) travels
+  // with it. Works in TEAM/HOME (.cap in #loadout) + SQUAD (.hero in #squadGrid); a
+  // small movement threshold keeps taps behaving exactly as before.
+  const swapSlots = (a, b) => {
+    if (a === b || a < 0 || b < 0 || a > 5 || b > 5) return;
+    if (party[a] == null && party[b] == null) return;
+    [party[a], party[b]] = [party[b], party[a]];
+    [partyMoves[a], partyMoves[b]] = [partyMoves[b], partyMoves[a]];
+    if (activeSlot === a) activeSlot = b; else if (activeSlot === b) activeSlot = a;   // readout follows the mon
+    if (squadFocus === a) squadFocus = b; else if (squadFocus === b) squadFocus = a;
+    saveParty(); saveMoves();
+    renderLoadout(); renderConsole(); renderSquad(); refreshDiagnostic();
+    sfx.select();
+  };
+
+  // FLIP the two affected tiles into their new homes after a swap (dragged one from
+  // the pointer, displaced one from the target slot)
+  const flipSwap = (container, itemSel, slotKey, fromSlot, toSlot, srcRect, toRect, scale) => {
+    if (prefersReduced) return;
+    const items = [...container.querySelectorAll(itemSel)];
+    const at = s => items.find(el => +el.dataset[slotKey] === s);
+    const play = (el, oldR) => {
+      if (!el || !oldR) return;
+      const nr = el.getBoundingClientRect();
+      const dx = (oldR.left - nr.left) / scale, dy = (oldR.top - nr.top) / scale;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) return;
+      el.animate([{ transform: `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)` }, { transform: "none" }],
+        { duration: 240, easing: "cubic-bezier(.3,.85,.3,1)" });
+    };
+    play(at(toSlot), srcRect);     // dragged mon: from the pointer -> its new slot
+    play(at(fromSlot), toRect);    // displaced mon: from the target slot -> the vacated one
+  };
+
+  const initDragReorder = (container, itemSel, slotKey) => {
+    const DRAG_MIN = 6;
+    let armed = false, dragging = false, fromSlot = -1, srcEl = null;
+    let startX = 0, startY = 0, scale = 1, srcRect = null;
+    const slotOf = el => +el.dataset[slotKey];
+    const items = () => [...container.querySelectorAll(itemSel)];
+    const elAt = s => items().find(el => slotOf(el) === s);
+    const slotUnder = (x, y) => {
+      for (const el of items()) {
+        if (el === srcEl) continue;
+        const r = el.getBoundingClientRect();
+        if (x >= r.left && x <= r.right && y >= r.top && y <= r.bottom) return slotOf(el);
+      }
+      return -1;
+    };
+    const clearTargets = () => container.querySelectorAll(".drop-target").forEach(el => el.classList.remove("drop-target"));
+    const finish = (commit, x, y) => {
+      if (dragging) {
+        const toSlot = commit ? slotUnder(x, y) : -1;
+        clearTargets();
+        if (srcEl) { srcEl.classList.remove("dragging"); srcEl.style.transform = ""; srcEl.style.zIndex = ""; }
+        dragActive = false; justDragged = true;
+        if (toSlot >= 0 && toSlot !== fromSlot) {
+          const toRect = elAt(toSlot) ? elAt(toSlot).getBoundingClientRect() : null;
+          swapSlots(fromSlot, toSlot);
+          flipSwap(container, itemSel, slotKey, fromSlot, toSlot, srcRect, toRect, scale);
+        }
+      }
+      armed = false; dragging = false; srcEl = null; fromSlot = -1;
+    };
+    container.addEventListener("pointerdown", e => {
+      justDragged = false;
+      if (e.button != null && e.button > 0) return;
+      if (e.target.closest(".cap-x, .mslot-x, button")) return;   // let the clear-x etc. tap through
+      const item = e.target.closest(itemSel); if (!item) return;
+      const slot = slotOf(item);
+      if (party[slot] == null) return;                            // nothing to pick up
+      armed = true; fromSlot = slot; srcEl = item; startX = e.clientX; startY = e.clientY;
+    });
+    container.addEventListener("pointermove", e => {
+      if (!armed) return;
+      if (!dragging) {
+        if (Math.hypot(e.clientX - startX, e.clientY - startY) < DRAG_MIN) return;
+        dragging = true; dragActive = true;
+        const cr = container.getBoundingClientRect();
+        scale = container.offsetWidth ? cr.width / container.offsetWidth : 1;
+        srcRect = srcEl.getBoundingClientRect();
+        srcEl.classList.add("dragging");
+        try { container.setPointerCapture(e.pointerId); } catch {}
+        firstTouchUnlock();
+      }
+      const dx = (e.clientX - startX) / scale, dy = (e.clientY - startY) / scale;
+      srcEl.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px) scale(1.09)`;
+      clearTargets();
+      const t = slotUnder(e.clientX, e.clientY);
+      if (t >= 0 && t !== fromSlot) { const tel = elAt(t); if (tel) tel.classList.add("drop-target"); }
+    });
+    container.addEventListener("pointerup", e => finish(true, e.clientX, e.clientY));
+    container.addEventListener("pointercancel", () => finish(false));
+  };
+
   // ------------------------------------------------------------- search -----
   const searchEl = () => $("#search");
   const openSearch = (slot) => {
@@ -1472,6 +1571,7 @@
     // loadout: add (empty) / select (filled) / clear (x). In HOME view the strip
     // is the right rail — a filled unit hops back to TEAM so you can read it.
     $("#loadout").addEventListener("click", e => {
+      if (justDragged) { justDragged = false; return; }   // this "click" was the end of a drag
       firstTouchUnlock();
       const x = e.target.closest(".cap-x");
       if (x) { e.stopPropagation(); clearSlot(+x.dataset.x); return; }
@@ -1482,6 +1582,7 @@
       if (view === "home") applyView("team");
       selectSlot(i);
     });
+    initDragReorder($("#loadout"), ".cap", "slot");
 
     // console: swap
     $("#console").addEventListener("click", e => {
@@ -1497,12 +1598,14 @@
 
     // squad: tap a hero tile to focus it (empty tile -> add a unit there)
     $("#squadGrid").addEventListener("click", e => {
+      if (justDragged) { justDragged = false; return; }   // drag end, not a tap
       firstTouchUnlock();
       const h = e.target.closest(".hero"); if (!h) return;
       const i = +h.dataset.hi;
       if (party[i] == null) { openSearch(i); return; }
       if (i !== squadFocus) { squadFocus = i; renderSquad(); sfx.select(); }
     });
+    initDragReorder($("#squadGrid"), ".hero", "hi");
     // squad move bar: set a move (opens picker) / clear a move (x)
     $("#moveBar").addEventListener("click", e => {
       firstTouchUnlock();

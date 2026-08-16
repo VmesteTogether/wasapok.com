@@ -678,6 +678,19 @@ body.standalone .fit-toggle { display: none; }
    and on the home->team exit the loadout otherwise drops below the console. */
 #phone.reorienting .cap { z-index: 30; }
 
+/* drag-to-reorder: pick a filled slot up and drop it on another to swap. touch-action
+   none so a touch-drag doesn't scroll; the lifted tile follows the pointer (inline
+   transform), the hovered slot glows as a drop target. */
+.cap, .hero { touch-action: none; }
+.cap.filled, .hero.filled { cursor: grab; }
+.cap.dragging, .hero.dragging {
+  z-index: 50; cursor: grabbing; transition: none;
+  filter: brightness(1.06) drop-shadow(0 10px 16px rgba(0,0,0,0.6));
+}
+.cap.drop-target, .hero.drop-target {
+  filter: brightness(1.2) drop-shadow(0 0 7px rgba(120,232,255,0.85));
+}
+
 /* (B) the incoming screen doesn't snap in — it holds hidden through the caps'
    GATHER (~.31s) then rises + fades in as they DEAL out, so nothing is ever
    revealed under the flying caps and the panel lands with them. */
