@@ -1626,7 +1626,7 @@
     updateCount();
     updateStrip();
     wireEvents();
-    initTactile();
+    if (!prefersReduced) initTactile();     // motion parallax off when reduced-motion is requested
     clockTick();
     // restore last skin + view (no animation on cold boot)
     let savedSkin = "hud";
