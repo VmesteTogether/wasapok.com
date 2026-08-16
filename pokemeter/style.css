@@ -701,6 +701,7 @@ body.standalone .fit-toggle { display: none; }
   will-change: left, top, width, height;
 }
 
+
 /* ---------- HOME view layout: rail on the right, tiles fill the left -------- */
 .home { display: none; }
 #phone.view-home .console { display: none; }

@@ -663,64 +663,61 @@
     };
   };
 
-  // reorient the six caps between the top strip and the right rail as a two-phase
-  // MECHANISM instead of a diagonal flight:
-  //   (1) GATHER — every cap slides to the shared top-right corner into a fanned stack
-  //   (2) DEAL   — they extend out one-by-one along the new axis (down the rail /
-  //                left along the strip)
-  // Caps only ever ride the top edge + right edge, so nothing crosses the central
-  // screen; the panel (revealScreen) stays hidden through the gather and fades in as
-  // they deal. FLIP-measured: a cap's untransformed box IS its TARGET slot, so every
-  // waypoint is a translate from there; `.reorienting` keeps caps above the panel.
+  // EDGE CONVEYOR: the six caps ride an L-shaped track — along the TOP edge and down
+  // the RIGHT edge — rounding the top-right corner in a coordinated flow (a chain on a
+  // belt). No hub, nothing hides, nothing piles. Each cap moves along the SAME track
+  // from its source arc-position to its target arc-position over one shared timeline,
+  // so they round the bend one after another yet start & finish together. Symmetric —
+  // heading home the strip pours down into the rail; heading to team the rail feeds up
+  // and spreads across the strip. FLIP-measured: a cap's untransformed box is its
+  // TARGET slot, so every waypoint is a translate from there; caps only ride the top +
+  // right edges, never crossing the center screen. `.reorienting` lifts them above it.
   let reorientTimer = 0, reorientToken = 0;
   const reorient = (caps, first) => {
     if (!first || prefersReduced) return;
     const phone = $("#phone");
     const token = ++reorientToken;
     clearTimeout(reorientTimer);
-    caps.forEach(c => { (c.__anims || []).forEach(a => a.cancel()); c.__anims = []; });  // drop any in-flight
+    caps.forEach(c => { (c.__anims || []).forEach(a => a.cancel()); c.__anims = []; });
     phone.classList.add("reorienting");
 
-    const n = caps.length;
-    const last = caps.map(c => c.getBoundingClientRect());
-    // stack / pivot corner = the target slot nearest the top-right:
-    //   rail (home) -> the TOP cap (0);  strip (team) -> the RIGHT cap (n-1)
-    const anchor = view === "home" ? 0 : n - 1;
-    const cx = last[anchor].left, cy = last[anchor].top;
+    const last = caps.map(c => c.getBoundingClientRect());   // untransformed box = TARGET slot
+    const ccx = r => r.left + r.width / 2, ccy = r => r.top + r.height / 2;
+    const toHome = view === "home";
+    // the shared track corner = the rail column x at the strip row y (top-right)
+    const railX  = toHome ? ccx(last[0]) : ccx(first[0]);
+    const stripY = toHome ? ccy(first[0]) : ccy(last[0]);
 
-    const DG = 250, GST = 12, DD = 260, DST = 52;   // gather (near-together) / deal (one-by-one)
-    const gatherAnims = caps.map((c, i) => {
-      const f = first[i], l = last[i], dist = Math.abs(i - anchor), fan = dist * 2;
-      c.style.transformOrigin = "top left";
-      c.__dist = dist;
-      const startT = `translate(${(f.left - l.left).toFixed(1)}px, ${(f.top - l.top).toFixed(1)}px) scale(${(f.width / l.width) || 1}, ${(f.height / l.height) || 1})`;
-      // fanned stack leans toward the deal axis (down for the rail, left for the strip)
-      c.__cornerT = view === "home"
-        ? `translate(${(cx - l.left).toFixed(1)}px, ${(cy - l.top + fan).toFixed(1)}px) scale(1)`
-        : `translate(${(cx - l.left - fan).toFixed(1)}px, ${(cy - l.top).toFixed(1)}px) scale(1)`;
-      const a = c.animate([{ transform: startT }, { transform: c.__cornerT }],
-        { duration: DG, delay: i * GST, easing: "cubic-bezier(.5,0,.4,1)", fill: "both" });
+    // matched to the screen morph so the caps SETTLE before the panel reveals (the
+    // morph runs .42s and reveals the new screen at ~440ms after the swap — see
+    // beginScreenMorph). Running longer let the settled screen overlap still-moving caps.
+    const DURATION = 420;
+    caps.forEach((c, i) => {
+      const f = first[i], l = last[i], lcx = ccx(l), lcy = ccy(l);
+      c.style.transformOrigin = "center";
+      // waypoints (transforms relative to the target box): source -> corner -> target.
+      // source & corner share the top row (horizontal leg); corner & target share the
+      // rail column (vertical leg) -> the motion hugs the two edges exactly.
+      const startTx = ccx(f) - lcx, startTy = ccy(f) - lcy;
+      const cornerTx = railX - lcx, cornerTy = stripY - lcy;
+      // signed arc-length along the track (0 at the corner) -> when each cap rounds it
+      const aStart = toHome ? (ccx(f) - railX) : (ccy(f) - stripY);
+      const aEnd   = toHome ? (ccy(l) - stripY) : (ccx(l) - railX);
+      const pc = Math.max(0.05, Math.min(0.95, aStart / (aStart - aEnd) || 0.5));
+      const a = c.animate([
+        { transform: `translate(${startTx.toFixed(1)}px, ${startTy.toFixed(1)}px)`, easing: "cubic-bezier(.42,0,.5,1)" },
+        { transform: `translate(${cornerTx.toFixed(1)}px, ${cornerTy.toFixed(1)}px)`, offset: +pc.toFixed(3), easing: "cubic-bezier(.5,0,.35,1)" },
+        { transform: "translate(0px, 0px)" },
+      ], { duration: DURATION, easing: "linear", fill: "both" });
       c.__anims.push(a);
-      return a;
     });
 
-    // once the whole stack has gathered, deal each cap out to its slot in turn
-    Promise.all(gatherAnims.map(a => a.finished)).then(() => {
-      if (token !== reorientToken) return;
-      caps.forEach(c => {
-        const d = c.animate([{ transform: c.__cornerT }, { transform: "none" }],
-          { duration: DD, delay: c.__dist * DST, easing: "cubic-bezier(.2,.85,.3,1)", fill: "both" });
-        c.__anims.push(d);
-      });
-    }).catch(() => {});
-
-    const total = DG + (n - 1) * GST + DD + (n - 1) * DST + 90;
+    const total = DURATION + 120;
     reorientTimer = setTimeout(() => {
       if (token !== reorientToken) return;
       caps.forEach(c => {
-        (c.__anims || []).forEach(a => a.cancel());
-        c.__anims = []; c.style.transform = c.style.transformOrigin = "";
-        delete c.__cornerT; delete c.__dist;
+        (c.__anims || []).forEach(a => a.cancel()); c.__anims = [];
+        c.style.transform = c.style.transformOrigin = "";
       });
       phone.classList.remove("reorienting");
     }, total);
