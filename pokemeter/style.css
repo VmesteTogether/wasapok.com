@@ -1194,7 +1194,7 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   z-index: 3; pointer-events: none;
   background-image:
     linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.02) 12%, transparent 22%),   /* fresnel — top edge catches light */
-    radial-gradient(80% 106% at calc(50% + var(--px) * -11) calc(40% + var(--py) * -9),           /* moving specular glare */
+    radial-gradient(80% 106% at calc(50% + var(--px) * -5) calc(40% + var(--py) * -4),            /* moving specular glare — big, but gentle drift */
       var(--scr-glare-hi), var(--scr-glare) 42%, transparent 74%);
   background-repeat: no-repeat;
   background-size: 100% 100%, 100% 100%;
