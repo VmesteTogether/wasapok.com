@@ -1142,6 +1142,11 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   --scr-bloom: rgba(53,230,255,.075);   /* cyan backlight bloom   (C) */
   --scr-vig:   rgba(0,0,0,.46);         /* edge vignette          (C) */
   --scr-glass: rgba(255,255,255,.14);   /* glass sheen peak       (B) */
+  /* living glass (B): a soft specular glare that SLIDES with tilt (--px/--py) over the
+     always-on surface grain, so the screen reads as glass, not flat vector. */
+  --scr-glare:    rgba(226,238,255,.085);  /* broad ambient reflection (cool AR tint) */
+  --scr-glare-hi: rgba(255,255,255,.15);   /* sharp specular hotspot core */
+  --scr-grain: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.8' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3CfeComponentTransfer%3E%3CfeFuncA type='linear' slope='0.09'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='150' height='150' filter='url(%23g)'/%3E%3C/svg%3E");
 }
 #phone.skin-plastic .console,
 #phone.skin-plastic.view-home .home,
@@ -1157,12 +1162,17 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   border-right-color: var(--shell-lo);
   border-bottom-color: var(--shell-lo);   /* dark lower edges */
   border-radius: 15px;
-  /* (C) texture baked into the surface — scanlines · bloom · vignette · glass */
-  background:
+  /* (C) texture baked into the surface — grain · scanlines · bloom · vignette. The
+     grain lives here (always-on surface micro-texture); reflections + revealed grime
+     are the ::after above. */
+  background-image:
+    var(--scr-grain),
     repeating-linear-gradient(0deg, var(--scr-scan) 0 1px, transparent 1px 3px),
     radial-gradient(120% 95% at 50% 40%, var(--scr-bloom), transparent 58%),
     radial-gradient(135% 120% at 50% 50%, transparent 54%, var(--scr-vig) 100%),
     linear-gradient(180deg, var(--screen-2), var(--screen));
+  background-repeat: repeat, repeat, no-repeat, no-repeat, no-repeat;
+  background-size: 150px 150px, auto, auto, auto, auto;
   box-shadow:
     0 0 0 1px var(--shell-edge),           /* deep seam around the lip */
     0 2px 5px rgba(0,0,0,.32),             /* lip drops onto the shell */
@@ -1170,7 +1180,9 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
     inset 0 8px 18px rgba(0,0,0,.7),       /* recessed glass — overhang shadow */
     inset 0 -3px 9px rgba(0,0,0,.32);
 }
-/* (B) glass cover — a sheen over the surface (subtle, weighted to the corner) */
+/* (B) glass cover — a soft specular glare that slides across the surface as the phone
+   tilts (--px/--py), plus a fresnel highlight at the top edge. Sits over the always-on
+   grain (baked into the screen's own background). */
 #phone.skin-plastic .console::after,
 #phone.skin-plastic.view-home .home::after,
 #phone.skin-plastic .search-panel::after,
@@ -1180,9 +1192,13 @@ td.cx0  { color: #7f9dff; background: rgba(90,90,180,0.22); }
   content: ""; display: block; position: absolute; inset: 0;
   width: auto; height: auto; border: 0; border-radius: 10px;
   z-index: 3; pointer-events: none;
-  background:
-    linear-gradient(133deg, var(--scr-glass) 0%, rgba(255,255,255,.04) 13%, transparent 30%),
-    radial-gradient(140% 80% at 50% -14%, rgba(255,255,255,.10), transparent 55%);
+  background-image:
+    linear-gradient(180deg, rgba(255,255,255,.10), rgba(255,255,255,.02) 12%, transparent 22%),   /* fresnel — top edge catches light */
+    radial-gradient(80% 106% at calc(50% + var(--px) * -11) calc(40% + var(--py) * -9),           /* moving specular glare */
+      var(--scr-glare-hi), var(--scr-glare) 42%, transparent 74%);
+  background-repeat: no-repeat;
+  background-size: 100% 100%, 100% 100%;
+  background-position: 0 0, 0 0;
 }
 /* (C) power LED — the "device is on" tell, on the two persistent screens */
 #phone.skin-plastic .console::before,
