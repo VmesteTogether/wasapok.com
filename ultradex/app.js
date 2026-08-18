@@ -331,40 +331,25 @@
     `<div class="eff-row"><span class="eff-lbl ${cls}">${lbl}</span>
        <div class="eff-chips">${arr.length ? arr.map(echip).join("") : `<span class="eff-none">—</span>`}</div></div>`;
 
-  const renderScreen = (animate = true) => {
-    const el = $("#screen");
-    const u = focusId != null ? byId.get(focusId) : null;
-    if (!u) {
-      el.innerHTML = `<div class="scr-empty"><div class="ce-ring"></div>
-        <p>SPIN THE WHEEL<br><b>TO SCAN A UNIT</b></p></div>`;
-      return;
-    }
+  // full dex-entry markup for a unit (rendered into the INFO SHEET on OK)
+  const unitReadoutHTML = (u) => {
     const slot = slotOfId(u.id);
     const g = effGroups(u);
     const badge = slot >= 0
       ? `<span class="scr-team on">◉ ON TEAM · ${slot === 0 ? "LEAD" : "SLOT 0" + (slot + 1)}</span>`
       : `<span class="scr-team">◎ NOT ON TEAM</span>`;
-    // native-catchability strip: nine region cells lit where the species is catchable natively
     let catchStrip = "";
     if (NATIVE_LOADED) {
-      const cnt = nativeCount(u);
-      const cells = [];
+      const cnt = nativeCount(u); const cells = [];
       for (let gi = 1; gi <= 9; gi++)
         cells.push(`<span class="cat-cell ${nativeIn(u, gi) ? "on" : ""}" title="${REGIONS[gi - 1]}">${ROMAN[gi - 1]}</span>`);
       const tag = cnt === 0 ? "TRANSFER" : cnt === 9 ? "×9 ALL" : "×" + cnt;
-      catchStrip = `<div class="catch">
-          <span class="catch-k">◆ CATCH</span>
-          <div class="catch-cells">${cells.join("")}</div>
-          <span class="catch-n ${cnt === 0 ? "none" : ""}">${tag}</span>
-        </div>`;
+      catchStrip = `<div class="catch"><span class="catch-k">◆ CATCH</span><div class="catch-cells">${cells.join("")}</div><span class="catch-n ${cnt === 0 ? "none" : ""}">${tag}</span></div>`;
     }
-    el.innerHTML =
-      `<div class="unit">
+    return `<div class="unit">
          <div class="unit-top">
-           <div class="specimen">
-             <span class="spec-no">№${String(u.dexno).padStart(3, "0")}</span>
-             <img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="${u.name}">
-           </div>
+           <div class="specimen"><span class="spec-no">№${String(u.dexno).padStart(3, "0")}</span>
+             <img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="${u.name}"></div>
            <div class="unit-meta">
              <div class="unit-dex">NAT&nbsp;№${String(u.dexno).padStart(4, "0")} · ${REGIONS[u.gen - 1]}</div>
              <div class="unit-name">${u.name}</div>
@@ -387,7 +372,9 @@
            ${effRow("IMMUNE", "immune", g.immune)}
          </div>
        </div>`;
-    if (!animate || prefersReduced) {              // light paint — no cascade (used while scrolling slowly)
+  };
+  const animateReadout = (el) => {
+    if (prefersReduced) {
       el.querySelectorAll(".stat-fill").forEach(f => { f.style.transition = "none"; f.style.width = f.dataset.w + "%"; });
       el.querySelectorAll(".stat-val").forEach(s => { s.textContent = s.dataset.v; });
       return;
@@ -397,6 +384,21 @@
       el.querySelectorAll(".stat-val").forEach((s, i) => setTimeout(() => countUp(s, +s.dataset.v, 420), i * 45));
       el.querySelectorAll(".echip").forEach((c, i) => { c.style.animationDelay = (120 + i * 22) + "ms"; });
     }));
+  };
+
+  // the SMALLER screen — the running unit's live nameplate (name / no / origin / types)
+  const renderNameplate = () => {
+    const el = $("#nameplate");
+    const u = focusId != null ? byId.get(focusId) : null;
+    if (!u) { el.innerHTML = `<div class="np-empty">SPIN&nbsp;·&nbsp;BROWSE&nbsp;THE&nbsp;NATIONAL&nbsp;DEX</div>`; return; }
+    const slot = slotOfId(u.id);
+    el.innerHTML =
+      `<div class="np-no">№${String(u.dexno).padStart(4, "0")}</div>
+       <div class="np-mid">
+         <div class="np-name">${u.name}</div>
+         <div class="np-sub">GEN&nbsp;${ROMAN[u.gen - 1]} · ${REGIONS[u.gen - 1]}${slot >= 0 ? ` · <b>${slot === 0 ? "LEAD" : "SLOT 0" + (slot + 1)}</b>` : ""}</div>
+       </div>
+       <div class="np-types">${typeChip(u.t1)}${typeChip(u.t2)}</div>`;
   };
 
   // ================================================================ RAILS ===
@@ -466,66 +468,64 @@
   const refreshTeam = () => { renderTeamRack(); renderRails(); updateCount(); if ($("#matrix").classList.contains("open")) openMatrix(); };
 
   // ================================================================ WHEEL ====
-  // The reel is a windowed drum: `pos` is a float dex-list index; a small pool of
-  // row nodes is recycled + transformed around it (curved via rotateX). Physics:
-  // drag -> pos, release -> inertia -> spring-snap to the nearest integer.
-  const ROW = 42;                       // px per entry
-  const HALF = 4;                       // rows above / below the centre
-  const POOL = HALF * 2 + 3;            // recycled row nodes
+  // The THEATRE is a windowed horizontal filmstrip: `pos` is a float dex-list
+  // index; a recycled pool of sprite frames is transformed around it (a carousel
+  // curve via rotateY). Physics: drag/jog -> pos, release -> inertia -> spring-snap
+  // to the nearest integer. The centre frame is the "running" unit under focus.
+  const FRAME = 80;                     // px between adjacent sprite centres
+  const HALF = 3;                       // frames each side of centre
+  const POOL = HALF * 2 + 3;            // recycled sprite frames
   let list = [];                        // filtered dex list (unit objects)
   let pos = 0, vel = 0, raf = 0, dragging = false;
-  let focusId = null;                   // the unit under the centre band
-  const reelWin = () => $("#reelWindow");
+  let focusId = null;                   // the unit running through centre stage
+  const theaterWin = () => $("#theaterWindow");
   let pool = [];
 
   const maxPos = () => Math.max(0, list.length - 1);
   const clampPos = p => clamp(p, 0, maxPos());
 
   const buildPool = () => {
-    const win = reelWin(); win.innerHTML = "";
+    const win = theaterWin(); win.innerHTML = "";
     pool = [];
     for (let i = 0; i < POOL; i++) {
-      const r = document.createElement("div");
-      r.className = "reel-row"; r.dataset.idx = "-999";
-      r.innerHTML = `<span class="rr-no"></span><img class="rr-img" alt="">
-        <span class="rr-name"></span><span class="rr-types"></span>`;
-      win.appendChild(r); pool.push(r);
+      const f = document.createElement("div");
+      f.className = "tframe"; f.dataset.idx = "-999";
+      f.innerHTML = `<span class="tf-glow"></span><img class="tf-img" alt="">`;
+      win.appendChild(f); pool.push(f);
     }
   };
 
-  const paintRow = (r, idx) => {
+  const paintFrame = (f, idx) => {
     const u = list[idx];
-    r.dataset.idx = String(idx);
-    if (!u) { r.style.display = "none"; return; }
-    r.style.display = "";
-    r.querySelector(".rr-no").textContent = "№" + String(u.dexno).padStart(3, "0");
-    const img = r.querySelector(".rr-img");
+    f.dataset.idx = String(idx);
+    if (!u) { f.style.display = "none"; return; }
+    f.style.display = "";
+    const img = f.querySelector(".tf-img");
     img.src = SPRITE(u.id); img.setAttribute("onerror", SPRITE_FALLBACK(u.dexno));
-    r.querySelector(".rr-name").textContent = u.name;
-    r.querySelector(".rr-types").innerHTML = typeDots(u);
-    r.classList.toggle("on-team", slotOfId(u.id) >= 0);
-    r.dataset.id = String(u.id);
+    f.querySelector(".tf-glow").className = "tf-glow t-" + u.t1;
+    f.classList.toggle("on-team", slotOfId(u.id) >= 0);
+    f.dataset.id = String(u.id);
   };
 
-  const renderReel = () => {
+  const renderTheater = () => {
     const center = Math.round(pos);
     for (let k = -Math.floor(POOL / 2); k <= Math.ceil(POOL / 2) - 1; k++) {
       const idx = center + k;
-      const r = pool[k + Math.floor(POOL / 2)];
-      if (!r) continue;
-      if (+r.dataset.idx !== idx) paintRow(r, idx);
-      if (idx < 0 || idx >= list.length) { r.style.display = "none"; continue; }
-      r.style.display = "";
-      const d = idx - pos;                        // signed distance from centre in rows
-      const y = d * ROW;
-      const ang = clamp(d * 17, -74, 74);         // curve of the drum
+      const f = pool[k + Math.floor(POOL / 2)];
+      if (!f) continue;
+      if (+f.dataset.idx !== idx) paintFrame(f, idx);
+      if (idx < 0 || idx >= list.length) { f.style.display = "none"; continue; }
+      f.style.display = "";
+      const d = idx - pos;                         // signed distance from centre stage
+      const x = d * FRAME;
+      const ang = clamp(d * -26, -62, 62);         // carousel turn
       const dist = Math.abs(d);
-      const scale = clamp(1 - dist * 0.055, 0.72, 1);
-      const op = clamp(1 - dist * 0.24, 0.06, 1);
-      r.style.transform = `translate(-50%,-50%) translateY(${y.toFixed(1)}px) rotateX(${(-ang).toFixed(1)}deg) scale(${scale.toFixed(3)})`;
-      r.style.opacity = op.toFixed(3);
-      r.style.zIndex = String(100 - Math.round(dist * 10));
-      r.classList.toggle("center", Math.abs(d) < 0.5);
+      const scale = clamp(1 - dist * 0.19, 0.46, 1);
+      const op = clamp(1 - dist * 0.32, 0.05, 1);
+      f.style.transform = `translate(-50%,-50%) translateX(${x.toFixed(1)}px) rotateY(${ang.toFixed(1)}deg) scale(${scale.toFixed(3)})`;
+      f.style.opacity = op.toFixed(3);
+      f.style.zIndex = String(100 - Math.round(dist * 10));
+      f.classList.toggle("center", Math.abs(d) < 0.5);
     }
   };
 
@@ -543,21 +543,24 @@
       ? `<b>${String(idx + 1)}</b> / ${list.length}${u ? ` · ${u.name.toUpperCase()}` : ""}`
       : `NO UNITS MATCH FILTER`;
   };
-  // resolve the crossing: update focus id + foot always; paint the (heavy) centre
-  // screen only when settled (full, animated) or when moving slowly (light) —
-  // skipped during a fast inertia flick so the drum stays buttery.
-  const onCross = (settled) => {
+  const setTheaterNo = () => {
+    const u = list[clampPos(Math.round(pos))];
+    $("#theaterNo").textContent = u ? "№" + String(u.dexno).padStart(3, "0") : "";
+  };
+  // resolve a crossing: swap the running unit -> nameplate + foot + dex no. Cheap;
+  // the heavy full readout only builds when you press OK (openInfo).
+  const onCross = () => {
     const c = clampPos(Math.round(pos));
     if (c !== lastFocus) {
-      lastFocus = c; sfx.tick(); updateFoot();
+      lastFocus = c; sfx.tick();
       setFocusId(list[c] ? list[c].id : null);
-      if (!settled && Math.abs(vel) < 0.11 && snapTarget == null) renderScreen(false);
+      renderNameplate(); updateFoot(); setTheaterNo();
+      if (infoOpen()) openInfo(true);            // keep an open info sheet in sync while stepping
     }
-    if (settled) renderScreen(true);
   };
 
   const tick = () => {
-    if (dragging) { renderReel(); onCross(false); raf = requestAnimationFrame(tick); return; }
+    if (dragging) { renderTheater(); onCross(); raf = requestAnimationFrame(tick); return; }
     if (snapTarget != null) {
       const d = snapTarget - pos;
       if (Math.abs(d) > 0.002) pos += d * 0.22; else { pos = snapTarget; snapTarget = null; }
@@ -568,9 +571,9 @@
       vel = 0;
       const target = clampPos(Math.round(pos)), d = target - pos;
       if (Math.abs(d) > 0.0015) pos += d * 0.24;
-      else { pos = target; renderReel(); onCross(true); raf = 0; return; }
+      else { pos = target; renderTheater(); onCross(); raf = 0; return; }
     }
-    renderReel(); onCross(false);
+    renderTheater(); onCross();
     raf = requestAnimationFrame(tick);
   };
   const kick = () => { if (!raf) raf = requestAnimationFrame(tick); };
@@ -578,51 +581,47 @@
   const resolveNow = () => {
     const idx = clampPos(Math.round(pos)); lastFocus = idx; snapTarget = null; vel = 0;
     setFocusId(list[idx] ? list[idx].id : null);
-    renderReel(); updateFoot(); renderScreen(true);
+    renderTheater(); renderNameplate(); updateFoot(); setTheaterNo();
   };
   const snapTo = (idx, quiet) => {
     idx = clampPos(idx); vel = 0;
-    if (prefersReduced) { pos = idx; snapTarget = null; renderReel(); onCross(true); if (!quiet) sfx.detent(); return; }
+    if (prefersReduced) { pos = idx; snapTarget = null; lastFocus = -999; renderTheater(); onCross(); if (!quiet) sfx.detent(); return; }
     snapTarget = idx; kick();
     if (!quiet) sfx.detent();
   };
   const nudge = (delta) => { snapTo(clampPos((snapTarget != null ? snapTarget : Math.round(pos)) + delta), true); sfx.detent(); };
 
-  // ---- reel drag ----
-  const initReelDrag = () => {
-    const reel = $("#reel");
-    let startY = 0, startPos = 0, lastY = 0, lastT = 0, moved = false, downId = null, startX = 0;
-    reel.addEventListener("pointerdown", e => {
+  // ---- theatre drag (horizontal filmstrip) + tap-to-open-info ----
+  const initTheaterDrag = () => {
+    const th = $("#theater");
+    let startX = 0, startY = 0, startPos = 0, lastX = 0, lastT = 0, moved = false;
+    th.addEventListener("pointerdown", e => {
       firstTouchUnlock();
       dragging = true; vel = 0; moved = false;
-      startY = lastY = e.clientY; startX = e.clientX; startPos = pos; lastT = performance.now();
-      downId = e.target.closest(".reel-row");
-      try { reel.setPointerCapture(e.pointerId); } catch {}
+      startX = lastX = e.clientX; startY = e.clientY; startPos = pos; lastT = performance.now();
+      try { th.setPointerCapture(e.pointerId); } catch {}
       kick();
     });
-    reel.addEventListener("pointermove", e => {
+    th.addEventListener("pointermove", e => {
       if (!dragging) return;
-      const dy = e.clientY - startY;
-      if (Math.abs(dy) > 4 || Math.abs(e.clientX - startX) > 4) moved = true;
-      pos = clampPos(startPos - dy / ROW);
+      const dx = e.clientX - startX;
+      if (Math.abs(dx) > 4 || Math.abs(e.clientY - startY) > 4) moved = true;
+      pos = clampPos(startPos - dx / FRAME);
       const now = performance.now(), dt = Math.max(1, now - lastT);
-      vel = -((e.clientY - lastY) / ROW) / dt * 16;    // per-frame index velocity
+      vel = -((e.clientX - lastX) / FRAME) / dt * 16;   // per-frame index velocity
       vel = clamp(vel, -2.4, 2.4);
-      lastY = e.clientY; lastT = now;
-      renderReel();
+      lastX = e.clientX; lastT = now;
+      renderTheater();
     });
-    const end = e => {
+    const end = () => {
       if (!dragging) return;
       dragging = false;
-      if (!moved && downId) {                         // a tap on a row -> select it
-        const idx = +downId.dataset.idx;
-        if (!Number.isNaN(idx)) { vel = 0; snapTo(idx, true); sfx.select(); }
-      }
+      if (!moved) openInfo();                          // a clean tap on the stage -> open info
       kick();
     };
-    reel.addEventListener("pointerup", end);
-    reel.addEventListener("pointercancel", () => { dragging = false; kick(); });
-    reel.addEventListener("wheel", e => {
+    th.addEventListener("pointerup", end);
+    th.addEventListener("pointercancel", () => { dragging = false; kick(); });
+    th.addEventListener("wheel", e => {
       e.preventDefault(); firstTouchUnlock();
       nudge(e.deltaY > 0 ? 1 : -1);
     }, { passive: false });
@@ -659,11 +658,11 @@
     // poles
     $$(".cw-pole", ring).forEach(p => p.addEventListener("click", e => {
       e.stopPropagation(); firstTouchUnlock();
-      const pole = p.dataset.pole;
-      nudge(pole === "up" ? -1 : pole === "down" ? 1 : pole === "left" ? -10 : 10);
+      const pole = p.dataset.pole;                     // ◂ ▸ step one · ▲ ▼ jump ten
+      nudge(pole === "left" ? -1 : pole === "right" ? 1 : pole === "up" ? -10 : 10);
     }));
-    // centre FILE
-    $("#cwCenter").addEventListener("click", () => { firstTouchUnlock(); fileFocus(); });
+    // centre OK -> open the running unit's full info sheet
+    $("#cwCenter").addEventListener("click", () => { firstTouchUnlock(); openInfo(); });
   };
 
   // ================================================================ FILTER ===
@@ -724,6 +723,25 @@
     party[i] = null; saveParty(); resetSlotMoves(i);
     refreshTeam(); sfx.clear();
   };
+  // ---- INFO SHEET (opened by OK / tapping the theatre) ----
+  let infoUnitId = -1;
+  const infoOpen = () => $("#infoSheet").classList.contains("open");
+  const openInfo = (refresh) => {
+    if (focusId == null) { sfx.err(); return; }
+    const u = byId.get(focusId); if (!u) return;
+    infoUnitId = u.id;
+    $("#infoBody").innerHTML = unitReadoutHTML(u);
+    const slot = slotOfId(u.id);
+    $("#infoFoot").innerHTML = slot >= 0
+      ? `<button class="is-btn danger" data-is="release">⌫ RELEASE ${slot === 0 ? "LEAD" : "0" + (slot + 1)}</button>
+         <button class="is-btn" data-is="close">CLOSE</button>`
+      : `<button class="is-btn key" data-is="file">＋ FILE TO TEAM</button>
+         <button class="is-btn" data-is="close">CLOSE</button>`;
+    animateReadout($("#infoBody"));
+    if (!refresh) { const el = $("#infoSheet"); el.classList.add("open"); el.setAttribute("aria-hidden", "false"); sfx.open(); }
+  };
+  const closeInfo = () => { const el = $("#infoSheet"); el.classList.remove("open"); el.setAttribute("aria-hidden", "true"); };
+
   const makeLead = (i) => {
     if (i === 0 || party[i] == null) return;
     [party[0], party[i]] = [party[i], party[0]];
@@ -900,7 +918,7 @@
 
   // ============================================================== EVENTS =====
   const wireEvents = () => {
-    initReelDrag(); initClickWheel(); initTeamRack();
+    initTheaterDrag(); initClickWheel(); initTeamRack();
 
     // function rack
     $("#funcRack").addEventListener("click", e => {
@@ -960,6 +978,18 @@
     $("#matrixClose").addEventListener("click", closeMatrix);
     $("#matrix").addEventListener("click", e => { if (e.target === $("#matrix")) closeMatrix(); });
 
+    // info sheet (OK / theatre tap): file / release / close
+    $("#infoClose").addEventListener("click", closeInfo);
+    $("#infoSheet").addEventListener("click", e => {
+      if (e.target === $("#infoSheet")) { closeInfo(); return; }
+      const b = e.target.closest("[data-is]"); if (!b) return;
+      firstTouchUnlock();
+      const a = b.dataset.is;
+      if (a === "close") closeInfo();
+      else if (a === "file") { fileFocus(); openInfo(true); }
+      else if (a === "release") { const s = slotOfId(infoUnitId); if (s >= 0) releaseSlot(s); openInfo(true); }
+    });
+
     // keyboard: arrows scrub the wheel
     addEventListener("keydown", e => {
       if (document.activeElement && /INPUT|TEXTAREA/.test(document.activeElement.tagName)) return;
@@ -967,7 +997,9 @@
       else if (e.key === "ArrowUp") { nudge(-1); e.preventDefault(); }
       else if (e.key === "PageDown") { nudge(10); e.preventDefault(); }
       else if (e.key === "PageUp") { nudge(-10); e.preventDefault(); }
-      else if (e.key === "Enter") { fileFocus(); }
+      else if (e.key === "Enter") { openInfo(); }
+      else if (e.key === " ") { fileFocus(); e.preventDefault(); }
+      else if (e.key === "Escape") { closeInfo(); closeMatrix(); closeCapMenu(); closeMovePick(); }
     });
   };
 
@@ -982,7 +1014,7 @@
   async function boot() {
     let raw;
     try { raw = await (await fetch("data/pokedex.json")).json(); }
-    catch { $("#screen").innerHTML = `<div class="scr-empty"><p style="color:var(--amber)">DATABASE OFFLINE<br>COULD NOT LOAD DEX</p></div>`; return; }
+    catch { $("#nameplate").innerHTML = `<div class="np-empty" style="color:var(--amber)">DATABASE OFFLINE · COULD NOT LOAD DEX</div>`; return; }
     DEX = raw.map(r => {
       const [id, ident, t1, t2, stats, dexno] = r;
       const u = { id, ident, name: prettify(ident), key: norm(ident), t1, t2: t2 || null,
@@ -1039,6 +1071,7 @@
       if (m === "cap" && party[0] != null) setTimeout(() => openCapMenu(0), 150);
       else if (m === "move" && party[0] != null) { openCapMenu(0); setTimeout(() => openMovePick(0), 220); }
       else if (m === "rate") setTimeout(openMatrix, 150);
+      else if (m === "info") setTimeout(() => openInfo(), 150);
     } catch {}
   }
 

@@ -84,11 +84,10 @@
       </div>
     </section>
 
-    <!-- MAIN CONSOLE ROW — a central Pokédex "screen" flanked by two parallel
-         mini-screens (readiness rail · coverage rail). The centre is limited to
-         the focused unit's dex data / stats / info; everything else lives on the
-         rails and the caps. -->
-    <section class="cockpit" aria-label="Dex readout and diagnostic rails">
+    <!-- MAIN CONSOLE ROW — the BIG screen is a sprite THEATRE: species run through
+         it as you spin the wheel. It is flanked by two parallel mini-screens
+         (readiness rail · coverage rail). Pressing OK opens the full info sheet. -->
+    <section class="cockpit" aria-label="Sprite theatre and diagnostic rails">
 
       <!-- LEFT parallel screen: live team readiness (rating) -->
       <button class="rail rail-l" id="railL" type="button" aria-label="Team readiness — tap to expand">
@@ -99,8 +98,14 @@
         <span class="rail-foot" id="rdyItems"></span>
       </button>
 
-      <!-- CENTRE: the Pokédex readout screen (dex/stats/info ONLY) -->
-      <div class="screen" id="screen" aria-live="polite"></div>
+      <!-- CENTRE: the sprite theatre — a horizontal filmstrip the wheel drives.
+           Tap it (or press OK) to open the running unit's full info sheet. -->
+      <div class="theater" id="theater" aria-label="Pokédex theatre — spin to browse, OK for info">
+        <div class="theater-window" id="theaterWindow"></div>
+        <div class="theater-center" aria-hidden="true"></div>
+        <span class="theater-no" id="theaterNo"></span>
+        <span class="theater-ok" aria-hidden="true">TAP · OK ▸ INFO</span>
+      </div>
 
       <!-- RIGHT parallel screen: type coverage read (offense/defense pips) -->
       <button class="rail rail-r" id="railR" type="button" aria-label="Team coverage — tap to expand">
@@ -109,6 +114,9 @@
         <span class="rail-foot" id="covFoot"></span>
       </button>
     </section>
+
+    <!-- SMALLER SCREEN — the running unit's nameplate (name / no / origin / types) -->
+    <section class="nameplate" id="nameplate" aria-live="polite"></section>
 
     <!-- DEX WHEEL — the Gen-IV pokédex browse organ: a curved scroll REEL you flick,
          driven (or nudged) by a physical iPod-style CLICK WHEEL. Search + gen filter
@@ -121,33 +129,39 @@
       </div>
       <div class="dw-genrow" id="genChips" aria-label="Filter by generation"></div>
 
-      <div class="dw-body">
-        <!-- the reel (curved drum) -->
-        <div class="reel" id="reel" aria-label="Dex list — drag to scroll">
-          <div class="reel-window" id="reelWindow"></div>
-          <div class="reel-selband" aria-hidden="true"></div>
-          <div class="reel-shade top" aria-hidden="true"></div>
-          <div class="reel-shade bot" aria-hidden="true"></div>
-        </div>
-
-        <!-- the click wheel (jog dial) -->
-        <div class="clickwheel" id="clickWheel" aria-label="Click wheel — spin to scroll">
+      <!-- the click wheel (jog dial) — spins species through the theatre above;
+           OK opens the running unit's info. Poles: ◂ ▸ step one, ▲ ▼ jump ten. -->
+      <div class="dw-wheelrow">
+        <div class="dw-side dw-side-l"><span class="dws-k">SPIN</span><span class="dws-v">BROWSE</span></div>
+        <div class="clickwheel" id="clickWheel" aria-label="Click wheel — spin to browse">
           <div class="cw-ring" id="cwRing">
-            <span class="cw-pole cw-up" data-pole="up" aria-hidden="true">▲</span>
-            <span class="cw-pole cw-down" data-pole="down" aria-hidden="true">▼</span>
-            <span class="cw-pole cw-left" data-pole="left" aria-hidden="true">◂10</span>
-            <span class="cw-pole cw-right" data-pole="right" aria-hidden="true">10▸</span>
+            <span class="cw-pole cw-up" data-pole="up" aria-hidden="true">▲10</span>
+            <span class="cw-pole cw-down" data-pole="down" aria-hidden="true">▼10</span>
+            <span class="cw-pole cw-left" data-pole="left" aria-hidden="true">◂</span>
+            <span class="cw-pole cw-right" data-pole="right" aria-hidden="true">▸</span>
           </div>
-          <button class="cw-center" id="cwCenter" type="button" aria-label="File focused unit to team">
-            <span class="cwc-plus">＋</span><span class="cwc-lbl">FILE</span>
+          <button class="cw-center" id="cwCenter" type="button" aria-label="Open info for the running unit">
+            <span class="cwc-plus">◉</span><span class="cwc-lbl">OK</span>
           </button>
         </div>
+        <div class="dw-side dw-side-r"><span class="dws-k">OK</span><span class="dws-v">INFO</span></div>
       </div>
       <div class="dw-foot" id="reelFoot"></div>
     </section>
 
     <!-- drawn home indicator — browser preview only, hidden in standalone -->
     <div class="home-indicator"></div>
+
+    <!-- INFO SHEET — opens on OK / tapping the theatre. The running unit's full dex
+         entry (stats · defensive profile · native catch) with a file/release action. -->
+    <div class="infosheet overlay" id="infoSheet" aria-hidden="true">
+      <div class="is-panel">
+        <div class="is-grip" aria-hidden="true"></div>
+        <button class="is-close" id="infoClose" type="button" aria-label="Close">&times;</button>
+        <div class="is-body" id="infoBody"></div>
+        <div class="is-foot" id="infoFoot"></div>
+      </div>
+    </div>
 
     <!-- CAPSULE MENU — the long-press popover on a team unit. Runs "parallel" to the
          screen: release / make-lead / inspect + the full 4-move loadout editor. -->
