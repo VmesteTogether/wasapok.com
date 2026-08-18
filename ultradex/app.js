@@ -263,6 +263,7 @@
   let MOVES = [];
   const moveById = new Map();
   const LEARN = {}; let LEARN_LOADED = false;
+  let NATIVE_DEX = {}, NATIVE_LOADED = false;      // per-region (gen 1..9) Set of natively-catchable national dex nos
   let party = [null, null, null, null, null, null];
   let partyMoves = [[null,null,null,null],[null,null,null,null],[null,null,null,null],
                     [null,null,null,null],[null,null,null,null],[null,null,null,null]];
@@ -290,6 +291,9 @@
   // ------------------------------------------------------ small renderers ---
   const typeChip = t => t ? `<span class="tchip t-${t}">${t}</span>` : "";
   const typeDots = u => `<i class="t-${u.t1}"></i>${u.t2 ? `<i class="t-${u.t2}"></i>` : ""}`;
+  // native catchability: can this species be caught in a region's own games (no transfer)?
+  const nativeIn = (u, gen) => NATIVE_LOADED && !!NATIVE_DEX[gen] && NATIVE_DEX[gen].has(u.dexno);
+  const nativeCount = u => { let n = 0; for (let g = 1; g <= 9; g++) if (nativeIn(u, g)) n++; return n; };
   const slotOfId = id => party.indexOf(id);
   const updateCount = () => { $("#partyCount").textContent = party.filter(x => x != null).length; };
 
@@ -340,6 +344,20 @@
     const badge = slot >= 0
       ? `<span class="scr-team on">◉ ON TEAM · ${slot === 0 ? "LEAD" : "SLOT 0" + (slot + 1)}</span>`
       : `<span class="scr-team">◎ NOT ON TEAM</span>`;
+    // native-catchability strip: nine region cells lit where the species is catchable natively
+    let catchStrip = "";
+    if (NATIVE_LOADED) {
+      const cnt = nativeCount(u);
+      const cells = [];
+      for (let gi = 1; gi <= 9; gi++)
+        cells.push(`<span class="cat-cell ${nativeIn(u, gi) ? "on" : ""}" title="${REGIONS[gi - 1]}">${ROMAN[gi - 1]}</span>`);
+      const tag = cnt === 0 ? "TRANSFER" : cnt === 9 ? "×9 ALL" : "×" + cnt;
+      catchStrip = `<div class="catch">
+          <span class="catch-k">◆ CATCH</span>
+          <div class="catch-cells">${cells.join("")}</div>
+          <span class="catch-n ${cnt === 0 ? "none" : ""}">${tag}</span>
+        </div>`;
+    }
     el.innerHTML =
       `<div class="unit">
          <div class="unit-top">
@@ -355,6 +373,7 @@
              ${badge}
            </div>
          </div>
+         ${catchStrip}
          <div class="stats">
            ${u.stats.map((v, i) => statRow(STAT_LBL[i], v, 200)).join("")}
            <div class="stat-row bst"><span class="stat-lbl">BST</span>
@@ -977,6 +996,12 @@
     try {
       const lraw = await (await fetch("data/learnsets.json")).json();
       for (const k in lraw) LEARN[k] = new Set(lraw[k]); LEARN_LOADED = true;
+    } catch {}
+    // per-region native-catch dex (which regions can catch a species without transfer)
+    try {
+      const nd = await (await fetch("data/nativedex.json")).json();
+      for (let g = 1; g <= 9; g++) NATIVE_DEX[g] = new Set(nd[g] || nd[String(g)] || []);
+      NATIVE_LOADED = true;
     } catch {}
 
     loadParty(); loadMoves();
