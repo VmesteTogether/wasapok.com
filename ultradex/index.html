@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>Ultradex</title>
+<!-- Single-screen field Pokédex + team console. Descends from Pokemeter (same
+     cyan-on-gunmetal chassis, type engine + data) but NEVER switches modes: the
+     Pokédex readout, the six-unit team rack, the parallel rating/coverage rails
+     and the Gen-IV scroll/click wheel all co-exist on ONE screen. Y2K gadget
+     dress by default. Installable (Share -> Add to Home Screen). -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Ultradex">
+<meta name="theme-color" content="#070a0e">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='42' fill='none' stroke='%2335e6ff' stroke-width='7'/><circle cx='50' cy='50' r='15' fill='none' stroke='%2335e6ff' stroke-width='7'/><line x1='8' y1='50' x2='92' y2='50' stroke='%2335e6ff' stroke-width='7'/></svg>">
+</head>
+<body>
+
+<div class="phone-wrap" id="phoneWrap">
+  <div class="phone" id="phone">
+
+    <!-- ambient HUD layers (behind everything) -->
+    <div class="amb grid-bg" aria-hidden="true"></div>
+    <div class="amb hexwash" aria-hidden="true"></div>
+    <div class="amb scanlines" aria-hidden="true"></div>
+    <div class="amb vignette" aria-hidden="true"></div>
+    <div class="amb sweep" aria-hidden="true"></div>
+
+    <!-- drawn status bar — browser preview only, hidden in standalone -->
+    <div class="statusbar">
+      <span id="clock">9:41</span>
+      <span class="sb-right">
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 12 L11.2 8.8 A4.4 4.4 0 0 0 5.8 8.8 Z"/><path d="M3.6 6.2 A7.4 7.4 0 0 1 13.4 6.2 L15.4 3.9 A10.4 10.4 0 0 0 1.6 3.9 Z" opacity="0.95"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="currentColor" stroke-opacity="0.5"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><path d="M25.5 4.5 V8.5 A2.2 2.2 0 0 0 25.5 4.5Z" fill="currentColor" fill-opacity="0.5"/></svg>
+      </span>
+    </div>
+
+    <!-- HUD header -->
+    <header class="hud-head">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div class="brand-text">
+          <h1>ULTRADEX</h1>
+          <span class="brand-sub">NATIONAL&nbsp;DEX&nbsp;·&nbsp;TEAM&nbsp;CONSOLE&nbsp;·&nbsp;mk.IV</span>
+        </div>
+      </div>
+      <div class="hud-head-right">
+        <button class="skin-toggle" id="skinToggle" type="button" aria-pressed="false" aria-label="Cycle shell theme" title="Cycle shell theme">
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"><rect x="2.5" y="2.5" width="9" height="9" rx="2.6"/><path d="M6 15.5 h7 a2.5 2.5 0 0 0 2.5-2.5 V6"/></svg>
+        </button>
+        <div class="sysreadout" title="Party count">
+          <span class="sys-dot" id="readyLed" aria-hidden="true"></span>
+          <span class="sys-label">PARTY</span>
+          <span class="sys-count"><b id="partyCount">0</b>/6</span>
+        </div>
+      </div>
+    </header>
+
+    <!-- TEAM RACK — the six party capsules live at the very top, always present.
+         Tap empty -> file the wheel's focused unit · tap filled -> inspect it ·
+         LONG-PRESS filled -> open its capsule menu (moves / lead / release) ·
+         drag to reorder. Trailing function capsules add utility without a mode. -->
+    <section class="teamzone" aria-label="Party team rack">
+      <div class="tz-lead">
+        <span class="tz-tab">TEAM</span>
+        <span class="tz-hint" id="tzHint">HOLD&nbsp;A&nbsp;UNIT&nbsp;FOR&nbsp;MOVES</span>
+      </div>
+      <div class="team-rack" id="teamRack" aria-label="Six unit slots"></div>
+      <div class="func-rack" id="funcRack" aria-label="Console functions">
+        <button class="fcap" data-fn="file" type="button" title="File focused unit to team">
+          <span class="fcap-ico">▸</span><span class="fcap-lbl">FILE</span></button>
+        <button class="fcap" data-fn="random" type="button" title="Jump the dex to a random unit">
+          <span class="fcap-ico">⚄</span><span class="fcap-lbl">RAND</span></button>
+        <button class="fcap" data-fn="rate" type="button" title="Expand the full team rating / coverage matrix">
+          <span class="fcap-ico">◈</span><span class="fcap-lbl">RATE</span></button>
+      </div>
+    </section>
+
+    <!-- MAIN CONSOLE ROW — a central Pokédex "screen" flanked by two parallel
+         mini-screens (readiness rail · coverage rail). The centre is limited to
+         the focused unit's dex data / stats / info; everything else lives on the
+         rails and the caps. -->
+    <section class="cockpit" aria-label="Dex readout and diagnostic rails">
+
+      <!-- LEFT parallel screen: live team readiness (rating) -->
+      <button class="rail rail-l" id="railL" type="button" aria-label="Team readiness — tap to expand">
+        <span class="rail-cap">RDY</span>
+        <div class="rail-gauge"><div class="rail-gauge-fill" id="rdyFill"></div>
+          <span class="rail-gauge-val" id="rdyScore">--</span></div>
+        <span class="rail-tier" id="rdyTier">—</span>
+        <span class="rail-foot" id="rdyItems"></span>
+      </button>
+
+      <!-- CENTRE: the Pokédex readout screen (dex/stats/info ONLY) -->
+      <div class="screen" id="screen" aria-live="polite"></div>
+
+      <!-- RIGHT parallel screen: type coverage read (offense/defense pips) -->
+      <button class="rail rail-r" id="railR" type="button" aria-label="Team coverage — tap to expand">
+        <span class="rail-cap">COV</span>
+        <div class="cov-strip" id="covStrip" aria-hidden="true"></div>
+        <span class="rail-foot" id="covFoot"></span>
+      </button>
+    </section>
+
+    <!-- DEX WHEEL — the Gen-IV pokédex browse organ: a curved scroll REEL you flick,
+         driven (or nudged) by a physical iPod-style CLICK WHEEL. Search + gen filter
+         narrow the reel in place. This is the only way to travel the dex — no pages. -->
+    <section class="dexwheel" aria-label="Pokédex scroll wheel">
+      <div class="dw-search">
+        <span class="dw-si-glyph" aria-hidden="true"></span>
+        <input id="dexSearch" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="FILTER DEX — NAME / NO.">
+        <button class="dw-clear" id="dexClear" type="button" aria-label="Clear">&times;</button>
+      </div>
+      <div class="dw-genrow" id="genChips" aria-label="Filter by generation"></div>
+
+      <div class="dw-body">
+        <!-- the reel (curved drum) -->
+        <div class="reel" id="reel" aria-label="Dex list — drag to scroll">
+          <div class="reel-window" id="reelWindow"></div>
+          <div class="reel-selband" aria-hidden="true"></div>
+          <div class="reel-shade top" aria-hidden="true"></div>
+          <div class="reel-shade bot" aria-hidden="true"></div>
+        </div>
+
+        <!-- the click wheel (jog dial) -->
+        <div class="clickwheel" id="clickWheel" aria-label="Click wheel — spin to scroll">
+          <div class="cw-ring" id="cwRing">
+            <span class="cw-pole cw-up" data-pole="up" aria-hidden="true">▲</span>
+            <span class="cw-pole cw-down" data-pole="down" aria-hidden="true">▼</span>
+            <span class="cw-pole cw-left" data-pole="left" aria-hidden="true">◂10</span>
+            <span class="cw-pole cw-right" data-pole="right" aria-hidden="true">10▸</span>
+          </div>
+          <button class="cw-center" id="cwCenter" type="button" aria-label="File focused unit to team">
+            <span class="cwc-plus">＋</span><span class="cwc-lbl">FILE</span>
+          </button>
+        </div>
+      </div>
+      <div class="dw-foot" id="reelFoot"></div>
+    </section>
+
+    <!-- drawn home indicator — browser preview only, hidden in standalone -->
+    <div class="home-indicator"></div>
+
+    <!-- CAPSULE MENU — the long-press popover on a team unit. Runs "parallel" to the
+         screen: release / make-lead / inspect + the full 4-move loadout editor. -->
+    <div class="capmenu overlay" id="capMenu" aria-hidden="true">
+      <div class="cm-panel">
+        <div class="cm-head">
+          <img class="cm-sprite" id="cmSprite" src="" alt="">
+          <div class="cm-id">
+            <div class="cm-slot" id="cmSlot">SLOT 01</div>
+            <div class="cm-name" id="cmName">—</div>
+            <div class="cm-types" id="cmTypes"></div>
+          </div>
+          <button class="cm-close" id="cmClose" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="cm-acts">
+          <button class="cm-act" data-cm="lead" type="button"><span>★</span>MAKE&nbsp;LEAD</button>
+          <button class="cm-act" data-cm="inspect" type="button"><span>◎</span>TO&nbsp;SCREEN</button>
+          <button class="cm-act danger" data-cm="release" type="button"><span>⌫</span>RELEASE</button>
+        </div>
+        <div class="cm-moves-head">MOVE&nbsp;LOADOUT <span class="cm-mh-sub" id="cmLearnNote"></span></div>
+        <div class="cm-moves" id="cmMoves"></div>
+      </div>
+    </div>
+
+    <!-- MOVE PICKER — opened from a move slot in the capsule menu. Its own reel of
+         learnable moves (real learnsets), searchable. Slides over, no route change. -->
+    <div class="movepick overlay" id="movePick" aria-hidden="true">
+      <div class="mp-panel">
+        <div class="mp-head">
+          <button class="mp-back" id="mpBack" type="button"><span class="chev">&lsaquo;</span> BACK</button>
+          <div class="mp-title">SET&nbsp;MOVE <b id="mpSlot">1</b></div>
+        </div>
+        <div class="mp-search">
+          <span class="dw-si-glyph" aria-hidden="true"></span>
+          <input id="moveSearch" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="SEARCH MOVES">
+          <button class="dw-clear" id="moveClear" type="button" aria-label="Clear">&times;</button>
+        </div>
+        <div class="mp-results" id="moveResults"></div>
+        <div class="mp-foot" id="moveFoot"></div>
+      </div>
+    </div>
+
+    <!-- RATING MATRIX — the full defensive-coverage matrix, expanded from the RDY /
+         COV rails or the RATE cap. Fits the screen, no scroll. -->
+    <div class="matrix overlay" id="matrix" aria-hidden="true">
+      <div class="matrix-panel">
+        <div class="matrix-head">
+          <div class="matrix-title">TEAM&nbsp;RATING <span class="matrix-sub" id="matrixSub">DEFENSIVE&nbsp;COVERAGE</span></div>
+          <button class="matrix-close" id="matrixClose" type="button">COLLAPSE <span class="mx">&times;</span></button>
+        </div>
+        <div class="matrix-summary" id="matrixSummary"></div>
+        <div class="matrix-body" id="matrixBody"></div>
+        <div class="matrix-legend">
+          <span><i class="lg lg-se"></i>SUPER-EFF</span>
+          <span><i class="lg lg-rs"></i>RESIST</span>
+          <span><i class="lg lg-im"></i>IMMUNE</span>
+          <span class="lg-net">W/R&nbsp;=&nbsp;MEMBERS WEAK / RESISTING</span>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<!-- dev-only: fill the viewport at the device aspect (preview the installed app) -->
+<button class="fit-toggle" id="fitToggle" type="button" aria-label="Fill the screen" title="Fill the screen">
+  <svg class="ic-expand" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 V2 H6 M16 6 V2 H12 M2 12 V16 H6 M16 12 V16 H12"/></svg>
+  <svg class="ic-compress" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 H6 V2 M16 6 H12 V2 M2 12 H6 V16 M16 12 H12 V16"/></svg>
+</button>
+
+<script src="app.js"></script>
+<script>
+  // fill-screen (desktop/browser preview): scale the whole device to fill the
+  // viewport at its 390x844 aspect. Home-Screen (standalone) launch takes the
+  // real-app path instead (body.standalone: full-bleed + env() safe-area insets).
+  (() => {
+    const AR_W = 390, AR_H = 844, KEY = "ultradex-fillscreen";
+    const wrap = document.getElementById("phoneWrap");
+    const btn = document.getElementById("fitToggle");
+    const fit = () => {
+      if (!document.body.classList.contains("fs")) { wrap.style.transform = ""; return; }
+      const vv = window.visualViewport;
+      const vw = vv ? vv.width : window.innerWidth;
+      const vh = vv ? vv.height : window.innerHeight;
+      const s = Math.min(vw / AR_W, vh / AR_H);
+      wrap.style.transform = "translate(" + (vw - AR_W) / 2 + "px, " + (vh - AR_H) / 2 + "px) scale(" + s + ")";
+    };
+    const setFS = (on, { native = false, persist = true } = {}) => {
+      document.body.classList.toggle("fs", on);
+      btn.setAttribute("aria-label", on ? "Exit full screen" : "Fill the screen");
+      fit();
+      if (persist) { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} }
+      if (native) { try { const el = document.documentElement;
+        if (on && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+        else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      } catch {} }
+    };
+    btn.addEventListener("click", () => setFS(!document.body.classList.contains("fs"), { native: true }));
+    addEventListener("resize", fit);
+    addEventListener("orientationchange", fit);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
+    const standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (standalone) { document.body.classList.add("standalone"); }
+    else { let saved = "0"; try { saved = localStorage.getItem(KEY) || "0"; } catch {} if (saved === "1") setFS(true, { persist: false }); }
+  })();
+</script>
+</body>
+</html>
