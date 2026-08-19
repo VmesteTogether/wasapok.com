@@ -475,11 +475,22 @@
   const FRAME = 80;                     // px between adjacent sprite centres
   const HALF = 3;                       // frames each side of centre
   const POOL = HALF * 2 + 3;            // recycled sprite frames
+  const DIAL_DEG = 16;                  // knurl rotation per dex step (the jog dial turns 1:1)
   let list = [];                        // filtered dex list (unit objects)
   let pos = 0, vel = 0, raf = 0, dragging = false;
   let focusId = null;                   // the unit running through centre stage
   const theaterWin = () => $("#theaterWindow");
   let pool = [];
+  let cwRingEl = null, prFillEl = null; // cached: the rotating knurl + the position-rail fill
+
+  // first-run "SPIN" hint on the jog dial — shown until the wheel is first used
+  const HINT_KEY = "ultradex-wheel-used";
+  let wheelUsed = false;
+  const markWheelUsed = () => {
+    if (wheelUsed) return; wheelUsed = true;
+    const w = $("#clickWheel"); if (w) w.classList.add("used");
+    try { localStorage.setItem(HINT_KEY, "1"); } catch {}
+  };
 
   const maxPos = () => Math.max(0, list.length - 1);
   const clampPos = p => clamp(p, 0, maxPos());
@@ -527,6 +538,9 @@
       f.style.zIndex = String(100 - Math.round(dist * 10));
       f.classList.toggle("center", Math.abs(d) < 0.5);
     }
+    // spin the knurl 1:1 with the dex position, and slide the position rail
+    if (cwRingEl) cwRingEl.style.transform = "rotate(" + (pos * DIAL_DEG).toFixed(2) + "deg)";
+    if (prFillEl) prFillEl.style.width = (maxPos() ? (clampPos(pos) / maxPos() * 100) : 0).toFixed(2) + "%";
   };
 
   let lastFocus = -999, snapTarget = null;
@@ -553,6 +567,7 @@
     const c = clampPos(Math.round(pos));
     if (c !== lastFocus) {
       lastFocus = c; sfx.tick();
+      if (navigator.vibrate && Math.abs(vel) < 0.18) navigator.vibrate(4);   // a soft detent tick (Android)
       setFocusId(list[c] ? list[c].id : null);
       renderNameplate(); updateFoot(); setTheaterNo();
       if (infoOpen()) openInfo(true);            // keep an open info sheet in sync while stepping
@@ -589,14 +604,14 @@
     snapTarget = idx; kick();
     if (!quiet) sfx.detent();
   };
-  const nudge = (delta) => { snapTo(clampPos((snapTarget != null ? snapTarget : Math.round(pos)) + delta), true); sfx.detent(); };
+  const nudge = (delta) => { markWheelUsed(); snapTo(clampPos((snapTarget != null ? snapTarget : Math.round(pos)) + delta), true); sfx.detent(); };
 
   // ---- theatre drag (horizontal filmstrip) + tap-to-open-info ----
   const initTheaterDrag = () => {
     const th = $("#theater");
     let startX = 0, startY = 0, startPos = 0, lastX = 0, lastT = 0, moved = false;
     th.addEventListener("pointerdown", e => {
-      firstTouchUnlock();
+      firstTouchUnlock(); markWheelUsed();
       dragging = true; vel = 0; moved = false;
       startX = lastX = e.clientX; startY = e.clientY; startPos = pos; lastT = performance.now();
       try { th.setPointerCapture(e.pointerId); } catch {}
@@ -629,38 +644,32 @@
 
   // ---- click wheel (jog dial + poles + centre FILE) ----
   const initClickWheel = () => {
-    const ring = $("#cwRing");
-    let spinning = false, cx = 0, cy = 0, lastAng = 0, acc = 0;
+    const wheel = $("#clickWheel"), ring = $("#cwRing"), touch = $("#cwTouch");
+    let spinning = false, cx = 0, cy = 0, rad = 0, lastAng = 0, acc = 0;
     const angOf = (x, y) => Math.atan2(y - cy, x - cx);
+    const placeTouch = (x, y) => { const a = angOf(x, y);
+      touch.style.transform = `translate(${(Math.cos(a) * rad).toFixed(1)}px, ${(Math.sin(a) * rad).toFixed(1)}px)`; };
     ring.addEventListener("pointerdown", e => {
-      if (e.target.closest(".cw-pole")) return;       // poles handle themselves
-      firstTouchUnlock();
-      const r = ring.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2;
+      firstTouchUnlock(); markWheelUsed();
+      const r = ring.getBoundingClientRect(); cx = r.left + r.width / 2; cy = r.top + r.height / 2; rad = r.width * 0.38;
       spinning = true; lastAng = angOf(e.clientX, e.clientY); acc = 0;
-      ring.classList.add("spinning");
+      wheel.classList.add("spinning"); placeTouch(e.clientX, e.clientY);
       try { ring.setPointerCapture(e.pointerId); } catch {}
     });
     ring.addEventListener("pointermove", e => {
       if (!spinning) return;
+      placeTouch(e.clientX, e.clientY);
       const a = angOf(e.clientX, e.clientY);
       let d = a - lastAng;
       if (d > Math.PI) d -= 2 * Math.PI; else if (d < -Math.PI) d += 2 * Math.PI;
-      lastAng = a;
-      acc += d;
-      // ~ a sixth of a turn per entry — a firm, geared feel
-      const STEP = Math.PI / 5.2;
+      lastAng = a; acc += d;
+      const STEP = Math.PI / 5.2;                       // ~a sixth-turn per entry — a firm, geared feel
       while (acc >= STEP) { acc -= STEP; nudge(1); }
       while (acc <= -STEP) { acc += STEP; nudge(-1); }
     });
-    const stop = () => { spinning = false; ring.classList.remove("spinning"); };
+    const stop = () => { spinning = false; wheel.classList.remove("spinning"); };
     ring.addEventListener("pointerup", stop);
     ring.addEventListener("pointercancel", stop);
-    // poles
-    $$(".cw-pole", ring).forEach(p => p.addEventListener("click", e => {
-      e.stopPropagation(); firstTouchUnlock();
-      const pole = p.dataset.pole;                     // ◂ ▸ step one · ▲ ▼ jump ten
-      nudge(pole === "left" ? -1 : pole === "right" ? 1 : pole === "up" ? -10 : 10);
-    }));
     // centre OK -> open the running unit's full info sheet
     $("#cwCenter").addEventListener("click", () => { firstTouchUnlock(); openInfo(); });
   };
@@ -682,6 +691,7 @@
     // keep the focus if still present, else land at top
     let idx = 0;
     if (keepId != null) { const f = list.findIndex(u => u.id === keepId); if (f >= 0) idx = f; }
+    const pt = $("#prTicks"); if (pt) pt.classList.toggle("hide", !!(genFilter || query));   // ticks only honest on the full dex
     pos = clampPos(idx); resolveNow();
   };
   const buildGenChips = () => {
@@ -689,6 +699,12 @@
     const chips = ['<button class="gchip sel" data-gen="0">ALL</button>'];
     for (let g = 1; g <= 9; g++) chips.push(`<button class="gchip" data-gen="${g}">${ROMAN[g - 1]}</button>`);
     el.innerHTML = chips.join("");
+  };
+  // gen-boundary ticks on the position rail (national-dex proportions; only honest
+  // when the full dex is shown, so they hide under a filter)
+  const buildPosTicks = () => {
+    const el = $("#prTicks"); if (!el) return;
+    el.innerHTML = GEN_CAPS.slice(0, 8).map(cap => `<i style="left:${(cap / 1025 * 100).toFixed(2)}%"></i>`).join("");
   };
 
   // ================================================================ ACTIONS ==
@@ -1046,7 +1062,9 @@
         if (ids.length) { party = [null,null,null,null,null,null]; ids.forEach((id, i) => party[i] = id); saveParty(); } }
       const f = +h.get("f"); if (byId.has(f)) hashFocus = f;
     } catch {}
-    buildGenChips(); buildPool();
+    buildGenChips(); buildPool(); buildPosTicks();
+    cwRingEl = $("#cwRing"); prFillEl = $("#prFill");
+    try { if (localStorage.getItem(HINT_KEY)) markWheelUsed(); } catch {}
     updateCount(); renderTeamRack(); renderRails();
 
     // restore skin

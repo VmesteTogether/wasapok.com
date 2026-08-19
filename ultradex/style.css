@@ -391,27 +391,38 @@ body { display: flex; align-items: center; justify-content: center; }
 .dws-v { font-family: var(--f-disp); font-weight: 700; font-size: 12px; letter-spacing: 1.5px; color: var(--txt-2); }
 .dw-side-l { text-align: center; } .dw-side-r { text-align: center; }
 
-/* the click wheel (jog dial) */
-.clickwheel { flex: 0 0 138px; position: relative; align-self: center; width: 138px; height: 138px; }
-.cw-ring {
-  position: absolute; inset: 0; border-radius: 50%; cursor: grab; touch-action: none;
-  background:
-    conic-gradient(from 0deg, rgba(53,230,255,.05), rgba(120,160,175,.02) 25%, rgba(53,230,255,.05) 50%, rgba(120,160,175,.02) 75%, rgba(53,230,255,.05)),
-    radial-gradient(circle at 50% 38%, rgba(53,230,255,.12), transparent 60%),
-    linear-gradient(150deg, var(--plate-hi), var(--plate) 60%, var(--bg-2));
-  border: 1px solid var(--hair);
-  box-shadow: 0 4px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(150,225,245,.14), inset 0 0 18px rgba(0,0,0,.5);
-}
+/* the JOG DIAL — a machined knurled knob that visibly rotates as you browse */
+.clickwheel { flex: 0 0 140px; position: relative; align-self: center; width: 140px; height: 140px; }
+/* fixed index mark at 12 o'clock (does NOT rotate) — the reference the knurl turns under */
+.cw-index { position: absolute; top: -3px; left: 50%; transform: translateX(-50%); z-index: 6; width: 0; height: 0;
+  border-left: 7px solid transparent; border-right: 7px solid transparent; border-top: 11px solid var(--cyan);
+  filter: drop-shadow(0 0 5px rgba(53,230,255,.75)); }
+/* the rotating knurled disc — JS spins it 1:1 with the dex position */
+.cw-ring { position: absolute; inset: 0; border-radius: 50%; cursor: grab; touch-action: none; z-index: 0; will-change: transform;
+  background: repeating-conic-gradient(from 0deg, #34464f 0 3deg, #172530 3deg 6deg);
+  box-shadow: 0 6px 15px rgba(0,0,0,.55), inset 0 0 0 1px rgba(0,0,0,.45), inset 0 0 0 2px rgba(150,225,245,.06); }
 .cw-ring:active { cursor: grabbing; }
-.cw-ring.spinning { box-shadow: 0 4px 12px rgba(0,0,0,.5), inset 0 1px 0 rgba(150,225,245,.22), inset 0 0 22px rgba(53,230,255,.14); }
-.cw-ring::after { content: ""; position: absolute; inset: 10px; border-radius: 50%; border: 1px dashed rgba(120,160,175,.18); }
-.cw-pole { position: absolute; z-index: 3; cursor: pointer; font-family: var(--f-mono); font-size: 10px; color: var(--cyan-dim);
-  width: 30px; height: 22px; display: grid; place-items: center; text-shadow: 0 1px 2px #000; }
-.cw-pole:active { color: var(--cyan); }
-.cw-up { top: 5px; left: 50%; transform: translateX(-50%); } .cw-down { bottom: 5px; left: 50%; transform: translateX(-50%); }
-.cw-left { left: 3px; top: 50%; transform: translateY(-50%); } .cw-right { right: 3px; top: 50%; transform: translateY(-50%); }
+.cw-knurl { display: none; }
+/* static top-lit sheen over the spinning knurl (makes it read as one lit metal knob) */
+.cw-sheen { position: absolute; inset: 0; border-radius: 50%; z-index: 1; pointer-events: none;
+  background:
+    radial-gradient(circle at 50% 24%, rgba(160,232,250,.4), rgba(160,232,250,0) 46%),
+    radial-gradient(circle at 50% 120%, rgba(0,0,0,.5), transparent 46%); }
+.clickwheel.spinning .cw-sheen { background:
+    radial-gradient(circle at 50% 24%, rgba(140,244,255,.55), rgba(140,244,255,0) 48%),
+    radial-gradient(circle at 50% 120%, rgba(0,0,0,.5), transparent 46%); }
+/* follow-your-finger contact glow on the rim while spinning */
+.cw-touch { position: absolute; left: 50%; top: 50%; z-index: 4; width: 22px; height: 22px; margin: -11px; border-radius: 50%;
+  pointer-events: none; opacity: 0; transition: opacity .18s;
+  background: radial-gradient(circle, rgba(140,244,255,.85), rgba(53,230,255,0) 70%); }
+.clickwheel.spinning .cw-touch { opacity: 1; }
+/* recessed centre well (static) */
+.cw-well { position: absolute; inset: 30px; border-radius: 50%; z-index: 2; pointer-events: none;
+  background: radial-gradient(circle at 50% 32%, var(--plate-hi), var(--plate) 62%, var(--bg-2));
+  box-shadow: inset 0 3px 9px rgba(0,0,0,.75), inset 0 -2px 3px rgba(150,225,245,.08), 0 1px 0 rgba(150,225,245,.12); }
+/* OK centre (fixed) */
 .cw-center {
-  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 58px; height: 58px; border-radius: 50%; cursor: pointer;
+  position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%); width: 58px; height: 58px; border-radius: 50%; cursor: pointer; z-index: 3;
   display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1px;
   color: var(--bg); border: 1px solid rgba(6,12,18,.6);
   background: radial-gradient(circle at 50% 34%, #7ff0ff, var(--cyan) 46%, var(--cyan-dim) 100%);
@@ -421,6 +432,23 @@ body { display: flex; align-items: center; justify-content: center; }
 .cw-center:active { transform: translate(-50%,-50%) scale(0.93); box-shadow: 0 1px 3px rgba(0,0,0,.5), inset 0 2px 5px rgba(0,0,0,.3); }
 .cwc-plus { font-size: 15px; font-weight: 700; line-height: 1; }
 .cwc-lbl { font-family: var(--f-mono); font-size: 8px; letter-spacing: 1.5px; font-weight: 700; }
+/* first-run gesture hint: a finger orbits the rim + "SPIN" until you first use it */
+.cw-hint { position: absolute; inset: 0; z-index: 5; pointer-events: none; opacity: 1; transition: opacity .45s; }
+.clickwheel.used .cw-hint { opacity: 0; }
+.cwh-finger { position: absolute; left: 50%; top: 50%; width: 15px; height: 15px; margin: -7.5px; border-radius: 50%;
+  background: rgba(140,244,255,.92); box-shadow: 0 0 12px rgba(53,230,255,.9), inset 0 0 3px #fff;
+  transform-origin: 50% 50%; animation: cwOrbit 3s ease-in-out infinite; }
+@keyframes cwOrbit { 0%,100% { transform: rotate(-45deg) translateY(-57px); } 50% { transform: rotate(135deg) translateY(-57px); } }
+.cwh-lbl { position: absolute; left: 50%; top: 27%; transform: translate(-50%,-50%); font-family: var(--f-disp); font-weight: 700; font-size: 10px; letter-spacing: 3px; color: var(--cyan); text-shadow: var(--glow-soft); }
+
+/* slim position rail — where you are across the whole (filtered) dex */
+.dw-posrail { flex: 0 0 auto; position: relative; height: 5px; margin: 7px 24px 0; border-radius: 3px; overflow: hidden;
+  background: rgba(11,16,21,.72); box-shadow: inset 0 1px 2px rgba(0,0,0,.6), 0 1px 0 rgba(150,225,245,.06); }
+.pr-fill { position: absolute; left: 0; top: 0; bottom: 0; width: 0; border-radius: 3px;
+  background: linear-gradient(90deg, var(--cyan-dim), var(--cyan)); box-shadow: 0 0 8px rgba(53,230,255,.5); transition: width .12s linear; }
+.pr-ticks { position: absolute; inset: 0; pointer-events: none; }
+.pr-ticks.hide { display: none; }
+.pr-ticks i { position: absolute; top: 0; bottom: 0; width: 1px; background: rgba(150,225,245,.28); }
 
 .dw-foot { text-align: center; margin-top: 3px; font-family: var(--f-mono); font-size: 9px; letter-spacing: 1px; color: var(--txt-2); }
 .dw-foot b { color: var(--cyan); }
@@ -673,19 +701,28 @@ body.standalone .dexwheel { padding-bottom: calc(6px + env(safe-area-inset-botto
 #phone.y2k .sys-label { color: #7fa9b6; } #phone.y2k .sys-count { color: var(--y-accent-hi); } #phone.y2k .sys-count b { color: var(--y-accent); }
 #phone.y2k .gchip { clip-path: none; border-radius: 7px; color: #46606e; border: 1px solid rgba(255,255,255,.4); background: linear-gradient(180deg, #f2f7fa, var(--y-shell-2)); }
 #phone.y2k .gchip.sel { color: #fff; background: linear-gradient(180deg, var(--y-accent), var(--y-accent-2)); border-color: transparent; box-shadow: inset 0 1px 0 rgba(255,255,255,.5); }
-/* candy click-wheel */
-#phone.y2k .cw-ring {
-  border: 1px solid rgba(255,255,255,.6);
-  background:
-    conic-gradient(from 0deg, rgba(255,255,255,.5), rgba(180,205,218,.25) 25%, rgba(255,255,255,.5) 50%, rgba(180,205,218,.25) 75%, rgba(255,255,255,.5)),
-    radial-gradient(circle at 50% 34%, #ffffff, var(--y-shell-2) 62%, var(--y-shell-3));
-  box-shadow: 0 5px 12px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.9), inset 0 -6px 12px rgba(80,110,125,.35);
-}
-#phone.y2k .cw-ring::after { border-color: rgba(95,120,135,.3); }
-#phone.y2k .cw-pole { color: #5f7482; text-shadow: 0 1px 0 rgba(255,255,255,.6); } #phone.y2k .cw-pole:active { color: var(--y-accent-2); }
+/* candy jog-dial: brushed-silver knurl, aqua accents */
+#phone.y2k .cw-ring { border: none;
+  background: repeating-conic-gradient(from 0deg, #f4f8fb 0 3deg, #9db0bc 3deg 6deg);
+  box-shadow: 0 6px 14px rgba(0,0,0,.38), inset 0 0 0 1px rgba(255,255,255,.5); }
+#phone.y2k .cw-index { border-top-color: var(--y-accent-2); filter: drop-shadow(0 0 5px rgba(23,199,230,.7)); }
+#phone.y2k .cw-sheen { background:
+  radial-gradient(circle at 50% 24%, rgba(255,255,255,.75), rgba(255,255,255,0) 46%),
+  radial-gradient(circle at 50% 120%, rgba(60,90,110,.4), transparent 46%); }
+#phone.y2k .clickwheel.spinning .cw-sheen { background:
+  radial-gradient(circle at 50% 24%, rgba(255,255,255,.9), rgba(255,255,255,0) 48%),
+  radial-gradient(circle at 50% 120%, rgba(60,90,110,.4), transparent 46%); }
+#phone.y2k .cw-well { background: radial-gradient(circle at 50% 32%, #eef4f7, var(--y-shell-2) 60%, var(--y-shell-3));
+  box-shadow: inset 0 3px 8px rgba(80,110,125,.5), inset 0 -2px 3px rgba(255,255,255,.8), 0 1px 0 rgba(255,255,255,.7); }
+#phone.y2k .cw-touch { background: radial-gradient(circle, rgba(23,199,230,.7), rgba(23,199,230,0) 70%); }
 #phone.y2k .cw-center { color: #fff; border: 1px solid rgba(255,255,255,.5);
   background: radial-gradient(circle at 50% 32%, var(--y-accent-hi), var(--y-accent) 48%, var(--y-accent-2));
   box-shadow: 0 3px 7px rgba(0,0,0,.35), inset 0 2px 3px rgba(255,255,255,.8), inset 0 -4px 7px rgba(0,60,75,.35); }
+#phone.y2k .cwh-finger { background: rgba(23,199,230,.9); box-shadow: 0 0 12px rgba(23,199,230,.8), inset 0 0 3px #fff; }
+#phone.y2k .cwh-lbl { color: var(--y-accent-2); }
+#phone.y2k .dw-posrail { background: rgba(60,90,110,.22); box-shadow: inset 0 1px 2px rgba(60,90,110,.4); }
+#phone.y2k .pr-fill { background: linear-gradient(90deg, var(--y-accent-2), var(--y-accent-hi)); }
+#phone.y2k .pr-ticks i { background: rgba(60,90,110,.4); }
 #phone.y2k .dw-foot { color: #5f7482; } #phone.y2k .dw-foot b { color: var(--y-accent-2); }
 #phone.y2k .rail-cap { color: #7fa9b6; } #phone.y2k .rail-tier { color: var(--y-accent-hi); }
 #phone.y2k .home-indicator::after { background: rgba(60,80,92,.4); }
@@ -738,10 +775,17 @@ body.standalone .dexwheel { padding-bottom: calc(6px + env(safe-area-inset-botto
   box-shadow: 0 0 0 1px var(--shell-edge), 0 2px 5px rgba(0,0,0,.32), inset 0 0 0 1px rgba(0,0,0,.5), inset 0 6px 14px rgba(0,0,0,.6);
 }
 #phone.skin-plastic .theater::before { top: 5px; left: 5px; border-top: 2px solid var(--cyan); border-left: 2px solid var(--cyan); width: 14px; height: 14px; border-radius: 0; background: none; }
-#phone.skin-plastic .cw-ring { background: radial-gradient(circle at 50% 34%, var(--shell-hi), var(--shell) 62%, var(--shell-lo)); border: 1px solid var(--shell-edge);
-  box-shadow: 0 4px 10px rgba(0,0,0,.4), inset 0 2px 2px rgba(255,255,255,.4), inset 0 -6px 12px rgba(0,0,0,.28); }
+#phone.skin-plastic .cw-ring { border: 1px solid var(--shell-edge);
+  background: repeating-conic-gradient(from 0deg, var(--shell-hi) 0 3deg, var(--shell-lo) 3deg 6deg);
+  box-shadow: 0 4px 10px rgba(0,0,0,.4), inset 0 0 0 1px rgba(0,0,0,.2); }
+#phone.skin-plastic .cw-index { border-top-color: var(--shell-edge); filter: none; }
+#phone.skin-plastic .cw-sheen { background: radial-gradient(circle at 50% 24%, rgba(255,255,255,.5), transparent 46%), radial-gradient(circle at 50% 120%, rgba(0,0,0,.3), transparent 46%); }
+#phone.skin-plastic .cw-well { background: radial-gradient(circle at 50% 32%, var(--shell-hi), var(--shell) 62%, var(--shell-lo));
+  box-shadow: inset 0 3px 7px rgba(0,0,0,.4), inset 0 -2px 3px rgba(255,255,255,.4); }
 #phone.skin-plastic .cw-center { color: var(--pl-txt); background: linear-gradient(180deg, var(--shell-hi), var(--shell-lo)); box-shadow: 0 3px 6px rgba(0,0,0,.4), inset 0 1px 0 rgba(255,255,255,.5); }
-#phone.skin-plastic .cw-pole { color: var(--pl-txt-mid); }
+#phone.skin-plastic .cwh-finger { background: rgba(255,255,255,.85); box-shadow: 0 0 10px rgba(255,255,255,.6); }
+#phone.skin-plastic .cwh-lbl { color: var(--pl-txt); }
+#phone.skin-plastic .pr-fill { background: linear-gradient(90deg, var(--shell-lo), var(--shell-hi)); }
 #phone.skin-plastic .home-indicator::after { background: rgba(0,0,0,.28); }
 
 /* ---------- reduced motion -------------------------------------------------- */

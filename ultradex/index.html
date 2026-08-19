@@ -129,23 +129,29 @@
       </div>
       <div class="dw-genrow" id="genChips" aria-label="Filter by generation"></div>
 
-      <!-- the click wheel (jog dial) — spins species through the theatre above;
-           OK opens the running unit's info. Poles: ◂ ▸ step one, ▲ ▼ jump ten. -->
+      <!-- the JOG DIAL — a machined knurled knob that visibly rotates as you spin
+           the dex. Drag the rim to turn it (or flick for momentum); the centre OK
+           opens the running unit's info. The knurl (#cwRing) rotates 1:1 with the
+           dex position; the index mark + OK stay fixed. -->
       <div class="dw-wheelrow">
         <div class="dw-side dw-side-l"><span class="dws-k">SPIN</span><span class="dws-v">BROWSE</span></div>
-        <div class="clickwheel" id="clickWheel" aria-label="Click wheel — spin to browse">
+        <div class="clickwheel" id="clickWheel" aria-label="Jog dial — spin to browse the dex">
+          <span class="cw-index" aria-hidden="true"></span>
           <div class="cw-ring" id="cwRing">
-            <span class="cw-pole cw-up" data-pole="up" aria-hidden="true">▲10</span>
-            <span class="cw-pole cw-down" data-pole="down" aria-hidden="true">▼10</span>
-            <span class="cw-pole cw-left" data-pole="left" aria-hidden="true">◂</span>
-            <span class="cw-pole cw-right" data-pole="right" aria-hidden="true">▸</span>
+            <span class="cw-knurl" aria-hidden="true"></span>
           </div>
+          <span class="cw-sheen" aria-hidden="true"></span>
+          <span class="cw-touch" id="cwTouch" aria-hidden="true"></span>
+          <div class="cw-well" aria-hidden="true"></div>
           <button class="cw-center" id="cwCenter" type="button" aria-label="Open info for the running unit">
             <span class="cwc-plus">◉</span><span class="cwc-lbl">OK</span>
           </button>
+          <div class="cw-hint" id="cwHint" aria-hidden="true"><span class="cwh-finger"></span><span class="cwh-lbl">SPIN</span></div>
         </div>
         <div class="dw-side dw-side-r"><span class="dws-k">OK</span><span class="dws-v">INFO</span></div>
       </div>
+      <!-- slim, non-interactive position rail: where you are across the whole dex -->
+      <div class="dw-posrail" id="posRail" aria-hidden="true"><div class="pr-fill" id="prFill"></div><div class="pr-ticks" id="prTicks"></div></div>
       <div class="dw-foot" id="reelFoot"></div>
     </section>
 
