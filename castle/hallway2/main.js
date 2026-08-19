@@ -965,6 +965,33 @@ function playerInShelfCorridor() {
   return beyond && tan > d.doorMin && tan < d.doorMax;
 }
 
+// True once the player has walked to the FAR END of the open shelf corridor —
+// the portal threshold. The corridor's dead-end tile sits at `endCoord`, so
+// "reached the end" = within END_TRIGGER metres of it, inside the door channel.
+const SHELF_PORTAL_END = 2.4;              // m from the corridor end that fires the portal
+function playerAtShelfCorridorEnd() {
+  const d = built.shelfDoor && built.shelfDoor._barrierDesc;
+  if (!d || !built.shelfDoor.open) return false;
+  const n   = d.normalX ? camera.position.x : camera.position.z;
+  const tan = d.normalX ? camera.position.z : camera.position.x;
+  const inChannel = tan > d.doorMin && tan < d.doorMax;
+  return inChannel && Math.abs(n - d.endCoord) < SHELF_PORTAL_END;
+}
+
+// The bookshelf corridor is a portal home: reaching its end fades to black and
+// loops the player back to /newhome. One-shot.
+let shelfPortalFired = false;
+function firePortalToNewhome() {
+  if (shelfPortalFired) return;
+  shelfPortalFired = true;
+  const ov = document.createElement('div');
+  ov.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;z-index:99999;' +
+    'transition:opacity .6s ease;pointer-events:none;';
+  document.body.appendChild(ov);
+  requestAnimationFrame(() => { ov.style.opacity = '1'; });
+  setTimeout(() => { window.location.href = '../newhome/'; }, 660);
+}
+
 function animate() {
   requestAnimationFrame(animate);
   const now = performance.now();
@@ -1051,6 +1078,8 @@ function animate() {
       }
       shelfTargetVisPrev = seen;
     }
+    // Portal home: walk to the end of the open corridor → fade → /newhome.
+    if (shelfDoorActive && !shelfPortalFired && playerAtShelfCorridorEnd()) firePortalToNewhome();
   }
   nav.check();
 
