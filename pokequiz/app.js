@@ -13,6 +13,19 @@
   const genOf = dex => { for (let i = 0; i < GEN_CAPS.length; i++) if (dex <= GEN_CAPS[i]) return i + 1; return 9; };
   const norm = s => s.toLowerCase().replace(/[^a-z0-9]/g, "");
   const prettify = ident => ident.replace(/-/g, " ");
+  // clean display name: regional forms read "Alolan Ninetales"; cosmetic/battle-form
+  // descriptors ("-blaze-breed", "-midnight") collapse to the base species; a few
+  // real hyphenated names are spelled out.
+  const capW = w => w ? w.charAt(0).toUpperCase() + w.slice(1) : w;
+  const REGION_FORM = [[/-alola/, "Alolan"], [/-galar/, "Galarian"], [/-hisui/, "Hisuian"], [/-paldea/, "Paldean"]];
+  const NAME_FIX = { "nidoran-f":"Nidoran ♀", "nidoran-m":"Nidoran ♂", "mr-mime":"Mr. Mime", "mr-rime":"Mr. Rime",
+    "mime-jr":"Mime Jr.", "porygon-z":"Porygon-Z", "jangmo-o":"Jangmo-o", "hakamo-o":"Hakamo-o", "kommo-o":"Kommo-o", "ho-oh":"Ho-Oh" };
+  const displayName = ident => {
+    if (NAME_FIX[ident]) return NAME_FIX[ident];
+    for (const [re, pre] of REGION_FORM) if (re.test(ident)) return pre + " " + capW(ident.split("-")[0]);
+    if (ident.includes("-")) return capW(ident.split("-")[0]);
+    return capW(ident);
+  };
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 
   const TYPES = ["normal","fire","water","electric","grass","ice","fighting","poison",
@@ -86,65 +99,150 @@
     balanced: ["ALL-ROUNDER","BULKY PIVOT","MIXED ATTACKER","PHYS ATTACKER"],
   };
 
-  // ---- the twelve questions. Each option seeds type (t) / region gen (r) /
-  // strategy (s) vectors; the first item in a list weighs heaviest. ----
+  // ---- the questions, in four chapters. Each option seeds type (t) / region gen
+  // (r) / strategy (s) vectors; the first item in a list weighs heaviest. ----
+  const S1 = "I · Temperament", S2 = "II · Your World", S3 = "III · In Battle", S4 = "IV · Heart & Soul";
   const QUESTIONS = [
-    { q:"Where do you feel most at home?", o:[
-      { a:"A neon city that never sleeps", t:["electric","dark","steel"], r:[5,6], s:["offense"] },
-      { a:"A quiet mountain village", t:["rock","ground","ice"], r:[4,2], s:["defense"] },
-      { a:"Sun-soaked beaches and islands", t:["water","fire","grass"], r:[7,3], s:["balanced"] },
-      { a:"Rolling green countryside", t:["grass","normal","fairy"], r:[8,1,9], s:["defense"] } ] },
-    { q:"Your ideal adventure is…", o:[
-      { a:"Racing to be the very best", t:["fire","electric","fighting"], r:[1], s:["offense"] },
-      { a:"Uncovering ancient mysteries", t:["psychic","ghost","rock"], r:[4,9], s:["setup"] },
-      { a:"Befriending every creature I meet", t:["normal","fairy","grass"], r:[8], s:["balanced"] },
-      { a:"Testing myself against the strongest", t:["dragon","fighting","steel"], r:[3], s:["breaker"] } ] },
-    { q:"An element calls to you.", o:[
-      { a:"Flame", t:["fire"], r:[3], s:["offense"] },
-      { a:"Deep water and ice", t:["water","ice"], r:[7,4], s:["defense"] },
-      { a:"Storm and lightning", t:["electric","flying"], r:[5], s:["offense"] },
-      { a:"Earth and growing things", t:["grass","ground"], r:[8,9], s:["defense"] } ] },
-    { q:"In a tough battle, you…", o:[
-      { a:"Go all-in and overwhelm them", t:["fighting","fire","dragon"], s:["offense"] },
-      { a:"Wear them down patiently", t:["steel","water","poison"], s:["defense"] },
-      { a:"Set traps and flip the tide", t:["ghost","dark","bug"], s:["trickster"] },
-      { a:"Read them and counter perfectly", t:["psychic","normal","fairy"], s:["balanced"] } ] },
-    { q:"Friends would call you…", o:[
+    /* ===================== I · TEMPERAMENT ===================== */
+    { sec:S1, q:"Friends would call you…", o:[
       { a:"Bold and fiery", t:["fire","fighting"], s:["offense"] },
       { a:"Calm and dependable", t:["water","steel","rock"], s:["defense"] },
       { a:"Clever and unpredictable", t:["psychic","ghost","dark"], s:["trickster"] },
       { a:"Warm and loyal", t:["normal","fairy","grass"], s:["balanced"] } ] },
-    { q:"Your greatest strength?", o:[
+    { sec:S1, q:"Your greatest strength?", o:[
       { a:"Raw power", t:["fighting","dragon","rock"], s:["breaker"] },
       { a:"Speed and instinct", t:["electric","flying","normal"], s:["offense"] },
       { a:"Resilience", t:["steel","rock","ground"], s:["defense"] },
       { a:"Cunning", t:["dark","ghost","poison"], s:["trickster"] } ] },
-    { q:"And your flaw?", o:[
+    { sec:S1, q:"And your flaw?", o:[
       { a:"Reckless", t:["fire","fighting"], s:["offense"] },
       { a:"Stubborn", t:["rock","ground","steel"], s:["defense"] },
       { a:"Secretive", t:["dark","ghost","ice"], s:["trickster"] },
       { a:"Too trusting", t:["fairy","normal","grass"], s:["balanced"] } ] },
-    { q:"Pick a palette.", o:[
-      { a:"Reds and embers", t:["fire","fighting"] },
-      { a:"Blues and frost", t:["water","ice","flying"] },
-      { a:"Violets and shadow", t:["poison","ghost","dark","psychic"] },
-      { a:"Greens and gold", t:["grass","ground","bug","electric"] } ] },
-    { q:"A legendary calls. You're drawn to the one that embodies…", o:[
-      { a:"Time, space and creation", t:["steel","dragon","psychic"], r:[4], s:["setup"] },
-      { a:"Nature, life and renewal", t:["fire","fairy","grass"], r:[2,6], s:["balanced"] },
-      { a:"Shadow, dreams and the void", t:["dark","ghost","dragon"], r:[7,4], s:["trickster"] },
-      { a:"Truth, ideals and thunder", t:["dragon","electric","ice"], r:[5], s:["breaker"] } ] },
-    { q:"Your role among friends?", o:[
-      { a:"The leader, out front", t:["fire","fighting"], s:["offense"] },
-      { a:"The protector", t:["steel","rock","fairy"], s:["defense"] },
-      { a:"The strategist", t:["psychic","ghost"], s:["setup"] },
-      { a:"The heart that holds it together", t:["grass","water","normal"], s:["balanced"] } ] },
-    { q:"You're a season.", o:[
+    { sec:S1, q:"In a crowded room, you're…", o:[
+      { a:"The centre of it all", t:["fire","fairy","normal"], s:["offense"] },
+      { a:"Reading everyone quietly", t:["psychic","dark","ghost"], s:["trickster"] },
+      { a:"Bringing people together", t:["grass","water","normal"], s:["balanced"] },
+      { a:"The unpredictable spark", t:["electric","bug","poison"], s:["setup"] } ] },
+    { sec:S1, q:"You make the big calls with…", o:[
+      { a:"Gut instinct — fast", t:["fire","electric","flying"], s:["offense"] },
+      { a:"Careful analysis", t:["psychic","steel","ice"], s:["setup"] },
+      { a:"What feels right for everyone", t:["fairy","normal","grass"], s:["balanced"] },
+      { a:"Firm principle, no bending", t:["fighting","rock","steel"], s:["breaker"] } ] },
+    { sec:S1, q:"When a plan falls apart, you…", o:[
+      { a:"Charge harder", t:["fire","fighting","dragon"], s:["offense"] },
+      { a:"Dig in and outlast it", t:["rock","steel","water"], s:["defense"] },
+      { a:"Improvise a new angle", t:["dark","ghost","bug"], s:["trickster"] },
+      { a:"Calmly rebuild the plan", t:["psychic","grass","ice"], s:["setup"] } ] },
+    { sec:S1, q:"Your daily discipline looks like…", o:[
+      { a:"Relentless training", t:["fighting","steel","dragon"], s:["breaker"] },
+      { a:"A steady, gentle routine", t:["normal","grass","fairy"], s:["defense"] },
+      { a:"Chaotic bursts of genius", t:["electric","bug","fire"], s:["offense"] },
+      { a:"Quiet study and planning", t:["psychic","ghost","ice"], s:["setup"] } ] },
+    /* ===================== II · YOUR WORLD ===================== */
+    { sec:S2, q:"Where do you feel most at home?", o:[
+      { a:"A neon city that never sleeps", t:["electric","dark","steel"], r:[5,6], s:["offense"] },
+      { a:"A quiet mountain village", t:["rock","ground","ice"], r:[4,2], s:["defense"] },
+      { a:"Sun-soaked beaches and islands", t:["water","fire","grass"], r:[7,3], s:["balanced"] },
+      { a:"Rolling green countryside", t:["grass","normal","fairy"], r:[8,1,9], s:["defense"] } ] },
+    { sec:S2, q:"You'd build your base in…", o:[
+      { a:"A volcano's edge", t:["fire","rock"], r:[7,3], s:["offense"] },
+      { a:"A deep forest grove", t:["grass","bug","poison"], r:[6,2], s:["balanced"] },
+      { a:"An ancient, echoing ruin", t:["ghost","psychic","ground"], r:[9,4], s:["trickster"] },
+      { a:"A cliffside above the sea", t:["water","flying","ice"], r:[3,8], s:["defense"] } ] },
+    { sec:S2, q:"Your kind of weather…", o:[
+      { a:"Blazing sun", t:["fire","ground","grass"], r:[3,7] },
+      { a:"Pouring rain", t:["water","electric"], r:[8] },
+      { a:"A swirling sandstorm", t:["rock","ground","steel"], r:[9] },
+      { a:"Silent snowfall", t:["ice","fairy","steel"], r:[4] } ] },
+    { sec:S2, q:"You're a season.", o:[
       { a:"Blazing summer", t:["fire","grass"], r:[3,7] },
       { a:"Still winter", t:["ice","steel"], r:[4,8] },
       { a:"Golden autumn", t:["ground","rock","ghost"], r:[6,2,9] },
       { a:"Fresh spring", t:["fairy","grass","normal"], r:[1,8] } ] },
-    { q:"Above all, you love Pokémon for…", o:[
+    { sec:S2, q:"A treasure worth chasing…", o:[
+      { a:"A relic of the ancient world", t:["rock","ground","steel"], r:[4,9], s:["setup"] },
+      { a:"A rare, radiant gem", t:["fairy","psychic"], r:[6], s:["balanced"] },
+      { a:"Lost, humming technology", t:["electric","steel","poison"], r:[5], s:["trickster"] },
+      { a:"A legend's fallen feather", t:["flying","fire","dragon"], r:[2], s:["offense"] } ] },
+    { sec:S2, q:"Pick a palette.", o:[
+      { a:"Reds and embers", t:["fire","fighting"] },
+      { a:"Blues and frost", t:["water","ice","flying"] },
+      { a:"Violets and shadow", t:["poison","ghost","dark","psychic"] },
+      { a:"Greens and gold", t:["grass","ground","bug","electric"] } ] },
+    { sec:S2, q:"First thing you notice in a new town…", o:[
+      { a:"The gym and its challengers", t:["fighting","fire"], r:[5], s:["offense"] },
+      { a:"The market and its people", t:["normal","grass","fairy"], r:[8], s:["balanced"] },
+      { a:"The old shrine or lab", t:["psychic","ghost","steel"], r:[4], s:["setup"] },
+      { a:"The wild edges beyond it", t:["dark","poison","ground"], r:[9], s:["trickster"] } ] },
+    /* ===================== III · IN BATTLE ===================== */
+    { sec:S3, q:"In a tough battle, you…", o:[
+      { a:"Go all-in and overwhelm them", t:["fighting","fire","dragon"], s:["offense"] },
+      { a:"Wear them down patiently", t:["steel","water","poison"], s:["defense"] },
+      { a:"Set traps and flip the tide", t:["ghost","dark","bug"], s:["trickster"] },
+      { a:"Read them and counter perfectly", t:["psychic","normal","fairy"], s:["balanced"] } ] },
+    { sec:S3, q:"Your ideal adventure is…", o:[
+      { a:"Racing to be the very best", t:["fire","electric","fighting"], r:[1], s:["offense"] },
+      { a:"Uncovering ancient mysteries", t:["psychic","ghost","rock"], r:[4,9], s:["setup"] },
+      { a:"Befriending every creature I meet", t:["normal","fairy","grass"], r:[8], s:["balanced"] },
+      { a:"Testing myself against the strongest", t:["dragon","fighting","steel"], r:[3], s:["breaker"] } ] },
+    { sec:S3, q:"What matters most in a battle team?", o:[
+      { a:"Overwhelming firepower", t:["fire","dragon","fighting"], s:["breaker"] },
+      { a:"An airtight, unbreakable core", t:["steel","rock","water"], s:["defense"] },
+      { a:"Clever synergy and traps", t:["ghost","bug","poison"], s:["trickster"] },
+      { a:"Speed and adaptability", t:["electric","flying","normal"], s:["offense"] } ] },
+    { sec:S3, q:"Your relationship with the rules…", o:[
+      { a:"Honour them fully", t:["normal","steel","fairy"], s:["defense"] },
+      { a:"Bend them when needed", t:["psychic","water","grass"], s:["balanced"] },
+      { a:"Break them for the win", t:["fire","fighting","dragon"], s:["offense"] },
+      { a:"Rewrite them entirely", t:["dark","ghost","poison"], s:["trickster"] } ] },
+    { sec:S3, q:"Your ideal victory is…", o:[
+      { a:"A flawless, unanswered sweep", t:["dragon","electric","fire"], s:["setup"] },
+      { a:"A grinding war of attrition", t:["steel","water","poison"], s:["defense"] },
+      { a:"A perfectly sprung trap", t:["ghost","dark","bug"], s:["trickster"] },
+      { a:"A hard-earned comeback", t:["fighting","fire","grass"], s:["breaker"] } ] },
+    { sec:S3, q:"Your training philosophy…", o:[
+      { a:"Push past every limit", t:["fighting","dragon","fire"], s:["breaker"] },
+      { a:"Perfect the fundamentals", t:["steel","normal","rock"], s:["defense"] },
+      { a:"Trust the bond above all", t:["fairy","grass","water"], s:["balanced"] },
+      { a:"Out-think the meta", t:["psychic","dark","ghost"], s:["trickster"] } ] },
+    { sec:S3, q:"Pick a held-item vibe.", o:[
+      { a:"Choice Band — commit hard", t:["fighting","dragon","rock"], s:["breaker"] },
+      { a:"Leftovers — endure forever", t:["steel","water","poison"], s:["defense"] },
+      { a:"Focus Sash — one clutch chance", t:["electric","ghost","ice"], s:["trickster"] },
+      { a:"Life Orb — all risk, all reward", t:["fire","dark","dragon"], s:["offense"] } ] },
+    /* ===================== IV · HEART & SOUL ===================== */
+    { sec:S4, q:"An element calls to you.", o:[
+      { a:"Flame", t:["fire"], r:[3], s:["offense"] },
+      { a:"Deep water and ice", t:["water","ice"], r:[7,4], s:["defense"] },
+      { a:"Storm and lightning", t:["electric","flying"], r:[5], s:["offense"] },
+      { a:"Earth and growing things", t:["grass","ground"], r:[8,9], s:["defense"] } ] },
+    { sec:S4, q:"A legendary calls. You're drawn to the one that embodies…", o:[
+      { a:"Time, space and creation", t:["steel","dragon","psychic"], r:[4], s:["setup"] },
+      { a:"Nature, life and renewal", t:["fire","fairy","grass"], r:[2,6], s:["balanced"] },
+      { a:"Shadow, dreams and the void", t:["dark","ghost","dragon"], r:[7,4], s:["trickster"] },
+      { a:"Truth, ideals and thunder", t:["dragon","electric","ice"], r:[5], s:["breaker"] } ] },
+    { sec:S4, q:"Your ideal partner Pokémon is…", o:[
+      { a:"Fierce and proud", t:["fire","dragon","fighting"] },
+      { a:"Gentle and loyal", t:["grass","normal","fairy"] },
+      { a:"Sly and mischievous", t:["dark","ghost","poison"] },
+      { a:"Cool and mysterious", t:["psychic","ice","steel"] } ] },
+    { sec:S4, q:"Your role among friends?", o:[
+      { a:"The leader, out front", t:["fire","fighting"], s:["offense"] },
+      { a:"The protector", t:["steel","rock","fairy"], s:["defense"] },
+      { a:"The strategist", t:["psychic","ghost"], s:["setup"] },
+      { a:"The heart that holds it together", t:["grass","water","normal"], s:["balanced"] } ] },
+    { sec:S4, q:"A mythic spirit you'd embody…", o:[
+      { a:"The rising phoenix", t:["fire","flying"], s:["offense"] },
+      { a:"The deep-sea leviathan", t:["water","dragon"], s:["breaker"] },
+      { a:"The mountain golem", t:["rock","ground","steel"], s:["defense"] },
+      { a:"The forest sprite", t:["grass","fairy","bug"], s:["balanced"] } ] },
+    { sec:S4, q:"If you could master one power…", o:[
+      { a:"Command fire and storm", t:["fire","electric"], s:["offense"] },
+      { a:"Bend mind and shadow", t:["psychic","ghost","dark"], s:["trickster"] },
+      { a:"Shape stone and steel", t:["rock","ground","steel"], s:["defense"] },
+      { a:"Speak with every living thing", t:["grass","normal","fairy","water"], s:["balanced"] } ] },
+    { sec:S4, q:"Above all, you love Pokémon for…", o:[
       { a:"The thrill of battle", t:["fighting","dragon"], s:["breaker","offense"] },
       { a:"Completing the whole dex", t:["normal","flying"], s:["balanced"] },
       { a:"The bond with your partners", t:["fairy","grass","water"], s:["defense"] },
@@ -325,6 +423,7 @@
     const stage = $("#qStage");
     stage.innerHTML =
       `<div class="qcard">
+        <div class="q-sec">${Q.sec || ""}</div>
         <h2 class="q-text">${Q.q}</h2>
         <div class="q-opts">${Q.o.map((o, i) =>
           `<button class="opt${answers[qi] === i ? " picked" : ""}" data-i="${i}" type="button">
@@ -380,9 +479,9 @@
           <div class="hc-aura"></div>
           <div class="hc-kick">IF YOU WERE A POKÉMON</div>
           <div class="hc-body">
-            <div class="hc-sprite"><img src="${SPRITE(you.id)}" onerror="${SPRITE_FALLBACK(you.dexno)}" alt="${prettify(you.ident)}"></div>
+            <div class="hc-sprite"><img src="${SPRITE(you.id)}" onerror="${SPRITE_FALLBACK(you.dexno)}" alt="${displayName(you.ident)}"></div>
             <div class="hc-meta">
-              <div class="hc-name">${prettify(you.ident)}</div>
+              <div class="hc-name">${displayName(you.ident)}</div>
               <div class="hc-types">${typeChip(you.t1)}${typeChip(you.t2)}<span class="hc-title">★ ${title}</span></div>
               <div class="hc-why">A ${yArch} at heart — ${TYPE_DESC[S.topType]}.</div>
             </div>
@@ -419,18 +518,18 @@
           <div class="team-grid">${team.map((m, i) =>
             `<div class="tmon" style="--tc:${TYPE_HEX[m.u.t1]}">
                <span class="tmon-role">${m.role}</span>
-               <div class="tmon-art"><img src="${SPRITE(m.u.id)}" onerror="${SPRITE_FALLBACK(m.u.dexno)}" alt="${prettify(m.u.ident)}"></div>
-               <div class="tmon-name">${prettify(m.u.ident)}</div>
+               <div class="tmon-art"><img src="${SPRITE(m.u.id)}" onerror="${SPRITE_FALLBACK(m.u.dexno)}" alt="${displayName(m.u.ident)}"></div>
+               <div class="tmon-name">${displayName(m.u.ident)}</div>
                <div class="tmon-dots">${typeDots(m.u)}</div>
                <div class="tmon-sub">${m.sub}</div>
              </div>`).join("")}</div>
         </div>
 
         <div class="rival-card" style="--tc:${TYPE_HEX[rivalType]}">
-          <div class="rc-sprite"><img src="${SPRITE(rival.id)}" onerror="${SPRITE_FALLBACK(rival.dexno)}" alt="${prettify(rival.ident)}"></div>
+          <div class="rc-sprite"><img src="${SPRITE(rival.id)}" onerror="${SPRITE_FALLBACK(rival.dexno)}" alt="${displayName(rival.ident)}"></div>
           <div class="rc-body">
             <div class="rc-h"><span class="fh-ic">⚡</span>YOUR RIVAL</div>
-            <div class="rc-name">${prettify(rival.ident)}</div>
+            <div class="rc-name">${displayName(rival.ident)}</div>
             <div class="rc-sub">A ${rivalType}-type who plays <b>${STRATS[rivalStratKey].name}</b> — the trainer who'd love to knock you down a peg.</div>
           </div>
         </div>
@@ -461,13 +560,13 @@
     const txt =
 `MY TRAINER PROFILE — wasapok.com/pokequiz
 ★ Title:  ${title}
-◓ I'd be: ${prettify(you.ident).toUpperCase()} (${[you.t1, you.t2].filter(Boolean).join("/")})
+◓ I'd be: ${displayName(you.ident).toUpperCase()} (${[you.t1, you.t2].filter(Boolean).join("/")})
 ✦ Type:   ${S.specialize ? S.topType : "generalist, leaning " + S.topType}
 ▲ Region: ${region.name}
 ⚔ Style:  ${strat.name}
 ✧ Kit:    ${nature.name} nature · ${move ? move.name : "—"}
-▦ Team:   ${team.map(m => prettify(m.u.ident)).join(", ")}
-⚡ Rival:  ${prettify(rival.ident)} (${rivalType})
+▦ Team:   ${team.map(m => displayName(m.u.ident)).join(", ")}
+⚡ Rival:  ${displayName(rival.ident)} (${rivalType})
 Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     const btn = $("#shareBtn");
     const done = () => { btn.textContent = "Copied! ✓"; setTimeout(() => btn.textContent = "Copy my profile", 1800); };
@@ -506,11 +605,12 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
       for (let g = 1; g <= 9; g++) NATIVE[g] = new Set(nd[g] || nd[String(g)] || []); NATIVE_OK = true; } catch {}
     try { const mv = await (await fetch("data/moves.json")).json();
       MOVES = mv.map(r => ({ id: r[0], name: r[1], type: r[2], power: r[3] || 0, cat: r[4] || "N" })); } catch {}
-    $("#introFoot").textContent = `${DEX.length} species on file · ${QUESTIONS.length} questions · ~2 min`;
+    const qt = $("#qTotal"); if (qt) qt.textContent = QUESTIONS.length;
+    $("#introFoot").textContent = `${DEX.length} species on file · ${QUESTIONS.length} questions · ~${Math.max(2, Math.round(QUESTIONS.length * 8 / 60))} min`;
     wire();
     if (location.hash === "#quiz") { startQuiz(); return; }   // dev/preview hook
     // deep-link: #r=<12 answer indices> jumps straight to a shared result
-    const m = /(?:^|[#&])r=([0-3]{1,12})/.exec(location.hash);
+    const m = /(?:^|[#&])r=([0-3]{1,40})/.exec(location.hash);
     if (m && m[1].length === QUESTIONS.length) { answers = m[1].split("").map(Number); qi = QUESTIONS.length; renderResults(); }
   }
   boot();

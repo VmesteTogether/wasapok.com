@@ -72,6 +72,7 @@ img{image-rendering:pixelated}
 .q-stage{flex:1 1 auto;display:flex;align-items:center;justify-content:center;padding:24px 20px 40px}
 .qcard{width:100%;max-width:600px}
 .qcard.in{animation:cardIn .42s cubic-bezier(.2,.85,.25,1) both}
+.q-sec{font-family:var(--f-mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--type);margin-bottom:12px;transition:color .6s}
 .q-text{font-family:var(--f-disp);font-weight:600;font-size:clamp(24px,4.6vw,34px);line-height:1.12;letter-spacing:-.01em;
   text-wrap:balance;margin-bottom:26px}
 .q-opts{display:flex;flex-direction:column;gap:12px}
