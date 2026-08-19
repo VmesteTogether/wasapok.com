@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Trainer Profile</title>
+<meta name="description" content="A twelve-question quiz that reads your full trainer identity: your Pokémon, your type, your region, your battle strategy, and the team of six you'd carry.">
+<meta name="theme-color" content="#11131a">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@500;600;700&family=Share+Tech+Mono&family=Fraunces:opsz,wght@9..144,600;9..144,700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='44' fill='%23fff' stroke='%23111' stroke-width='6'/><path d='M6 50 h88' stroke='%23111' stroke-width='7'/><circle cx='50' cy='50' r='14' fill='%23fff' stroke='%23111' stroke-width='7'/></svg>">
+</head>
+<body>
+<div class="app" id="app" data-type="none">
+
+  <!-- ambient type-tinted wash (blooms toward your leading type) -->
+  <div class="wash" aria-hidden="true"></div>
+
+  <!-- ===== INTRO ===== -->
+  <section class="scene intro active" id="intro">
+    <div class="intro-inner">
+      <div class="kicker">POKÉQUIZ · TRAINER ANALYSIS</div>
+      <h1 class="hero-title">Who are you,<br><span class="hg">Trainer?</span></h1>
+      <p class="hero-sub">Twelve questions. One complete read of the trainer you'd be — pulled from the full National Dex.</p>
+      <ul class="facet-list" aria-label="What this reveals">
+        <li><span class="fi">◓</span>The Pokémon you'd <b>be</b></li>
+        <li><span class="fi">✦</span>The <b>type</b> you'd specialize in</li>
+        <li><span class="fi">▲</span>The <b>region</b> you're from</li>
+        <li><span class="fi">⚔</span>Your battle <b>strategy</b></li>
+        <li><span class="fi">▦</span>Your full <b>team of six</b></li>
+      </ul>
+      <button class="btn-begin" id="beginBtn" type="button">Begin analysis <span class="arw">→</span></button>
+      <div class="intro-foot" id="introFoot"></div>
+    </div>
+  </section>
+
+  <!-- ===== QUIZ ===== -->
+  <section class="scene quiz" id="quiz">
+    <header class="quiz-head">
+      <button class="q-back" id="qBack" type="button" aria-label="Previous question">←</button>
+      <div class="q-progress">
+        <div class="qp-meta"><span id="qNum">Q1</span><span id="qCount">/ 12</span></div>
+        <div class="qp-bar"><div class="qp-fill" id="qpFill"></div></div>
+      </div>
+      <button class="q-restart" id="qRestart" type="button" aria-label="Start over">↺</button>
+    </header>
+    <div class="q-stage" id="qStage" aria-live="polite"></div>
+  </section>
+
+  <!-- ===== CRUNCH (brief compute reveal) ===== -->
+  <section class="scene crunch" id="crunch">
+    <div class="crunch-ball" aria-hidden="true"><span class="cb-top"></span><span class="cb-btn"></span></div>
+    <div class="crunch-txt" id="crunchTxt">Reading your profile…</div>
+  </section>
+
+  <!-- ===== RESULTS ===== -->
+  <section class="scene results" id="results" aria-live="polite"></section>
+
+</div>
+<script src="app.js"></script>
+</body>
+</html>
