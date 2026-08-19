@@ -539,6 +539,8 @@
       const N = 14, R = 52, FLAT = 0.4;   // puffs, ring radius, vertical squash (reads as a ring seen from below)
       door.addEventListener('click', function (e) {
         e.preventDefault();
+        if (door._entering) return;    // sequence already running — ignore repeat clicks
+        door._entering = true;
         smoke.innerHTML = '';
         const rise = -70;              // the ring shoots up out of the chimney top
         for (let i = 0; i < N; i++) {
@@ -553,6 +555,9 @@
           void b.offsetWidth;
           b.classList.add('go');
         }
+        // once the ring has fully puffed up and dissolved, step through to /newhome
+        const total = 1300 + (N - 1) * 6 + 120;   // slowest puff's delay + its 1.3s run + buffer
+        setTimeout(function () { window.location.href = '/newhome/'; }, total);
       });
     })();
   </script>
