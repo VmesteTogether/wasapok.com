@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
 <title>Pokédraft</title>
-<meta name="description" content="Feed in up to 30 favourite Pokémon and Pokédraft forges the best possible teams of six — ranked, with full defensive coverage and team stats, in Competitive or Game-Ready mode.">
+<meta name="description" content="Feed in up to 50 favourite Pokémon and Pokédraft forges the best possible teams of six — ranked, with defensive coverage, optimal movesets, per-era game-fit %, and full team stats, in Competitive or Game-Ready mode.">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
@@ -49,14 +49,14 @@
       <div class="sysreadout" title="Pool size">
         <span class="sys-dot" aria-hidden="true"></span>
         <span class="sys-label">POOL</span>
-        <span class="sys-count"><b id="poolCount">0</b>/30</span>
+        <span class="sys-count"><b id="poolCount">0</b>/50</span>
       </div>
     </header>
 
     <!-- ============ POOL BUILDER ============ -->
     <section class="view view-pool active" id="viewPool">
       <div class="pool-intro" id="poolIntro">
-        <p>Add your favourite Pokémon — up to <b>30</b>. Pokédraft forges the strongest teams of six it can build from them, ranked best to worst. <b>Lock</b> any you want in every team.</p>
+        <p>Add your favourite Pokémon — up to <b>50</b>. Pokédraft forges the strongest teams of six it can build from them, ranked best to worst. <b>Lock</b> any you want in every team.</p>
       </div>
       <div class="search-bar">
         <span class="sb-glyph" aria-hidden="true"></span>
@@ -94,8 +94,9 @@
       </div>
       <div class="team-hero" id="teamHero"></div>
       <div class="tabs" id="tabs">
-        <button class="tab sel" data-tab="coverage" type="button">COVERAGE</button>
-        <button class="tab" data-tab="roster" type="button">ROSTER</button>
+        <button class="tab sel" data-tab="coverage" type="button">COVER</button>
+        <button class="tab" data-tab="roster" type="button">MOVES</button>
+        <button class="tab" data-tab="games" type="button">GAMES</button>
         <button class="tab" data-tab="stats" type="button">STATS</button>
       </div>
       <div class="tab-body" id="tabBody"></div>

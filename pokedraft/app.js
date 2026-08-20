@@ -166,16 +166,59 @@
     return `well-rounded — few holes`;
   };
 
+  // -------------------------------------------------------- optimal movesets ---
+  // A sensible 4-move build per unit, legal to its learnset: STAB in its preferred
+  // category, a setup/utility slot fit to its role, then best coverage by new type.
+  const SETUP_RE = /^(swords dance|dragon dance|nasty plot|calm mind|quiver dance|shell smash|bulk up|coil|work up)$/i;
+  const UTIL_PRI = ["recover","roost","synthesis","moonlight","slack off","soft-boiled","morning sun","calm mind","bulk up",
+    "toxic","will-o-wisp","thunder wave","stealth rock","spikes","defog","iron defense","leech seed","substitute","knock off"];
+  const UTIL_RE = new RegExp("^(" + UTIL_PRI.map(s => s.replace(/[-]/g, "\\-")).join("|") + ")", "i");
+  // recharge / self-KO / one-shot gimmick moves — high BP but not "optimal", so
+  // they're skipped in favour of reliable STAB (Flamethrower over Blast Burn, etc.)
+  const BAD_DMG = /^(hyper beam|giga impact|blast burn|hydro cannon|frenzy plant|roar of time|rock wrecker|prismatic laser|eternabeam|light of ruin|self-destruct|explosion|last resort|misty explosion|final gambit)$/i;
+  const movesetFor = (u) => {
+    if (!MOVES.length) return [];
+    const learn = (LEARN_OK && LEARN[u.id]) ? LEARN[u.id] : null;
+    const canUse = m => !learn || learn.has(m.id);
+    const good = m => !BAD_DMG.test(m.name);
+    const phys = u.stats[1] >= u.stats[3], preferCat = phys ? "P" : "S";
+    const own = [u.t1, u.t2].filter(Boolean);
+    const chosen = [], usedIds = new Set(), usedTypes = new Set();
+    const push = m => { if (m && !usedIds.has(m.id)) { chosen.push(m); usedIds.add(m.id); usedTypes.add(m.type); } };
+    const bestDmg = (type, cat) => {
+      let p = MOVES.filter(m => canUse(m) && good(m) && m.type === type && m.power > 0 && (!cat || m.cat === cat));
+      if (!p.length && cat) p = MOVES.filter(m => canUse(m) && good(m) && m.type === type && m.power > 0);
+      p.sort((a, b) => b.power - a.power); return p[0] || null;
+    };
+    own.forEach(t => { if (chosen.length < 2) push(bestDmg(t, preferCat)); });     // STAB
+    const arch = archetype(u.stats);
+    if (WALL_ARCH.has(arch)) {                                                     // wall → best utility move
+      const util = MOVES.filter(m => canUse(m) && m.cat === "N" && UTIL_RE.test(m.name))
+        .sort((a, b) => { const ia = UTIL_PRI.findIndex(p => a.name.toLowerCase().startsWith(p)), ib = UTIL_PRI.findIndex(p => b.name.toLowerCase().startsWith(p)); return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib); });
+      push(util[0]);
+    } else if (SWEEP_ARCH.has(arch)) {                                            // sweeper → a fitting setup move
+      const setup = MOVES.filter(m => canUse(m) && m.cat === "N" && SETUP_RE.test(m.name) &&
+        (phys ? !/nasty plot|quiver dance/i.test(m.name) : !/swords dance|coil/i.test(m.name)));
+      push(setup[0]);
+    }
+    const cov = MOVES.filter(m => canUse(m) && good(m) && m.power > 0 && !own.includes(m.type)).sort((a, b) => b.power - a.power);
+    for (const m of cov) { if (chosen.length >= 4) break; if (usedTypes.has(m.type) || m.cat !== preferCat) continue; push(m); }
+    if (chosen.length < 4) { const rest = MOVES.filter(m => canUse(m) && good(m) && m.power > 0).sort((a, b) => b.power - a.power);
+      for (const m of rest) { if (chosen.length >= 4) break; if (usedIds.has(m.id)) continue; if (usedTypes.has(m.type) && chosen.length > 2) continue; push(m); } }
+    return chosen.slice(0, 4);
+  };
+
   // ------------------------------------------------------------------ state ---
   let DEX = [], NATIVE = {}, NATIVE_OK = false;
-  const byId = new Map();
+  let MOVES = [], LEARN = {}, LEARN_OK = false;
+  const byId = new Map(), moveById = new Map();
   let pool = [];                    // [{id, locked}]
   let candidates = [], mode = "comp", curTeam = null, curTab = "coverage";
   const inPool = id => pool.some(p => p.id === id);
 
   const savePool = () => { try { localStorage.setItem(POOL_KEY, JSON.stringify(pool)); } catch {} };
   const loadPool = () => { try { const r = JSON.parse(localStorage.getItem(POOL_KEY));
-    if (Array.isArray(r)) pool = r.filter(p => p && byId.has(p.id)).map(p => ({ id: p.id, locked: !!p.locked })).slice(0, 30); } catch {} };
+    if (Array.isArray(r)) pool = r.filter(p => p && byId.has(p.id)).map(p => ({ id: p.id, locked: !!p.locked })).slice(0, 50); } catch {} };
 
   // ------------------------------------------------------------- team eval ---
   const evalCache = new Map();
@@ -315,7 +358,7 @@
   };
 
   const addToPool = (id) => {
-    if (inPool(id) || pool.length >= 30) return;
+    if (inPool(id) || pool.length >= 50) return;
     pool.push({ id, locked: false }); savePool(); renderPool();
     const inp = $("#searchInput"); renderSearch(inp.value);
   };
@@ -324,8 +367,9 @@
 
   // ---- ranked team list ----
   const rankBadge = (sc) => `<span class="tier tier-${tierOf(sc)}">${tierOf(sc)}</span>`;
+  const TEAMS_SHOWN = 24;
   const renderResults = () => {
-    const list = candidates.slice().sort((a, b) => scoreOf(b, mode) - scoreOf(a, mode)).slice(0, 12);
+    const list = candidates.slice().sort((a, b) => scoreOf(b, mode) - scoreOf(a, mode)).slice(0, TEAMS_SHOWN);
     $("#modeNote").innerHTML = mode === "comp"
       ? `<b>COMPETITIVE</b> — ranked for battle: power, speed control, filled roles, no shared weakness.`
       : `<b>GAME-READY</b> — ranked for a playthrough: broad type coverage, survivability, few gaps.`;
@@ -365,6 +409,7 @@
     const A = curTeam.A, body = $("#tabBody");
     if (curTab === "coverage") body.innerHTML = coverageHTML(A, curTeam.units);
     else if (curTab === "roster") body.innerHTML = rosterHTML(curTeam.units);
+    else if (curTab === "games") body.innerHTML = gamesHTML(curTeam.units);
     else body.innerHTML = statsHTML(A);
     body.scrollTop = 0;
   };
@@ -394,17 +439,52 @@
   };
 
   const statRow = (lbl, v, max) => `<div class="mstat"><span class="mstat-l">${lbl}</span><div class="mstat-t"><div class="mstat-f" style="width:${clamp(v / max * 100, 0, 100).toFixed(0)}%"></div></div><span class="mstat-v">${v}</span></div>`;
+  const moveChip = m => `<span class="mvchip" style="--tc:${TYPE_HEX[m.type]}"><i class="mv-dot"></i><span class="mv-nm">${m.name}</span><b class="mv-bp">${m.power > 0 ? m.power : "—"}</b></span>`;
   const rosterHTML = (units) => `<div class="roster">${units.map(u => {
     const arch = archetype(u.stats), best = STAT_LBL[u.stats.indexOf(Math.max(...u.stats))];
+    const mv = movesetFor(u);
     return `<div class="rmon" style="--tc:${TYPE_HEX[u.t1]}">
-      <div class="rm-art">${spr(u)}</div>
-      <div class="rm-body">
-        <div class="rm-top"><span class="rm-name">${displayName(u.ident)}</span><span class="rm-dots">${typeDots(u)}</span></div>
-        <div class="rm-meta"><span class="rm-arch">${arch}</span><span class="rm-dex">№${String(u.dexno).padStart(3,"0")} · ${REGIONS[u.gen-1]}</span></div>
-        <div class="rm-stats"><span>BST <b>${u.bst}</b></span><span>top <b>${best} ${Math.max(...u.stats)}</b></span><span>SPE <b>${u.stats[5]}</b></span></div>
+      <div class="rm-head">
+        <div class="rm-art">${spr(u)}</div>
+        <div class="rm-body">
+          <div class="rm-top"><span class="rm-name">${displayName(u.ident)}</span><span class="rm-dots">${typeDots(u)}</span></div>
+          <div class="rm-meta"><span class="rm-arch">${arch}</span><span class="rm-dex">№${String(u.dexno).padStart(3,"0")} · ${u.stats[1] >= u.stats[3] ? "PHYSICAL" : "SPECIAL"}</span></div>
+          <div class="rm-stats"><span>BST <b>${u.bst}</b></span><span>top <b>${best} ${Math.max(...u.stats)}</b></span><span>SPE <b>${u.stats[5]}</b></span></div>
+        </div>
       </div>
+      ${mv.length ? `<div class="rm-moves">${mv.map(moveChip).join("")}</div>` : ""}
     </div>`;
   }).join("")}</div>`;
+
+  // GAMES tab — which era's games best fit this exact team, by % you can catch
+  // in-region (no transfers). Eras before the team's latest debut can't run it.
+  const gamesHTML = (units) => {
+    const size = units.length, floor = Math.max(...units.map(u => u.gen));
+    const rows = [];
+    for (let g = 1; g <= 9; g++) {
+      const playable = g >= floor;
+      const nativeN = NATIVE_OK && NATIVE[g] ? units.filter(u => NATIVE[g].has(u.dexno)).length : 0;
+      rows.push({ g, playable, nativeN, pct: playable ? Math.round(100 * nativeN / size) : 0 });
+    }
+    const sorted = rows.slice().sort((a, b) => (b.playable - a.playable) || (b.pct - a.pct) || (a.g - b.g));
+    const best = sorted.find(r => r.playable);
+    const bar = r => {
+      const cls = !r.playable ? "locked" : r.pct >= 80 ? "hi" : r.pct >= 40 ? "mid" : "lo";
+      const note = !r.playable ? `pre-debut · needs Gen ${ROMAN[floor - 1]}+` : `catch ${r.nativeN}/${size} in-region`;
+      return `<div class="grow ${cls}${best && r.g === best.g ? " best" : ""}">
+        <div class="grow-l"><span class="grow-g">GEN ${ROMAN[r.g - 1]}</span><span class="grow-r">${REGIONS[r.g - 1]}</span>${best && r.g === best.g ? `<span class="grow-best">BEST FIT</span>` : ""}</div>
+        <div class="grow-bar"><div class="grow-fill" style="width:${r.playable ? Math.max(4, r.pct) : 0}%"></div></div>
+        <div class="grow-pct">${r.playable ? r.pct + "%" : "—"}</div>
+        <div class="grow-note">${note}</div>
+      </div>`;
+    };
+    return `<div class="games-wrap">
+      <div class="sec-h">GAME FIT <span class="sec-sub">% of the team you can catch in that era — no transfers</span></div>
+      ${NATIVE_OK ? "" : `<div class="off-line dim">availability data offline</div>`}
+      <div class="games-list">${sorted.map(bar).join("")}</div>
+      <div class="games-foot">Earliest era this exact team can legally exist: <b>Gen ${ROMAN[floor - 1]} · ${REGIONS[floor - 1]}</b>.</div>
+    </div>`;
+  };
 
   const statsHTML = (A) => {
     const dutyPips = DUTIES.map(d => { const on = A.staffed.includes(d);
@@ -480,13 +560,17 @@
       byId.set(id, u); return u; });
     try { const nd = await (await fetch("data/nativedex.json")).json();
       for (let g = 1; g <= 9; g++) NATIVE[g] = new Set(nd[g] || nd[String(g)] || []); NATIVE_OK = true; } catch {}
+    try { const mv = await (await fetch("data/moves.json")).json();
+      MOVES = mv.map(r => { const m = { id: r[0], name: r[1], type: r[2], power: r[3] || 0, cat: r[4] || "N" }; moveById.set(m.id, m); return m; }); } catch {}
+    try { const lr = await (await fetch("data/learnsets.json")).json();
+      for (const k in lr) LEARN[k] = new Set(lr[k]); LEARN_OK = true; } catch {}
     loadPool(); renderPool(); wire(); clockTick();
     // dev/preview hook: #pool=1,4,7,...[;lock=1,4][;forge] seeds a pool
     const h = location.hash;
     const pm = /pool=([\d,]+)/.exec(h);
     if (pm) {
       const lk = new Set((/lock=([\d,]+)/.exec(h)?.[1] || "").split(",").map(Number));
-      pool = pm[1].split(",").map(Number).filter(id => byId.has(id)).slice(0, 30).map(id => ({ id, locked: lk.has(id) }));
+      pool = pm[1].split(",").map(Number).filter(id => byId.has(id)).slice(0, 50).map(id => ({ id, locked: lk.has(id) }));
       savePool(); renderPool();
       if (/[#;&]forge/.test(h)) {
         generate();
