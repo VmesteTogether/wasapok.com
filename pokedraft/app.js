@@ -146,7 +146,9 @@
     if (A.count < 6) s -= (6 - A.count) * 6;
     return clamp(Math.round(s), 1, 99);
   };
-  const scoreOf = (ev, mode) => mode === "game" ? ev.game : ev.comp;
+  // AVERAGE = the best all-purpose team, strong across both battle and playthrough.
+  const scoreOf = (ev, m) => m === "game" ? ev.game : m === "avg" ? Math.round((ev.comp + ev.game) / 2) : ev.comp;
+  const MODE_LBL = { comp: "COMPETITIVE", avg: "AVERAGE", game: "GAME-READY" };
 
   const TIERS = [
     { min: 88, t:"S" }, { min: 78, t:"A" }, { min: 66, t:"B" }, { min: 52, t:"C" }, { min: 38, t:"D" }, { min: 0, t:"E" },
@@ -278,7 +280,7 @@
           add(ids);
         }
       };
-      greedy("comp"); greedy("game");
+      greedy("comp"); greedy("game"); greedy("avg");
       const rng = mulberry32(0x51ceb00c);
       for (let r = 0; r < 260; r++) {
         const sh = free.slice(); for (let i = sh.length - 1; i > 0; i--) { const j = (rng() * (i + 1)) | 0; [sh[i], sh[j]] = [sh[j], sh[i]]; }
@@ -370,9 +372,10 @@
   const TEAMS_SHOWN = 24;
   const renderResults = () => {
     const list = candidates.slice().sort((a, b) => scoreOf(b, mode) - scoreOf(a, mode)).slice(0, TEAMS_SHOWN);
-    $("#modeNote").innerHTML = mode === "comp"
-      ? `<b>COMPETITIVE</b> — ranked for battle: power, speed control, filled roles, no shared weakness.`
-      : `<b>GAME-READY</b> — ranked for a playthrough: broad type coverage, survivability, few gaps.`;
+    $("#modeNote").innerHTML =
+      mode === "comp" ? `<b>COMPETITIVE</b> — ranked for battle: power, speed control, filled roles, no shared weakness.`
+      : mode === "game" ? `<b>GAME-READY</b> — ranked for a playthrough: broad type coverage, survivability, few gaps.`
+      : `<b>AVERAGE</b> — the best all-purpose team: strongest across both battle and playthrough at once.`;
     const wrap = $("#teamList");
     if (!list.length) { wrap.innerHTML = `<div class="tl-empty">Add at least two units and forge again.</div>`; return; }
     wrap.innerHTML = list.map((ev, i) => {
@@ -393,7 +396,7 @@
     curTab = "coverage";
     $$("#tabs .tab").forEach(t => t.classList.toggle("sel", t.dataset.tab === "coverage"));
     const sc = scoreOf(curTeam, mode);
-    $("#teamRankBadge").innerHTML = `${rankBadge(sc)}<span class="trb-lbl">${mode === "comp" ? "COMPETITIVE" : "GAME-READY"}</span>`;
+    $("#teamRankBadge").innerHTML = `${rankBadge(sc)}<span class="trb-lbl">${MODE_LBL[mode]}</span>`;
     $("#teamHero").innerHTML =
       `<div class="th-sprites">${curTeam.units.map(u => `<span class="ths">${spr(u)}</span>`).join("")}</div>
        <div class="th-scores">
@@ -574,7 +577,7 @@
       savePool(); renderPool();
       if (/[#;&]forge/.test(h)) {
         generate();
-        mode = /mode=game/.test(h) ? "game" : "comp";
+        mode = /mode=(comp|avg|game)/.test(h) ? RegExp.$1 : "comp";
         $$("#modeToggle .mt-opt").forEach(o => o.classList.toggle("sel", o.dataset.mode === mode));
         renderResults();
         const tm = /team=(\d+)/.exec(h);

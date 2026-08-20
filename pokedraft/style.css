@@ -122,7 +122,7 @@ img{image-rendering:pixelated}
 .rb-back{background:rgba(53,230,255,.06);border:1px solid var(--hair);color:var(--cyan);font-family:var(--f-mono);font-size:10px;letter-spacing:1px;padding:7px 11px;cursor:pointer;clip-path:polygon(5px 0,100% 0,100% calc(100% - 5px),calc(100% - 5px) 100%,0 100%,0 5px)}
 .rb-back:active{background:rgba(53,230,255,.16)}
 .mode-toggle{flex:1 1 auto;display:flex;background:var(--bg-2);border:1px solid var(--hair-soft);border-radius:9px;padding:2px}
-.mt-opt{flex:1 1 0;padding:8px 4px;cursor:pointer;background:transparent;border:0;border-radius:7px;font-family:var(--f-disp);font-weight:700;font-size:11px;letter-spacing:1px;color:var(--txt-2);transition:color .15s,background .15s}
+.mt-opt{flex:1 1 0;min-width:0;padding:8px 2px;cursor:pointer;background:transparent;border:0;border-radius:7px;font-family:var(--f-disp);font-weight:700;font-size:9.5px;letter-spacing:.3px;color:var(--txt-2);transition:color .15s,background .15s;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .mt-opt.sel{color:var(--bg);background:var(--cyan);box-shadow:var(--glow-soft)}
 .mode-note{flex:0 0 auto;padding:0 16px 8px;font-family:var(--f-mono);font-size:10px;line-height:1.5;letter-spacing:.3px;color:var(--txt-2)}
 .mode-note b{color:var(--cyan)}
