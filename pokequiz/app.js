@@ -73,6 +73,19 @@
     1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1014,1015,1016,1017,1020,1021,1022,1023,1024,1025]);
   const BATTLE_ONLY = /-mega|-gmax|-primal|-totem|-eternamax|-ultra|-busted|-crowned|-eternal|-ash|-starter/;
 
+  // ---- FORM axis: which VARIANT of a species you'd be. A real scored dimension
+  // (base + four regional families) that also steers the "you'd be" pick toward an
+  // actual regional form when one fits your type. ----
+  const FORMS = {
+    base:  { name:"Original",  adj:"true-to-form", vibe:"timeless and unchanged — you honour the classics and never lose yourself to a trend." },
+    alola: { name:"Alolan",    adj:"island-touched", vibe:"shaped by warmth and easy days — you adapt, relax into new places and wear change lightly." },
+    galar: { name:"Galarian",  adj:"reforged", vibe:"tempered by a harsher world — tougher, moodier and rebuilt from the ground up." },
+    hisui: { name:"Hisuian",   adj:"primal", vibe:"ancient and untamed — you carry an older, wilder spirit the modern world forgot." },
+    paldea:{ name:"Paldean",   adj:"unbound", vibe:"bold and free — a fearless, modern reinvention that answers to no one." },
+  };
+  const FORM_KEYS = ["alola", "galar", "hisui", "paldea"];
+  const formOf = ident => { for (const k of FORM_KEYS) if (ident.includes("-" + k)) return k; return "base"; };
+
   // combat class from base stats [hp,atk,def,spa,spd,spe] (ported from pokemeter)
   const archetype = s => {
     const [hp, atk, def, spa, spd] = s, spe = s[5];
@@ -101,152 +114,211 @@
 
   // ---- the questions, in four chapters. Each option seeds type (t) / region gen
   // (r) / strategy (s) vectors; the first item in a list weighs heaviest. ----
-  const S1 = "I · Temperament", S2 = "II · Your World", S3 = "III · In Battle", S4 = "IV · Heart & Soul";
+  const S1 = "I · Temperament", S2 = "II · Your World", S3 = "III · In Battle", S4 = "IV · Heart & Soul", S5 = "V · Identity & Form";
   const QUESTIONS = [
     /* ===================== I · TEMPERAMENT ===================== */
     { sec:S1, q:"Friends would call you…", o:[
       { a:"Bold and fiery", t:["fire","fighting"], s:["offense"] },
       { a:"Calm and dependable", t:["water","steel","rock"], s:["defense"] },
       { a:"Clever and unpredictable", t:["psychic","ghost","dark"], s:["trickster"] },
-      { a:"Warm and loyal", t:["normal","fairy","grass"], s:["balanced"] } ] },
+      { a:"Warm and loyal", t:["normal","fairy","grass"], s:["balanced"] },
+      { a:"Restless and free", t:["flying","electric","bug"], s:["setup"] } ] },
     { sec:S1, q:"Your greatest strength?", o:[
       { a:"Raw power", t:["fighting","dragon","rock"], s:["breaker"] },
       { a:"Speed and instinct", t:["electric","flying","normal"], s:["offense"] },
       { a:"Resilience", t:["steel","rock","ground"], s:["defense"] },
-      { a:"Cunning", t:["dark","ghost","poison"], s:["trickster"] } ] },
+      { a:"Cunning", t:["dark","ghost","poison"], s:["trickster"] },
+      { a:"Empathy", t:["fairy","grass","water"], s:["balanced"] } ] },
     { sec:S1, q:"And your flaw?", o:[
       { a:"Reckless", t:["fire","fighting"], s:["offense"] },
       { a:"Stubborn", t:["rock","ground","steel"], s:["defense"] },
       { a:"Secretive", t:["dark","ghost","ice"], s:["trickster"] },
-      { a:"Too trusting", t:["fairy","normal","grass"], s:["balanced"] } ] },
+      { a:"Too trusting", t:["fairy","normal","grass"], s:["balanced"] },
+      { a:"Aloof", t:["psychic","poison","dragon"], s:["setup"] } ] },
     { sec:S1, q:"In a crowded room, you're…", o:[
       { a:"The centre of it all", t:["fire","fairy","normal"], s:["offense"] },
       { a:"Reading everyone quietly", t:["psychic","dark","ghost"], s:["trickster"] },
       { a:"Bringing people together", t:["grass","water","normal"], s:["balanced"] },
-      { a:"The unpredictable spark", t:["electric","bug","poison"], s:["setup"] } ] },
+      { a:"The unpredictable spark", t:["electric","bug","poison"], s:["setup"] },
+      { a:"Watching from the wall", t:["steel","ice","rock"], s:["defense"] } ] },
     { sec:S1, q:"You make the big calls with…", o:[
       { a:"Gut instinct — fast", t:["fire","electric","flying"], s:["offense"] },
       { a:"Careful analysis", t:["psychic","steel","ice"], s:["setup"] },
       { a:"What feels right for everyone", t:["fairy","normal","grass"], s:["balanced"] },
-      { a:"Firm principle, no bending", t:["fighting","rock","steel"], s:["breaker"] } ] },
+      { a:"Firm principle, no bending", t:["fighting","rock","steel"], s:["breaker"] },
+      { a:"A quiet hunch you keep to yourself", t:["dark","ghost","poison"], s:["trickster"] } ] },
     { sec:S1, q:"When a plan falls apart, you…", o:[
       { a:"Charge harder", t:["fire","fighting","dragon"], s:["offense"] },
       { a:"Dig in and outlast it", t:["rock","steel","water"], s:["defense"] },
       { a:"Improvise a new angle", t:["dark","ghost","bug"], s:["trickster"] },
-      { a:"Calmly rebuild the plan", t:["psychic","grass","ice"], s:["setup"] } ] },
+      { a:"Calmly rebuild the plan", t:["psychic","grass","ice"], s:["setup"] },
+      { a:"Rally everyone and adapt", t:["normal","fairy","flying"], s:["balanced"] } ] },
     { sec:S1, q:"Your daily discipline looks like…", o:[
       { a:"Relentless training", t:["fighting","steel","dragon"], s:["breaker"] },
       { a:"A steady, gentle routine", t:["normal","grass","fairy"], s:["defense"] },
       { a:"Chaotic bursts of genius", t:["electric","bug","fire"], s:["offense"] },
-      { a:"Quiet study and planning", t:["psychic","ghost","ice"], s:["setup"] } ] },
+      { a:"Quiet study and planning", t:["psychic","ghost","ice"], s:["setup"] },
+      { a:"Whatever the day demands", t:["water","flying","poison"], s:["balanced"] } ] },
     /* ===================== II · YOUR WORLD ===================== */
     { sec:S2, q:"Where do you feel most at home?", o:[
       { a:"A neon city that never sleeps", t:["electric","dark","steel"], r:[5,6], s:["offense"] },
       { a:"A quiet mountain village", t:["rock","ground","ice"], r:[4,2], s:["defense"] },
-      { a:"Sun-soaked beaches and islands", t:["water","fire","grass"], r:[7,3], s:["balanced"] },
-      { a:"Rolling green countryside", t:["grass","normal","fairy"], r:[8,1,9], s:["defense"] } ] },
+      { a:"Sun-soaked beaches and islands", t:["water","fire","grass"], r:[7,3], s:["balanced"], f:["alola"] },
+      { a:"Rolling green countryside", t:["grass","normal","fairy"], r:[8,1,9], s:["defense"] },
+      { a:"A wild, untouched frontier", t:["ground","flying","dragon"], r:[9,4], s:["setup"], f:["hisui","paldea"] } ] },
     { sec:S2, q:"You'd build your base in…", o:[
       { a:"A volcano's edge", t:["fire","rock"], r:[7,3], s:["offense"] },
-      { a:"A deep forest grove", t:["grass","bug","poison"], r:[6,2], s:["balanced"] },
-      { a:"An ancient, echoing ruin", t:["ghost","psychic","ground"], r:[9,4], s:["trickster"] },
-      { a:"A cliffside above the sea", t:["water","flying","ice"], r:[3,8], s:["defense"] } ] },
+      { a:"A deep forest grove", t:["grass","bug","poison"], r:[6,2], s:["balanced"], f:["hisui"] },
+      { a:"An ancient, echoing ruin", t:["ghost","psychic","ground"], r:[9,4], s:["trickster"], f:["hisui"] },
+      { a:"A cliffside above the sea", t:["water","flying","ice"], r:[3,8], s:["defense"] },
+      { a:"A rain-slick industrial district", t:["steel","electric","dark"], r:[8,5], s:["breaker"], f:["galar"] } ] },
     { sec:S2, q:"Your kind of weather…", o:[
-      { a:"Blazing sun", t:["fire","ground","grass"], r:[3,7] },
-      { a:"Pouring rain", t:["water","electric"], r:[8] },
-      { a:"A swirling sandstorm", t:["rock","ground","steel"], r:[9] },
-      { a:"Silent snowfall", t:["ice","fairy","steel"], r:[4] } ] },
+      { a:"Blazing sun", t:["fire","ground","grass"], r:[3,7], f:["alola"] },
+      { a:"Pouring rain", t:["water","electric"], r:[8], f:["galar"] },
+      { a:"A swirling sandstorm", t:["rock","ground","steel"], r:[9], f:["paldea"] },
+      { a:"Silent snowfall", t:["ice","fairy","steel"], r:[4], f:["hisui"] },
+      { a:"Clear skies and open wind", t:["flying","normal","dragon"], r:[1,2] } ] },
     { sec:S2, q:"You're a season.", o:[
-      { a:"Blazing summer", t:["fire","grass"], r:[3,7] },
-      { a:"Still winter", t:["ice","steel"], r:[4,8] },
-      { a:"Golden autumn", t:["ground","rock","ghost"], r:[6,2,9] },
-      { a:"Fresh spring", t:["fairy","grass","normal"], r:[1,8] } ] },
+      { a:"Blazing summer", t:["fire","grass"], r:[3,7], f:["alola"] },
+      { a:"Still winter", t:["ice","steel"], r:[4,8], f:["galar"] },
+      { a:"Golden autumn", t:["ground","rock","ghost"], r:[6,2,9], f:["hisui"] },
+      { a:"Fresh spring", t:["fairy","grass","normal"], r:[1,8] },
+      { a:"A storm season all its own", t:["electric","water","flying"], r:[5], f:["paldea"] } ] },
     { sec:S2, q:"A treasure worth chasing…", o:[
-      { a:"A relic of the ancient world", t:["rock","ground","steel"], r:[4,9], s:["setup"] },
+      { a:"A relic of the ancient world", t:["rock","ground","steel"], r:[4,9], s:["setup"], f:["hisui"] },
       { a:"A rare, radiant gem", t:["fairy","psychic"], r:[6], s:["balanced"] },
-      { a:"Lost, humming technology", t:["electric","steel","poison"], r:[5], s:["trickster"] },
-      { a:"A legend's fallen feather", t:["flying","fire","dragon"], r:[2], s:["offense"] } ] },
+      { a:"Lost, humming technology", t:["electric","steel","poison"], r:[5], s:["trickster"], f:["galar"] },
+      { a:"A legend's fallen feather", t:["flying","fire","dragon"], r:[2], s:["offense"] },
+      { a:"Wide-open freedom itself", t:["normal","ground","grass"], r:[9], s:["balanced"], f:["paldea"] } ] },
     { sec:S2, q:"Pick a palette.", o:[
       { a:"Reds and embers", t:["fire","fighting"] },
       { a:"Blues and frost", t:["water","ice","flying"] },
       { a:"Violets and shadow", t:["poison","ghost","dark","psychic"] },
-      { a:"Greens and gold", t:["grass","ground","bug","electric"] } ] },
+      { a:"Greens and gold", t:["grass","ground","bug","electric"] },
+      { a:"Silver and steel", t:["steel","normal","rock"], f:["galar"] } ] },
     { sec:S2, q:"First thing you notice in a new town…", o:[
       { a:"The gym and its challengers", t:["fighting","fire"], r:[5], s:["offense"] },
-      { a:"The market and its people", t:["normal","grass","fairy"], r:[8], s:["balanced"] },
-      { a:"The old shrine or lab", t:["psychic","ghost","steel"], r:[4], s:["setup"] },
-      { a:"The wild edges beyond it", t:["dark","poison","ground"], r:[9], s:["trickster"] } ] },
+      { a:"The market and its people", t:["normal","grass","fairy"], r:[8], s:["balanced"], f:["alola"] },
+      { a:"The old shrine or lab", t:["psychic","ghost","steel"], r:[4], s:["setup"], f:["hisui"] },
+      { a:"The wild edges beyond it", t:["dark","poison","ground"], r:[9], s:["trickster"], f:["paldea"] },
+      { a:"The harbour and the horizon", t:["water","flying","ice"], r:[3,7] } ] },
     /* ===================== III · IN BATTLE ===================== */
     { sec:S3, q:"In a tough battle, you…", o:[
       { a:"Go all-in and overwhelm them", t:["fighting","fire","dragon"], s:["offense"] },
       { a:"Wear them down patiently", t:["steel","water","poison"], s:["defense"] },
       { a:"Set traps and flip the tide", t:["ghost","dark","bug"], s:["trickster"] },
-      { a:"Read them and counter perfectly", t:["psychic","normal","fairy"], s:["balanced"] } ] },
+      { a:"Read them and counter perfectly", t:["psychic","normal","fairy"], s:["balanced"] },
+      { a:"Build one turn, then end it", t:["dragon","electric","ice"], s:["setup"] } ] },
     { sec:S3, q:"Your ideal adventure is…", o:[
       { a:"Racing to be the very best", t:["fire","electric","fighting"], r:[1], s:["offense"] },
-      { a:"Uncovering ancient mysteries", t:["psychic","ghost","rock"], r:[4,9], s:["setup"] },
+      { a:"Uncovering ancient mysteries", t:["psychic","ghost","rock"], r:[4,9], s:["setup"], f:["hisui"] },
       { a:"Befriending every creature I meet", t:["normal","fairy","grass"], r:[8], s:["balanced"] },
-      { a:"Testing myself against the strongest", t:["dragon","fighting","steel"], r:[3], s:["breaker"] } ] },
+      { a:"Testing myself against the strongest", t:["dragon","fighting","steel"], r:[3], s:["breaker"] },
+      { a:"Wandering wherever the road goes", t:["flying","ground","water"], r:[9,7], s:["trickster"], f:["paldea"] } ] },
     { sec:S3, q:"What matters most in a battle team?", o:[
       { a:"Overwhelming firepower", t:["fire","dragon","fighting"], s:["breaker"] },
       { a:"An airtight, unbreakable core", t:["steel","rock","water"], s:["defense"] },
       { a:"Clever synergy and traps", t:["ghost","bug","poison"], s:["trickster"] },
-      { a:"Speed and adaptability", t:["electric","flying","normal"], s:["offense"] } ] },
+      { a:"Speed and adaptability", t:["electric","flying","normal"], s:["offense"] },
+      { a:"Deep, patient setup", t:["psychic","grass","ice"], s:["setup"] } ] },
     { sec:S3, q:"Your relationship with the rules…", o:[
-      { a:"Honour them fully", t:["normal","steel","fairy"], s:["defense"] },
+      { a:"Honour them fully", t:["normal","steel","fairy"], s:["defense"], f:["base"] },
       { a:"Bend them when needed", t:["psychic","water","grass"], s:["balanced"] },
       { a:"Break them for the win", t:["fire","fighting","dragon"], s:["offense"] },
-      { a:"Rewrite them entirely", t:["dark","ghost","poison"], s:["trickster"] } ] },
+      { a:"Rewrite them entirely", t:["dark","ghost","poison"], s:["trickster"], f:["paldea"] },
+      { a:"Never learned them anyway", t:["ground","rock","bug"], s:["breaker"], f:["hisui"] } ] },
     { sec:S3, q:"Your ideal victory is…", o:[
       { a:"A flawless, unanswered sweep", t:["dragon","electric","fire"], s:["setup"] },
       { a:"A grinding war of attrition", t:["steel","water","poison"], s:["defense"] },
       { a:"A perfectly sprung trap", t:["ghost","dark","bug"], s:["trickster"] },
-      { a:"A hard-earned comeback", t:["fighting","fire","grass"], s:["breaker"] } ] },
+      { a:"A hard-earned comeback", t:["fighting","fire","grass"], s:["breaker"] },
+      { a:"One clean, decisive strike", t:["ice","rock","normal"], s:["offense"] } ] },
     { sec:S3, q:"Your training philosophy…", o:[
       { a:"Push past every limit", t:["fighting","dragon","fire"], s:["breaker"] },
-      { a:"Perfect the fundamentals", t:["steel","normal","rock"], s:["defense"] },
+      { a:"Perfect the fundamentals", t:["steel","normal","rock"], s:["defense"], f:["base"] },
       { a:"Trust the bond above all", t:["fairy","grass","water"], s:["balanced"] },
-      { a:"Out-think the meta", t:["psychic","dark","ghost"], s:["trickster"] } ] },
+      { a:"Out-think the meta", t:["psychic","dark","ghost"], s:["trickster"] },
+      { a:"Return to primal instinct", t:["ground","bug","poison"], s:["setup"], f:["hisui"] } ] },
     { sec:S3, q:"Pick a held-item vibe.", o:[
       { a:"Choice Band — commit hard", t:["fighting","dragon","rock"], s:["breaker"] },
       { a:"Leftovers — endure forever", t:["steel","water","poison"], s:["defense"] },
       { a:"Focus Sash — one clutch chance", t:["electric","ghost","ice"], s:["trickster"] },
-      { a:"Life Orb — all risk, all reward", t:["fire","dark","dragon"], s:["offense"] } ] },
+      { a:"Life Orb — all risk, all reward", t:["fire","dark","dragon"], s:["offense"] },
+      { a:"Eviolite — patience, potential", t:["grass","normal","fairy"], s:["setup"] } ] },
     /* ===================== IV · HEART & SOUL ===================== */
     { sec:S4, q:"An element calls to you.", o:[
       { a:"Flame", t:["fire"], r:[3], s:["offense"] },
       { a:"Deep water and ice", t:["water","ice"], r:[7,4], s:["defense"] },
       { a:"Storm and lightning", t:["electric","flying"], r:[5], s:["offense"] },
-      { a:"Earth and growing things", t:["grass","ground"], r:[8,9], s:["defense"] } ] },
+      { a:"Earth and growing things", t:["grass","ground"], r:[8,9], s:["defense"] },
+      { a:"Mind and shadow", t:["psychic","ghost","dark"], r:[6,4], s:["trickster"] } ] },
     { sec:S4, q:"A legendary calls. You're drawn to the one that embodies…", o:[
       { a:"Time, space and creation", t:["steel","dragon","psychic"], r:[4], s:["setup"] },
       { a:"Nature, life and renewal", t:["fire","fairy","grass"], r:[2,6], s:["balanced"] },
       { a:"Shadow, dreams and the void", t:["dark","ghost","dragon"], r:[7,4], s:["trickster"] },
-      { a:"Truth, ideals and thunder", t:["dragon","electric","ice"], r:[5], s:["breaker"] } ] },
+      { a:"Truth, ideals and thunder", t:["dragon","electric","ice"], r:[5], s:["breaker"] },
+      { a:"Land, sea and sky", t:["ground","water","flying"], r:[3], s:["offense"] } ] },
     { sec:S4, q:"Your ideal partner Pokémon is…", o:[
       { a:"Fierce and proud", t:["fire","dragon","fighting"] },
       { a:"Gentle and loyal", t:["grass","normal","fairy"] },
       { a:"Sly and mischievous", t:["dark","ghost","poison"] },
-      { a:"Cool and mysterious", t:["psychic","ice","steel"] } ] },
+      { a:"Cool and mysterious", t:["psychic","ice","steel"] },
+      { a:"Playful and boundless", t:["electric","water","flying"] } ] },
     { sec:S4, q:"Your role among friends?", o:[
       { a:"The leader, out front", t:["fire","fighting"], s:["offense"] },
       { a:"The protector", t:["steel","rock","fairy"], s:["defense"] },
       { a:"The strategist", t:["psychic","ghost"], s:["setup"] },
-      { a:"The heart that holds it together", t:["grass","water","normal"], s:["balanced"] } ] },
+      { a:"The heart that holds it together", t:["grass","water","normal"], s:["balanced"] },
+      { a:"The wildcard", t:["electric","dark","bug"], s:["trickster"] } ] },
     { sec:S4, q:"A mythic spirit you'd embody…", o:[
       { a:"The rising phoenix", t:["fire","flying"], s:["offense"] },
       { a:"The deep-sea leviathan", t:["water","dragon"], s:["breaker"] },
       { a:"The mountain golem", t:["rock","ground","steel"], s:["defense"] },
-      { a:"The forest sprite", t:["grass","fairy","bug"], s:["balanced"] } ] },
+      { a:"The forest sprite", t:["grass","fairy","bug"], s:["balanced"] },
+      { a:"The midnight phantom", t:["ghost","dark","psychic"], s:["trickster"] } ] },
     { sec:S4, q:"If you could master one power…", o:[
       { a:"Command fire and storm", t:["fire","electric"], s:["offense"] },
       { a:"Bend mind and shadow", t:["psychic","ghost","dark"], s:["trickster"] },
       { a:"Shape stone and steel", t:["rock","ground","steel"], s:["defense"] },
-      { a:"Speak with every living thing", t:["grass","normal","fairy","water"], s:["balanced"] } ] },
+      { a:"Speak with every living thing", t:["grass","normal","fairy","water"], s:["balanced"] },
+      { a:"Ride the wind, unbound", t:["flying","dragon","ice"], s:["setup"] } ] },
     { sec:S4, q:"Above all, you love Pokémon for…", o:[
       { a:"The thrill of battle", t:["fighting","dragon"], s:["breaker","offense"] },
       { a:"Completing the whole dex", t:["normal","flying"], s:["balanced"] },
       { a:"The bond with your partners", t:["fairy","grass","water"], s:["defense"] },
-      { a:"Mastering deep strategy", t:["psychic","steel"], s:["trickster","setup"] } ] },
+      { a:"Mastering deep strategy", t:["psychic","steel"], s:["trickster","setup"] },
+      { a:"Discovering the strange and rare", t:["ghost","poison","bug"], s:["setup"], f:["hisui","galar"] } ] },
+    /* ===================== V · IDENTITY & FORM ===================== */
+    { sec:S5, q:"How do you wear change?", o:[
+      { a:"I stay true to who I've always been", t:["normal","rock","fighting"], f:["base"] },
+      { a:"I adapt and mellow into new places", t:["water","grass","fairy"], f:["alola"] },
+      { a:"I let hardship reforge me tougher", t:["steel","dark","poison"], f:["galar"] },
+      { a:"I reconnect with something older in me", t:["ghost","ground","bug"], f:["hisui"] },
+      { a:"I reinvent myself entirely, my way", t:["electric","fire","dragon"], f:["paldea"] } ] },
+    { sec:S5, q:"A place transforms the people in it. Yours is…", o:[
+      { a:"Nowhere — I'm the same everywhere", t:["normal","steel"], f:["base"] },
+      { a:"A sunlit island that softens you", t:["water","fairy","grass"], r:[7], f:["alola"] },
+      { a:"A cold, industrial city that hardens you", t:["steel","electric","dark"], r:[8], f:["galar"] },
+      { a:"An ancient wilderness that awakens you", t:["ground","rock","ghost"], r:[4], f:["hisui"] },
+      { a:"A wide frontier that sets you free", t:["flying","fighting","dragon"], r:[9], f:["paldea"] } ] },
+    { sec:S5, q:"Your relationship with tradition…", o:[
+      { a:"Honour it — classics are classic for a reason", t:["normal","fire","water"], f:["base"] },
+      { a:"Blend the old and new, easygoing", t:["grass","fairy","psychic"], f:["alola"] },
+      { a:"Rebuild it grittier and modern", t:["dark","steel","poison"], f:["galar"] },
+      { a:"Dig beneath it to the primal roots", t:["ground","rock","bug"], f:["hisui"] },
+      { a:"Toss it out and start fresh", t:["electric","fighting","dragon"], f:["paldea"] } ] },
+    { sec:S5, q:"If your look got a redesign, it'd be…", o:[
+      { a:"Unchanged — timeless", t:["normal","fighting","rock"], f:["base"] },
+      { a:"Breezy, tropical, relaxed", t:["water","grass","fairy"], f:["alola"] },
+      { a:"Darker, tougher, a little punk", t:["dark","steel","ghost"], f:["galar"] },
+      { a:"Rugged, ancient, feral", t:["ground","fire","bug"], f:["hisui"] },
+      { a:"Sleek, bold, rebellious", t:["electric","dragon","poison"], f:["paldea"] } ] },
+    { sec:S5, q:"What awakens your true form?", o:[
+      { a:"Nothing — I was always this", t:["normal","psychic","steel"], f:["base"] },
+      { a:"Warmth, community and ease", t:["fairy","grass","water"], f:["alola"] },
+      { a:"Pressure and hard weather", t:["ice","steel","fighting"], f:["galar"] },
+      { a:"The call of a wilder past", t:["ghost","ground","rock"], f:["hisui"] },
+      { a:"Freedom and the open road", t:["flying","fire","electric"], f:["paldea"] } ] },
   ];
 
   // ---------------------------------------------------------------- audio ---
@@ -284,31 +356,42 @@
     return best;
   };
   const score = () => {
-    const ty = {}, rg = {}, st = {};
+    const ty = {}, rg = {}, st = {}, fm = { base: 2 };   // base gets a small head-start
     answers.forEach((oi, i) => {
       const o = QUESTIONS[i].o[oi];
       (o.t || []).forEach((t, k) => ty[t] = (ty[t] || 0) + (k === 0 ? 3 : 1.5));
       (o.r || []).forEach((r, k) => rg[r] = (rg[r] || 0) + (k === 0 ? 3 : 1.5));
       (o.s || []).forEach((s, k) => st[s] = (st[s] || 0) + (k === 0 ? 3 : 1.5));
+      (o.f || []).forEach((f, k) => fm[f] = (fm[f] || 0) + (k === 0 ? 3 : 1.5));
     });
     const rank = obj => Object.keys(obj).sort((a, b) => obj[b] - obj[a]);
-    const tRank = rank(ty), rRank = rank(rg), sRank = rank(st);
+    const tRank = rank(ty), rRank = rank(rg), sRank = rank(st), fRank = rank(fm);
     const topType = tRank[0] || "normal";
     const secondType = tRank[1];
     // "specialize (if any)": decisive only if the leader clears the runner-up
     const specialize = !secondType || (ty[topType] >= ty[secondType] + 3 && ty[topType] >= ty[secondType] * 1.35);
     const topGen = +(rRank[0] || 1);
     const topStrat = sRank[0] || "balanced";
-    return { ty, rg, st, topType, secondType, specialize, topGen, topStrat, tRank };
+    // form: base is the default; a regional family only wins if it clearly leads base
+    const topRegional = fRank.find(k => k !== "base");
+    const formDecisive = topRegional && (fm[topRegional] || 0) >= (fm.base || 0) + 3;
+    const topForm = formDecisive ? topRegional : "base";
+    return { ty, rg, st, fm, topType, secondType, specialize, topGen, topStrat, tRank, topForm, topRegional, formDecisive };
   };
 
-  // pick a relatable species best fitting a (type, strategy, region) — seeded.
-  // Drives both the "you'd be" pick and your rival.
-  const pickMon = (type, stratKey, gen, exclude, rnd, second) => {
+  // pick a relatable species best fitting a (type, strategy, region, form) — seeded.
+  // Drives both the "you'd be" pick and your rival. When `formPref` is a regional
+  // family, its forms are surfaced and strongly pulled toward (so a matching type
+  // lands e.g. Alolan Ninetales); otherwise only base-form species are eligible.
+  const pickMon = (type, stratKey, gen, exclude, rnd, second, formPref) => {
     const arches = STRAT_ARCH[stratKey] || [];
     let best = null, bv = -1;
     for (const u of DEX) {
-      if (u.bst < 430 || u.bst > 600) continue;
+      const fam = formOf(u.ident);
+      if (fam !== "base") {
+        if (!(formPref && fam === formPref)) continue;   // regional forms only when that's the wanted family
+        if (u.bst < 380) continue;
+      } else if (u.bst < 430 || u.bst > 600) continue;
       if (LEGENDARY.has(u.dexno) || BATTLE_ONLY.test(u.ident)) continue;
       if (exclude && exclude.has(u.id)) continue;
       let sc = 0;
@@ -317,6 +400,7 @@
       const arch = archetype(u.stats);
       if (arches[0] === arch) sc += 4; else if (arches.includes(arch)) sc += 2.5;
       if (gen && nativeIn(u, gen)) sc += 2;
+      if (formPref && formPref !== "base" && fam === formPref) sc += 6;   // pull toward the wanted regional form
       sc += rnd() * 2.2;
       if (sc > bv) { bv = sc; best = u; }
     }
@@ -370,7 +454,7 @@
   // build a themed six — your ace, then role players, region-native where possible,
   // rewarding type diversity so the squad reads as a real balanced team
   const buildTeam = (you, S, rnd) => {
-    let pool = DEX.filter(u => u.bst >= 430 && !LEGENDARY.has(u.dexno) && !BATTLE_ONLY.test(u.ident));
+    let pool = DEX.filter(u => u.bst >= 430 && !LEGENDARY.has(u.dexno) && !BATTLE_ONLY.test(u.ident) && formOf(u.ident) === "base");
     const nat = pool.filter(u => nativeIn(u, S.topGen));
     const use = nat.length >= 12 ? nat : pool;
     const chosen = [you], used = new Set([you.id]);
@@ -427,7 +511,7 @@
         <h2 class="q-text">${Q.q}</h2>
         <div class="q-opts">${Q.o.map((o, i) =>
           `<button class="opt${answers[qi] === i ? " picked" : ""}" data-i="${i}" type="button">
-             <span class="opt-key">${"ABCD"[i]}</span><span class="opt-a">${o.a}</span><span class="opt-go">→</span>
+             <span class="opt-key">${"ABCDE"[i]}</span><span class="opt-a">${o.a}</span><span class="opt-go">→</span>
            </button>`).join("")}</div>
       </div>`;
     if (!prefersReduced) { const c = stage.querySelector(".qcard"); c.classList.add("in"); }
@@ -456,10 +540,12 @@
   const renderResults = () => {
     const S = score();
     const rnd = mulberry32(hashSeed(answers.join("")) >>> 0);
-    const you = pickMon(S.topType, S.topStrat, S.topGen, null, rnd, S.secondType);
+    const you = pickMon(S.topType, S.topStrat, S.topGen, null, rnd, S.secondType, S.topForm);
     const team = buildTeam(you, S, rnd);
     const region = REGIONS[S.topGen - 1];
     const strat = STRATS[S.topStrat];
+    const form = FORMS[S.topForm] || FORMS.base;
+    const youIsForm = formOf(you.ident) !== "base";
     const yArch = archetype(you.stats).toLowerCase();
     const title = trainerTitle(S), nature = natureFor(you, S), move = signatureMove(you, S);
     const rivalType = RIVAL_TYPE[S.topType] || "fighting", rivalStratKey = RIVAL_STRAT[S.topStrat] || "balanced";
@@ -469,6 +555,9 @@
     const typeLine = S.specialize
       ? `You specialize in <b>${S.topType}</b>`
       : `You're a <b>generalist</b> — but you lean <b>${S.topType}</b>`;
+    const personaBody = (S.topForm !== "base" ? form.adj + " " : "") + yArch;
+    const personaLine = `${/^[aeiou]/i.test(personaBody) ? "An" : "A"} ${personaBody} at heart — ${TYPE_DESC[S.topType]}.`;
+    const creed = CREEDS[S.topStrat] || CREEDS.balanced;
 
     const el = $("#results");
     el.innerHTML =
@@ -483,7 +572,8 @@
             <div class="hc-meta">
               <div class="hc-name">${displayName(you.ident)}</div>
               <div class="hc-types">${typeChip(you.t1)}${typeChip(you.t2)}<span class="hc-title">★ ${title}</span></div>
-              <div class="hc-why">A ${yArch} at heart — ${TYPE_DESC[S.topType]}.</div>
+              <div class="hc-why">${personaLine}</div>
+              <div class="hc-creed">“${creed}”</div>
             </div>
           </div>
         </div>
@@ -499,6 +589,11 @@
             <div class="facet-h"><span class="fh-ic">▲</span>YOUR REGION</div>
             <div class="facet-big">${region.name}</div>
             <div class="facet-sub">${cap(region.vibe)}</div>
+          </div>
+          <div class="facet f-form">
+            <div class="facet-h"><span class="fh-ic">◈</span>YOUR FORM</div>
+            <div class="facet-big">${form.name}</div>
+            <div class="facet-sub">${cap(form.vibe)}${youIsForm ? ` <b>And you'd be one.</b>` : ""}</div>
           </div>
           <div class="facet f-strat">
             <div class="facet-h"><span class="fh-ic">⚔</span>YOUR STRATEGY</div>
@@ -542,12 +637,20 @@
       </div>`;
     show("results");
     $("#retakeBtn").addEventListener("click", restart);
-    $("#shareBtn").addEventListener("click", () => copyProfile({ you, S, region, strat, team, title, nature, move, rival, rivalType }));
+    $("#shareBtn").addEventListener("click", () => copyProfile({ you, S, region, strat, form, team, title, nature, move, rival, rivalType }));
     if (!prefersReduced) requestAnimationFrame(() => requestAnimationFrame(() => {
       el.querySelectorAll(".tmon, .facet, .hero-card").forEach((n, i) => { n.style.animationDelay = (i * 70) + "ms"; n.classList.add("pop"); });
     }));
   };
 
+  const CREEDS = {
+    offense:  "Strike first. Ask questions never.",
+    breaker:  "Every wall is just a door I haven't broken yet.",
+    defense:  "Outlast them — the mountain never chases the storm.",
+    trickster:"The battle's won in their head before it starts.",
+    setup:    "Give me one free turn. That's all I'll ever need.",
+    balanced: "A partner for every problem. That's how you win.",
+  };
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
   const hashSeed = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h; };
   const topTypeBars = (S) => {
@@ -556,13 +659,14 @@
       `<div class="tbar"><span class="tbar-l">${t}</span><div class="tbar-t"><div class="tbar-f" style="width:${(S.ty[t] / max * 100).toFixed(0)}%;background:${TYPE_HEX[t]}"></div></div></div>`).join("");
   };
 
-  const copyProfile = ({ you, S, region, strat, team, title, nature, move, rival, rivalType }) => {
+  const copyProfile = ({ you, S, region, strat, form, team, title, nature, move, rival, rivalType }) => {
     const txt =
 `MY TRAINER PROFILE — wasapok.com/pokequiz
 ★ Title:  ${title}
 ◓ I'd be: ${displayName(you.ident).toUpperCase()} (${[you.t1, you.t2].filter(Boolean).join("/")})
 ✦ Type:   ${S.specialize ? S.topType : "generalist, leaning " + S.topType}
 ▲ Region: ${region.name}
+◈ Form:   ${form.name}
 ⚔ Style:  ${strat.name}
 ✧ Kit:    ${nature.name} nature · ${move ? move.name : "—"}
 ▦ Team:   ${team.map(m => displayName(m.u.ident)).join(", ")}
@@ -587,8 +691,8 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     addEventListener("keydown", e => {
       if (!$("#quiz").classList.contains("active")) return;
       const k = e.key.toUpperCase();
-      if ("ABCD".includes(k)) { const i = "ABCD".indexOf(k); if (QUESTIONS[qi].o[i]) answer(i); }
-      else if ((k === "1" || k === "2" || k === "3" || k === "4")) { const i = +k - 1; if (QUESTIONS[qi].o[i]) answer(i); }
+      if ("ABCDE".includes(k)) { const i = "ABCDE".indexOf(k); if (QUESTIONS[qi].o[i]) answer(i); }
+      else if ("12345".includes(e.key)) { const i = +e.key - 1; if (QUESTIONS[qi].o[i]) answer(i); }
       else if (e.key === "Backspace") { if (qi > 0) { qi--; renderQuestion(); } }
     });
   };
@@ -609,8 +713,8 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     $("#introFoot").textContent = `${DEX.length} species on file · ${QUESTIONS.length} questions · ~${Math.max(2, Math.round(QUESTIONS.length * 8 / 60))} min`;
     wire();
     if (location.hash === "#quiz") { startQuiz(); return; }   // dev/preview hook
-    // deep-link: #r=<12 answer indices> jumps straight to a shared result
-    const m = /(?:^|[#&])r=([0-3]{1,40})/.exec(location.hash);
+    // deep-link: #r=<answer indices> jumps straight to a shared result
+    const m = /(?:^|[#&])r=([0-4]{1,48})/.exec(location.hash);
     if (m && m[1].length === QUESTIONS.length) { answers = m[1].split("").map(Number); qi = QUESTIONS.length; renderResults(); }
   }
   boot();
