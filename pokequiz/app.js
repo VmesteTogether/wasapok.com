@@ -72,6 +72,15 @@
     888,889,890,891,892,893,894,895,896,897,898,905,984,985,986,987,988,989,990,991,992,993,994,995,
     1001,1002,1003,1004,1005,1006,1007,1008,1009,1010,1014,1015,1016,1017,1020,1021,1022,1023,1024,1025]);
   const BATTLE_ONLY = /-mega|-gmax|-primal|-totem|-eternamax|-ultra|-busted|-crowned|-eternal|-ash|-starter/;
+  // finer tiers so the party can decide legendary vs mythical vs "monster" vs friend.
+  const MYTHICAL = new Set([151,251,385,386,489,490,491,492,493,494,647,648,649,719,720,721,801,802,807,808,809,893,1025]);
+  const LEGEND_ONLY = new Set([...LEGENDARY].filter(d => !MYTHICAL.has(d)));   // box/trio legends, no mythicals
+  const PSEUDO = new Set([149,248,373,376,445,635,706,784,887,998]);           // pseudo-legendary "monsters"
+  const SCARY_TYPES = new Set(["dragon","dark","ghost","rock","steel","poison","fighting","ground"]);
+  const CUTE = new Set([25,26,35,36,39,40,113,133,134,135,136,172,173,174,175,176,183,184,209,300,301,468,700,517,546,547,684,685,702,761,856,857,926,957]);
+  const CUTE_TYPES = new Set(["fairy","normal","grass","water","electric","psychic","ice"]);
+  const monsterScore = u => u.bst / 100 + (SCARY_TYPES.has(u.t1) ? 1.4 : 0) + (SCARY_TYPES.has(u.t2) ? 1 : 0) + (PSEUDO.has(u.dexno) ? 3 : 0);
+  const cuteScore = u => (CUTE.has(u.dexno) ? 4 : 0) + (CUTE_TYPES.has(u.t1) ? 1.4 : 0) + (CUTE_TYPES.has(u.t2) ? 0.8 : 0) + (u.bst < 480 ? 1 : 0);
 
   // ---- FORM axis: which VARIANT of a species you'd be. A real scored dimension
   // (base + four regional families) that also steers the "you'd be" pick toward an
@@ -112,9 +121,11 @@
     balanced: ["ALL-ROUNDER","BULKY PIVOT","MIXED ATTACKER","PHYS ATTACKER"],
   };
 
-  // ---- the questions, in four chapters. Each option seeds type (t) / region gen
-  // (r) / strategy (s) vectors; the first item in a list weighs heaviest. ----
-  const S1 = "I · Temperament", S2 = "II · Your World", S3 = "III · In Battle", S4 = "IV · Heart & Soul", S5 = "V · Identity & Form";
+  // ---- the questions, in six chapters. Each option seeds type (t) / region gen
+  // (r) / strategy (s) / form (f) vectors + scalar leans L (legendary) · Y (mythical)
+  // · M (monster↔cute) that let the party scan whether you'd wield a legend. ----
+  const S1 = "I · Temperament", S2 = "II · Your World", S3 = "III · In Battle",
+        S4 = "IV · Heart & Soul", S5 = "V · Identity & Form", S6 = "VI · Destiny & Bond";
   const QUESTIONS = [
     /* ===================== I · TEMPERAMENT ===================== */
     { sec:S1, q:"Friends would call you…", o:[
@@ -319,6 +330,55 @@
       { a:"Pressure and hard weather", t:["ice","steel","fighting"], f:["galar"] },
       { a:"The call of a wilder past", t:["ghost","ground","rock"], f:["hisui"] },
       { a:"Freedom and the open road", t:["flying","fire","electric"], f:["paldea"] } ] },
+    /* ============ VI · DESTINY & BOND — legendary / mythical / pseudo + what you LIKE ============ */
+    { sec:S6, q:"A legendary Pokémon crosses your path. You…", o:[
+      { a:"Capture it — power like that belongs with me", t:["dragon","psychic"], L:3, M:1 },
+      { a:"Befriend it as an equal, never a trophy", t:["fairy","normal"], L:1, Y:1 },
+      { a:"Bow and let it pass — some things aren't ours to hold", t:["grass","water"], L:-3 },
+      { a:"Study it from afar, in awe", t:["psychic","ice"], Y:2, L:1 },
+      { a:"Challenge it to prove myself", t:["fighting","fire"], L:2, M:2, P:1 } ] },
+    { sec:S6, q:"Be honest — what would you ACTUALLY want on your team?", o:[
+      { a:"A world-shaking legendary, obviously", t:["dragon","steel"], L:4 },
+      { a:"A terrifying pseudo-legend powerhouse", t:["dragon","dark"], P:4, M:3 },
+      { a:"A rare mythical few will ever see", t:["psychic","fairy"], Y:4, L:1 },
+      { a:"A cute little partner I adore", t:["fairy","normal"], M:-4 },
+      { a:"A balanced, reliable ace", t:["normal","fighting"], M:0 } ] },
+    { sec:S6, q:"Do you believe you're destined for greatness?", o:[
+      { a:"Absolutely — it's my fate", t:["dragon","fire"], L:3, s:["breaker"] },
+      { a:"I'll earn it through sheer work", t:["fighting","steel"], L:1, s:["breaker"] },
+      { a:"Greatness is overrated — I want joy", t:["fairy","grass"], L:-2, M:-2 },
+      { a:"I revere those far greater than me", t:["psychic","ice"], Y:2, L:1 },
+      { a:"I'd rather be feared than admired", t:["dark","poison"], M:3, P:1, s:["trickster"] } ] },
+    { sec:S6, q:"The Pokémon that fits you is more…", o:[
+      { a:"Cute and cuddly", t:["fairy","normal"], M:-3 },
+      { a:"Cool and sleek", t:["ice","steel","dark"], M:1 },
+      { a:"Fierce and monstrous", t:["dragon","dark","rock"], M:3, P:2 },
+      { a:"Elegant and graceful", t:["fairy","psychic","flying"], M:-1, Y:1 },
+      { a:"Ancient and powerful", t:["rock","ground","dragon"], L:2, Y:1, P:1 } ] },
+    { sec:S6, q:"You'd rather your ACE be…", o:[
+      { a:"A colossal, fearsome beast", t:["dragon","rock","ground"], P:3, M:2 },
+      { a:"A radiant legendary", t:["psychic","fire","dragon"], L:3 },
+      { a:"A juggernaut you raised from tiny", t:["dragon","fighting"], P:2, M:1 },
+      { a:"A clever trickster", t:["ghost","dark","psychic"], M:-1, s:["trickster"] },
+      { a:"A graceful, loyal companion", t:["fairy","grass","water"], M:-2 } ] },
+    { sec:S6, q:"What would you do with unlimited power?", o:[
+      { a:"Rule and reshape the world", t:["dark","dragon"], L:3, M:1 },
+      { a:"Protect everyone I love", t:["fairy","steel"], L:-1, s:["defense"] },
+      { a:"Explore every last mystery", t:["psychic","water"], Y:2, s:["setup"] },
+      { a:"Prove I'm the undisputed strongest", t:["fighting","fire"], M:2, L:1, P:1 },
+      { a:"Live free, bound to no one", t:["flying","electric"], L:-1, f:["paldea"] } ] },
+    { sec:S6, q:"Your bond with your Pokémon is…", o:[
+      { a:"One unbreakable lifelong partner", t:["normal","fairy"], M:-1, L:-1 },
+      { a:"A whole loving family of them", t:["grass","water","normal"], M:-3, L:-2 },
+      { a:"A pantheon of the mightiest", t:["dragon","steel"], L:3, P:1 },
+      { a:"A rare, secret companion few have met", t:["ghost","psychic"], Y:3 },
+      { a:"A rival-turned-ally forged in battle", t:["fighting","dark"], M:1, P:1 } ] },
+    { sec:S6, q:"When your legend is finally written, it says…", o:[
+      { a:"Conquered every challenge there was", t:["fighting","dragon"], L:2, M:1 },
+      { a:"Was loved by every Pokémon they met", t:["fairy","grass"], M:-2, L:-1 },
+      { a:"Touched the divine", t:["psychic","steel"], Y:3, L:1 },
+      { a:"Was feared across every region", t:["dark","poison"], M:3, P:1 },
+      { a:"Walked a path that was theirs alone", t:["dark","ghost"], s:["trickster"], f:["paldea"] } ] },
   ];
 
   // ---------------------------------------------------------------- audio ---
@@ -357,12 +417,14 @@
   };
   const score = () => {
     const ty = {}, rg = {}, st = {}, fm = { base: 2 };   // base gets a small head-start
+    let leg = 0, myth = 0, pseudo = 0, mon = 0;          // destiny/preference leans
     answers.forEach((oi, i) => {
       const o = QUESTIONS[i].o[oi];
       (o.t || []).forEach((t, k) => ty[t] = (ty[t] || 0) + (k === 0 ? 3 : 1.5));
       (o.r || []).forEach((r, k) => rg[r] = (rg[r] || 0) + (k === 0 ? 3 : 1.5));
       (o.s || []).forEach((s, k) => st[s] = (st[s] || 0) + (k === 0 ? 3 : 1.5));
       (o.f || []).forEach((f, k) => fm[f] = (fm[f] || 0) + (k === 0 ? 3 : 1.5));
+      leg += o.L || 0; myth += o.Y || 0; pseudo += o.P || 0; mon += o.M || 0;
     });
     const rank = obj => Object.keys(obj).sort((a, b) => obj[b] - obj[a]);
     const tRank = rank(ty), rRank = rank(rg), sRank = rank(st), fRank = rank(fm);
@@ -376,7 +438,12 @@
     const topRegional = fRank.find(k => k !== "base");
     const formDecisive = topRegional && (fm[topRegional] || 0) >= (fm.base || 0) + 3;
     const topForm = formDecisive ? topRegional : "base";
-    return { ty, rg, st, fm, topType, secondType, specialize, topGen, topStrat, tRank, topForm, topRegional, formDecisive };
+    // DESTINY READ — would you wield a legendary / mythical / pseudo? cute or monster?
+    const crownTier = myth >= 6 ? "mythical" : leg >= 5 ? "legendary" : "none";
+    const wantsPseudo = pseudo >= 4 || (mon >= 4 && pseudo >= 1);
+    const monsterLean = mon >= 3 ? "monster" : mon <= -3 ? "cute" : "mixed";
+    return { ty, rg, st, fm, topType, secondType, specialize, topGen, topStrat, tRank, topForm, topRegional, formDecisive,
+      leg, myth, pseudo, mon, crownTier, wantsPseudo, monsterLean };
   };
 
   // pick a relatable species best fitting a (type, strategy, region, form) — seeded.
@@ -453,38 +520,62 @@
 
   // build a themed six — your ace, then role players, region-native where possible,
   // rewarding type diversity so the squad reads as a real balanced team
-  const buildTeam = (you, S, rnd) => {
-    let pool = DEX.filter(u => u.bst >= 430 && !LEGENDARY.has(u.dexno) && !BATTLE_ONLY.test(u.ident) && formOf(u.ident) === "base");
-    const nat = pool.filter(u => nativeIn(u, S.topGen));
-    const use = nat.length >= 12 ? nat : pool;
-    const chosen = [you], used = new Set([you.id]);
-    const teamT = new Set([you.t1, you.t2].filter(Boolean));
-    const ROLES = [
-      { name:"SWEEPER",  sub:"speed & pressure", f:u => u.stats[5] + Math.max(u.stats[1], u.stats[3]) },
-      { name:"WALL",     sub:"defensive anchor", f:u => (u.stats[0]*u.stats[2] + u.stats[0]*u.stats[4]) / 60 },
-      { name:"SPECIAL",  sub:"special punch",    f:u => u.stats[3]*1.4 + (u.stats[0]+u.stats[4])*0.25 },
-      { name:"SUPPORT",  sub:"glue & pivot",     f:u => u.stats[0] + Math.min(u.stats[2], u.stats[4]) + u.stats[5]*0.4 },
-      { name:"COVERAGE", sub:"fills the gaps",   f:u => 0 },
-    ];
-    for (const role of ROLES) {
-      let best = null, bv = -1;
-      for (const u of use) {
-        if (used.has(u.id)) continue;
-        let sc = role.f(u);
-        const nov = (!teamT.has(u.t1) ? 1 : 0) + (u.t2 && !teamT.has(u.t2) ? 1 : 0);
-        sc += nov * 22;
-        if (role.name === "COVERAGE") sc += nov * 70;
-        else if (u.t1 === S.topType || u.t2 === S.topType) sc += 12;
-        sc += rnd() * 28;
-        if (sc > bv) { bv = sc; best = u; }
-      }
-      if (best) { chosen.push(best); used.add(best.id); teamT.add(best.t1); if (best.t2) teamT.add(best.t2); }
+  // build a character-SCANNED party of six: each slot is a facet of who you are AND
+  // what you'd actually like — deciding whether you'd carry a pseudo-legend, a
+  // legendary, or a mythical (or none), and whether you lean cute or monster.
+  const isWall = a => a === "FORTRESS" || a === "PHYS WALL" || a === "SPEC WALL" || a === "BULKY PIVOT";
+  const buildParty = (you, S, rnd) => {
+    const base = DEX.filter(u => !BATTLE_ONLY.test(u.ident) && formOf(u.ident) === "base");
+    const normalPool = base.filter(u => u.bst >= 430 && !LEGENDARY.has(u.dexno));
+    const pseudoPool = base.filter(u => PSEUDO.has(u.dexno));
+    const legendPool = base.filter(u => LEGEND_ONLY.has(u.dexno));
+    const mythPool   = base.filter(u => MYTHICAL.has(u.dexno));
+    const used = new Set([you.id]), teamT = new Set([you.t1, you.t2].filter(Boolean));
+    const tf = u => u.t1 === S.topType ? 4 : u.t2 === S.topType ? 3 : (S.secondType && (u.t1 === S.secondType || u.t2 === S.secondType)) ? 1.5 : 0;
+    const natB = u => nativeIn(u, S.topGen) ? 1.5 : 0;
+    const pick = (pool, fn) => { let b = null, bv = -1e9; for (const u of pool) { if (used.has(u.id)) continue; const s = fn(u) + rnd() * 3; if (s > bv) { bv = s; b = u; } } return b; };
+    const members = [{ u: you, role: "SIGNATURE", why: "The Pokémon you'd be — your very heart on the field.", tag: PSEUDO.has(you.dexno) ? "pseudo" : null }];
+    const add = (u, role, why, tag) => { if (!u) return; members.push({ u, role, why, tag: tag || null }); used.add(u.id); teamT.add(u.t1); if (u.t2) teamT.add(u.t2); };
+
+    // 2 · FIRST PARTNER — loyal & friendly; skews cute if that's what you like
+    add(pick(normalPool, u => tf(u) * 1.2 + cuteScore(u) * (S.monsterLean === "cute" ? 2 : 0.6) - monsterScore(u) * 0.4 + natB(u)),
+      "FIRST PARTNER",
+      S.monsterLean === "cute" ? "The gentle first partner you'd treasure — soft heart, fierce loyalty."
+        : "The friend you'd start your whole journey with — loyal to the very end.");
+
+    // 3 · POWERHOUSE — a pseudo-legend monster if you'd want one, else a heavy hitter
+    let power = null, ptag = null, pwhy = "";
+    if (S.wantsPseudo && pseudoPool.length) {
+      power = pick(pseudoPool, u => tf(u) * 1.5 + monsterScore(u) + natB(u));
+      if (power) { ptag = "pseudo"; pwhy = `A pseudo-legendary monster — the raw power your ${S.monsterLean === "monster" ? "fearsome streak" : "ambition"} demands.`; }
     }
-    while (chosen.length < 6) {                      // safety top-up
-      const u = use[(rnd() * use.length) | 0];
-      if (u && !used.has(u.id)) { chosen.push(u); used.add(u.id); }
-    }
-    return chosen.slice(0, 6).map((u, i) => ({ u, role: i === 0 ? "ACE" : ROLES[i - 1].name, sub: i === 0 ? "your signature" : ROLES[i - 1].sub }));
+    if (!power) { power = pick(normalPool, u => tf(u) * 1.2 + Math.max(u.stats[1], u.stats[3]) / 20 + (u.bst >= 520 ? 2 : 0) + natB(u));
+      pwhy = `Your heavy hitter — ${S.topType} force, straight down the middle.`; }
+    add(power, "POWERHOUSE", pwhy, ptag);
+
+    // 4 · GUARDIAN — a defensive anchor; you protect what matters
+    add(pick(normalPool, u => (isWall(archetype(u.stats)) ? 6 : 0) + (u.stats[0] * (u.stats[2] + u.stats[4])) / 1400 + (!teamT.has(u.t1) ? 2 : 0) + natB(u)),
+      "GUARDIAN", "Your shield. You protect what matters — and so does it.");
+
+    // 5 · WILDCARD — a new type, coloured by your taste
+    add(pick(normalPool, u => (!teamT.has(u.t1) ? 3 : 0) * 3 + (u.t2 && !teamT.has(u.t2) ? 2 : 0) +
+      (S.monsterLean === "cute" ? cuteScore(u) : S.monsterLean === "monster" ? monsterScore(u) : 1)),
+      "WILDCARD", "The unexpected one — because you were never just one thing.");
+
+    // 6 · CROWN — a mythical / legendary if you'd truly wield one, else a true equal
+    let crown = null, ctag = null, tier = S.crownTier;
+    if (tier === "mythical" && mythPool.length) { crown = pick(mythPool, u => tf(u) * 1.5 + natB(u)); if (crown) ctag = "mythical"; }
+    if (!crown && (tier === "mythical" || tier === "legendary") && legendPool.length) { crown = pick(legendPool, u => tf(u) * 1.5 + natB(u)); if (crown) { ctag = "legendary"; tier = "legendary"; } }
+    if (!crown) { crown = pick(normalPool, u => tf(u) + (!teamT.has(u.t1) ? 3 : 0) + natB(u)); tier = "none"; }
+    add(crown, tier === "none" ? "TRUE SIXTH" : "CROWN",
+      ctag === "mythical" ? "A mythical chose YOU — the divine reveals itself only to the rare few."
+        : ctag === "legendary" ? "You WOULD wield a legend. Ambition like yours never settles for less."
+        : "No idols. Your sixth is an equal, not a god on a leash — and that's the whole point.",
+      ctag);
+
+    const destiny = { tier, crown, ctag, mythical: ctag === "mythical", legendary: ctag === "legendary",
+      pseudo: members.some(m => m.tag === "pseudo"), monsterLean: S.monsterLean };
+    return { members: members.slice(0, 6), destiny };
   };
 
   // --------------------------------------------------------------- render ---
@@ -541,7 +632,8 @@
     const S = score();
     const rnd = mulberry32(hashSeed(answers.join("")) >>> 0);
     const you = pickMon(S.topType, S.topStrat, S.topGen, null, rnd, S.secondType, S.topForm);
-    const team = buildTeam(you, S, rnd);
+    const party = buildParty(you, S, rnd);
+    const team = party.members, destiny = party.destiny;
     const region = REGIONS[S.topGen - 1];
     const strat = STRATS[S.topStrat];
     const form = FORMS[S.topForm] || FORMS.base;
@@ -608,15 +700,26 @@
           </div>
         </div>
 
-        <div class="team-card">
-          <div class="facet-h"><span class="fh-ic">▦</span>YOUR TEAM OF SIX <span class="tc-region">${region.name}-forward</span></div>
-          <div class="team-grid">${team.map((m, i) =>
-            `<div class="tmon" style="--tc:${TYPE_HEX[m.u.t1]}">
-               <span class="tmon-role">${m.role}</span>
-               <div class="tmon-art"><img src="${SPRITE(m.u.id)}" onerror="${SPRITE_FALLBACK(m.u.dexno)}" alt="${displayName(m.u.ident)}"></div>
-               <div class="tmon-name">${displayName(m.u.ident)}</div>
-               <div class="tmon-dots">${typeDots(m.u)}</div>
-               <div class="tmon-sub">${m.sub}</div>
+        <div class="destiny-card">
+          <div class="facet-h"><span class="fh-ic">✵</span>DESTINY READ</div>
+          <div class="destiny-line">${destinyLine(destiny, S)}</div>
+          <div class="destiny-tags">
+            <span class="dtag ${destiny.legendary ? "on leg" : destiny.mythical ? "on myth" : "off"}">${destiny.mythical ? "◆ MYTHICAL" : "◆ LEGENDARY"}</span>
+            <span class="dtag ${destiny.pseudo ? "on pseudo" : "off"}">▲ PSEUDO-LEGEND</span>
+            <span class="dtag on lean-${destiny.monsterLean}">${destiny.monsterLean === "monster" ? "☠ MONSTERS" : destiny.monsterLean === "cute" ? "♡ CUTIES" : "◑ BALANCED"}</span>
+          </div>
+        </div>
+
+        <div class="party-card">
+          <div class="facet-h"><span class="fh-ic">▦</span>YOUR PARTY OF SIX <span class="tc-region">${region.name}-forward</span></div>
+          <div class="party-list">${team.map(m =>
+            `<div class="pmon${m.tag ? " has-tag tag-" + m.tag : ""}" style="--tc:${TYPE_HEX[m.u.t1]}">
+               <div class="pm-art"><img src="${SPRITE(m.u.id)}" onerror="${SPRITE_FALLBACK(m.u.dexno)}" alt="${displayName(m.u.ident)}">${m.tag ? `<span class="pm-badge">${m.tag === "mythical" ? "MYTHICAL" : m.tag === "legendary" ? "LEGENDARY" : "PSEUDO"}</span>` : ""}</div>
+               <div class="pm-body">
+                 <div class="pm-top"><span class="pm-role">${m.role}</span><span class="pm-dots">${typeDots(m.u)}</span></div>
+                 <div class="pm-name">${displayName(m.u.ident)}</div>
+                 <div class="pm-why">${m.why}</div>
+               </div>
              </div>`).join("")}</div>
         </div>
 
@@ -637,9 +740,9 @@
       </div>`;
     show("results");
     $("#retakeBtn").addEventListener("click", restart);
-    $("#shareBtn").addEventListener("click", () => copyProfile({ you, S, region, strat, form, team, title, nature, move, rival, rivalType }));
+    $("#shareBtn").addEventListener("click", () => copyProfile({ you, S, region, strat, form, team, destiny, title, nature, move, rival, rivalType }));
     if (!prefersReduced) requestAnimationFrame(() => requestAnimationFrame(() => {
-      el.querySelectorAll(".tmon, .facet, .hero-card").forEach((n, i) => { n.style.animationDelay = (i * 70) + "ms"; n.classList.add("pop"); });
+      el.querySelectorAll(".pmon, .facet, .hero-card, .destiny-card").forEach((n, i) => { n.style.animationDelay = (i * 60) + "ms"; n.classList.add("pop"); });
     }));
   };
 
@@ -652,6 +755,17 @@
     balanced: "A partner for every problem. That's how you win.",
   };
   const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  // the narrated destiny read — legendary / mythical / pseudo + cute↔monster taste
+  const destinyLine = (d, S) => {
+    const crownTxt = d.mythical ? `you'd be <b>chosen by a mythical</b> (${displayName(d.crown.ident)})`
+      : d.legendary ? `you <b>would</b> wield a legendary (${displayName(d.crown.ident)})`
+      : `you'd <b>never cage a legend</b> — no idols on your team`;
+    const pseudoTxt = d.pseudo ? `you'd raise a <b>pseudo-legendary monster</b> as your powerhouse` : `you skip the pseudo-legend monsters`;
+    const tasteTxt = d.monsterLean === "monster" ? `and you're drawn to the <b>fierce and monstrous</b>`
+      : d.monsterLean === "cute" ? `and your heart's with the <b>cute and gentle</b>`
+      : `with a taste that's <b>balanced</b> — a bit of everything`;
+    return `The scan says ${crownTxt}, ${pseudoTxt}, ${tasteTxt}.`;
+  };
   const hashSeed = s => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h; };
   const topTypeBars = (S) => {
     const max = S.ty[S.tRank[0]] || 1;
@@ -659,7 +773,9 @@
       `<div class="tbar"><span class="tbar-l">${t}</span><div class="tbar-t"><div class="tbar-f" style="width:${(S.ty[t] / max * 100).toFixed(0)}%;background:${TYPE_HEX[t]}"></div></div></div>`).join("");
   };
 
-  const copyProfile = ({ you, S, region, strat, form, team, title, nature, move, rival, rivalType }) => {
+  const copyProfile = ({ you, S, region, strat, form, team, destiny, title, nature, move, rival, rivalType }) => {
+    const crownTxt = destiny.mythical ? `mythical (${displayName(destiny.crown.ident)})`
+      : destiny.legendary ? `legendary (${displayName(destiny.crown.ident)})` : "none — no idols";
     const txt =
 `MY TRAINER PROFILE — wasapok.com/pokequiz
 ★ Title:  ${title}
@@ -669,7 +785,8 @@
 ◈ Form:   ${form.name}
 ⚔ Style:  ${strat.name}
 ✧ Kit:    ${nature.name} nature · ${move ? move.name : "—"}
-▦ Team:   ${team.map(m => displayName(m.u.ident)).join(", ")}
+✵ Crown:  ${crownTxt}${destiny.pseudo ? " · + pseudo-legend monster" : ""} · ${destiny.monsterLean}
+▦ Party:  ${team.map(m => displayName(m.u.ident)).join(", ")}
 ⚡ Rival:  ${displayName(rival.ident)} (${rivalType})
 Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     const btn = $("#shareBtn");

@@ -144,9 +144,41 @@ img{image-rendering:pixelated}
 .tbar-t{height:7px;border-radius:4px;background:var(--bg3);overflow:hidden}
 .tbar-f{height:100%;border-radius:4px;transition:width .8s cubic-bezier(.2,.85,.25,1)}
 
-/* team of six */
-.team-card{background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:22px}
+/* destiny read (legendary / mythical / pseudo / cute↔monster) */
+.destiny-card{background:linear-gradient(180deg,color-mix(in srgb,var(--type) 12%,var(--bg2)),var(--bg2));border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:12px}
+.destiny-line{font-size:15px;line-height:1.55;color:var(--muted);margin:2px 0 14px}
+.destiny-line b{color:var(--ink);font-weight:650}
+.destiny-tags{display:flex;flex-wrap:wrap;gap:8px}
+.dtag{font-family:var(--f-mono);font-size:10px;letter-spacing:.06em;padding:5px 11px;border-radius:100px;border:1px solid var(--line);color:var(--faint);white-space:nowrap}
+.dtag.off{opacity:.4;text-decoration:line-through}
+.dtag.on{color:var(--ink)}
+.dtag.leg{color:#ffd24a;border-color:rgba(255,210,74,.45);background:rgba(255,210,74,.08)}
+.dtag.myth{color:#f08fd0;border-color:rgba(240,143,208,.45);background:rgba(240,143,208,.08)}
+.dtag.pseudo{color:#6a53e6;border-color:rgba(106,83,230,.5);background:rgba(106,83,230,.12)}
+.dtag.lean-monster{color:#ff7a3d;border-color:rgba(255,122,61,.45);background:rgba(255,122,61,.08)}
+.dtag.lean-cute{color:#f08fd0;border-color:rgba(240,143,208,.4);background:rgba(240,143,208,.08)}
+.dtag.lean-mixed{color:var(--muted)}
+
+/* party of six — each slot a facet of you, with a rationale */
+.party-card,.team-card{background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:20px;margin-bottom:22px}
 .tc-region{margin-left:auto;font-family:var(--f-mono);font-size:10px;letter-spacing:.08em;color:var(--type);text-transform:uppercase;transition:color .6s}
+.party-list{display:flex;flex-direction:column;gap:9px}
+.pmon{position:relative;display:flex;gap:13px;align-items:center;border-radius:13px;padding:9px 12px;overflow:hidden;
+  background:linear-gradient(100deg,color-mix(in srgb,var(--tc) 14%,var(--bg3)),var(--bg3));border:1px solid var(--line);border-left:3px solid var(--tc)}
+.pmon.has-tag{border-left-width:4px;box-shadow:inset 0 0 0 1px color-mix(in srgb,var(--tc) 22%,transparent)}
+.pmon.tag-legendary{border-left-color:#ffd24a}.pmon.tag-mythical{border-left-color:#f08fd0}
+.pm-art{position:relative;flex:0 0 auto;width:60px;height:60px;display:grid;place-items:center;
+  background:radial-gradient(circle at 50% 42%,color-mix(in srgb,var(--tc) 30%,transparent),transparent 66%)}
+.pm-art img{width:56px;height:56px;object-fit:contain;filter:drop-shadow(0 3px 5px rgba(0,0,0,.5))}
+.pm-badge{position:absolute;bottom:-2px;left:50%;transform:translateX(-50%);font-family:var(--f-mono);font-size:7px;letter-spacing:.5px;
+  padding:1px 5px;border-radius:3px;background:var(--tc);color:#10121a;white-space:nowrap;font-weight:700}
+.pmon.tag-legendary .pm-badge{background:#ffd24a;color:#3a2e00}.pmon.tag-mythical .pm-badge{background:#f08fd0;color:#3a1030}.pmon.tag-pseudo .pm-badge{background:#6a53e6;color:#fff}
+.pm-body{flex:1 1 auto;min-width:0}
+.pm-top{display:flex;align-items:center;gap:8px}
+.pm-role{font-family:var(--f-mono);font-size:9.5px;letter-spacing:.08em;color:var(--tc);filter:brightness(1.3)}
+.pm-dots{display:flex;gap:4px;margin-left:auto}.pm-dots i{width:8px;height:8px;border-radius:50%;box-shadow:0 0 0 1px rgba(0,0,0,.3)}
+.pm-name{font-family:var(--f-lab);font-weight:700;font-size:16px;letter-spacing:.2px;text-transform:capitalize;line-height:1.1;margin:1px 0 2px}
+.pm-why{font-size:12px;line-height:1.4;color:var(--muted)}
 .team-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
 @media(min-width:560px){ .team-grid{grid-template-columns:repeat(3,1fr)} }
 .tmon{position:relative;border-radius:14px;padding:12px 10px 13px;text-align:center;overflow:hidden;
