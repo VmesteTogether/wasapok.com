@@ -125,7 +125,8 @@
   // (r) / strategy (s) / form (f) vectors + scalar leans L (legendary) · Y (mythical)
   // · M (monster↔cute) that let the party scan whether you'd wield a legend. ----
   const S1 = "I · Temperament", S2 = "II · Your World", S3 = "III · In Battle",
-        S4 = "IV · Heart & Soul", S5 = "V · Identity & Form", S6 = "VI · Destiny & Bond";
+        S4 = "IV · Heart & Soul", S5 = "V · Identity & Form", S6 = "VI · Destiny & Bond",
+        S7 = "VII · Fine Print";
   const QUESTIONS = [
     /* ===================== I · TEMPERAMENT ===================== */
     { sec:S1, q:"Friends would call you…", o:[
@@ -379,6 +380,43 @@
       { a:"Touched the divine", t:["psychic","steel"], Y:3, L:1 },
       { a:"Was feared across every region", t:["dark","poison"], M:3, P:1 },
       { a:"Walked a path that was theirs alone", t:["dark","ghost"], s:["trickster"], f:["paldea"] } ] },
+    /* ============ VII · FINE PRINT — the finer, preference-heavy details ============ */
+    { sec:S7, q:"Your favourite stat to build around is…", o:[
+      { a:"Attack — hit like a truck", t:["fighting","dragon","rock"], s:["breaker"], M:1 },
+      { a:"Speed — act before they can", t:["electric","flying","normal"], s:["offense"] },
+      { a:"Special Attack — precision blasts", t:["psychic","fire","ice"], s:["setup"] },
+      { a:"Defense — an immovable object", t:["steel","rock","ground"], s:["defense"], M:1 },
+      { a:"HP & bulk — never go down", t:["normal","fairy","poison"], s:["defense"], M:-1 } ] },
+    { sec:S7, q:"Your battle tempo is…", o:[
+      { a:"Blitz — over in three turns", t:["electric","fire","fighting"], s:["offense"] },
+      { a:"A long, grinding chess match", t:["steel","water","psychic"], s:["defense"] },
+      { a:"Feints, then a sudden kill", t:["dark","ghost","bug"], s:["trickster"] },
+      { a:"Build up, then unleash", t:["dragon","grass","ice"], s:["setup"] },
+      { a:"Adapt turn by turn", t:["normal","fairy","flying"], s:["balanced"] } ] },
+    { sec:S7, q:"Honestly, which type do you just LOVE using?", o:[
+      { a:"Fire, dragon, fighting — raw force", t:["fire","dragon","fighting"], M:1 },
+      { a:"Water, ice, flying — cool and fluid", t:["water","ice","flying"] },
+      { a:"Ghost, dark, poison — the shadows", t:["ghost","dark","poison"], M:1 },
+      { a:"Grass, fairy, bug — nature's side", t:["grass","fairy","bug"], M:-1 },
+      { a:"Steel, rock, electric, psychic — the sleek & strange", t:["steel","rock","electric","psychic"] } ] },
+    { sec:S7, q:"Your team's overall aesthetic is…", o:[
+      { a:"Terrifying and battle-scarred", t:["dark","dragon","rock"], M:3, P:1 },
+      { a:"Sleek, cool and coordinated", t:["steel","ice","electric"], M:1 },
+      { a:"Adorable and full of heart", t:["fairy","normal","grass"], M:-3 },
+      { a:"Mystical and otherworldly", t:["psychic","ghost","fairy"], Y:1 },
+      { a:"A chaotic mix — I just love them all", t:["normal","bug","water"], M:-1 } ] },
+    { sec:S7, q:"You'd nickname your ace something…", o:[
+      { a:"Fearsome — Ragnarök, Reaper, Fang", t:["dark","dragon","fire"], M:2 },
+      { a:"Noble — Sir, Aegis, Valor", t:["steel","fighting","normal"] },
+      { a:"Cute — Mochi, Pip, Sprout", t:["fairy","grass","normal"], M:-3 },
+      { a:"Mysterious — Echo, Hex, Riddle", t:["ghost","psychic","dark"], Y:1 },
+      { a:"No nickname — the name it earned is enough", t:["dragon","rock","steel"], L:1 } ] },
+    { sec:S7, q:"One word for your trainer style?", o:[
+      { a:"Relentless", t:["fighting","fire","dragon"], s:["breaker"] },
+      { a:"Untouchable", t:["steel","water","psychic"], s:["defense"] },
+      { a:"Devious", t:["dark","ghost","poison"], s:["trickster"] },
+      { a:"Visionary", t:["psychic","ice","dragon"], s:["setup"] },
+      { a:"Heartfelt", t:["fairy","grass","normal"], s:["balanced"], M:-1 } ] },
   ];
 
   // ---------------------------------------------------------------- audio ---
@@ -405,6 +443,7 @@
   const byId = new Map();
   let answers = [];            // chosen option index per question
   let qi = 0;
+  let partyState = null, lastProfile = null, matchTeam = [];   // results-page interactive state
   const nativeIn = (u, gen) => NATIVE_OK && NATIVE[gen] && NATIVE[gen].has(u.dexno);
   const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -520,63 +559,184 @@
 
   // build a themed six — your ace, then role players, region-native where possible,
   // rewarding type diversity so the squad reads as a real balanced team
-  // build a character-SCANNED party of six: each slot is a facet of who you are AND
-  // what you'd actually like — deciding whether you'd carry a pseudo-legend, a
-  // legendary, or a mythical (or none), and whether you lean cute or monster.
+  // build a character-SCANNED party of six. Each slot yields a RANKED top-5 of
+  // fitting candidates (the #1 is chosen); the user can swap within a slot or
+  // reshuffle the whole party (a new salt re-rolls among the good fits).
   const isWall = a => a === "FORTRESS" || a === "PHYS WALL" || a === "SPEC WALL" || a === "BULKY PIVOT";
-  const buildParty = (you, S, rnd) => {
+  const tagOf = u => MYTHICAL.has(u.dexno) ? "mythical" : LEGEND_ONLY.has(u.dexno) ? "legendary" : PSEUDO.has(u.dexno) ? "pseudo" : null;
+  const archFit = (u, S) => { const a = archetype(u.stats), r = STRAT_ARCH[S.topStrat] || []; return r[0] === a ? 4 : r.includes(a) ? 2.5 : 0; };
+  const typesOf = ids => { const t = new Set(); ids.forEach(id => { const u = byId.get(id); if (u) { t.add(u.t1); if (u.t2) t.add(u.t2); } }); return t; };
+
+  const buildParty = (you, S, salt) => {
+    const rnd = mulberry32((hashSeed(answers.join("")) ^ Math.imul(salt + 1, 0x9E3779B1)) >>> 0);
     const base = DEX.filter(u => !BATTLE_ONLY.test(u.ident) && formOf(u.ident) === "base");
     const normalPool = base.filter(u => u.bst >= 430 && !LEGENDARY.has(u.dexno));
     const pseudoPool = base.filter(u => PSEUDO.has(u.dexno));
     const legendPool = base.filter(u => LEGEND_ONLY.has(u.dexno));
     const mythPool   = base.filter(u => MYTHICAL.has(u.dexno));
-    const used = new Set([you.id]), teamT = new Set([you.t1, you.t2].filter(Boolean));
     const tf = u => u.t1 === S.topType ? 4 : u.t2 === S.topType ? 3 : (S.secondType && (u.t1 === S.secondType || u.t2 === S.secondType)) ? 1.5 : 0;
     const natB = u => nativeIn(u, S.topGen) ? 1.5 : 0;
-    const pick = (pool, fn) => { let b = null, bv = -1e9; for (const u of pool) { if (used.has(u.id)) continue; const s = fn(u) + rnd() * 3; if (s > bv) { bv = s; b = u; } } return b; };
-    const members = [{ u: you, role: "SIGNATURE", why: "The Pokémon you'd be — your very heart on the field.", tag: PSEUDO.has(you.dexno) ? "pseudo" : null }];
-    const add = (u, role, why, tag) => { if (!u) return; members.push({ u, role, why, tag: tag || null }); used.add(u.id); teamT.add(u.t1); if (u.t2) teamT.add(u.t2); };
-
-    // 2 · FIRST PARTNER — loyal & friendly; skews cute if that's what you like
-    add(pick(normalPool, u => tf(u) * 1.2 + cuteScore(u) * (S.monsterLean === "cute" ? 2 : 0.6) - monsterScore(u) * 0.4 + natB(u)),
-      "FIRST PARTNER",
-      S.monsterLean === "cute" ? "The gentle first partner you'd treasure — soft heart, fierce loyalty."
-        : "The friend you'd start your whole journey with — loyal to the very end.");
-
-    // 3 · POWERHOUSE — a pseudo-legend monster if you'd want one, else a heavy hitter
-    let power = null, ptag = null, pwhy = "";
-    if (S.wantsPseudo && pseudoPool.length) {
-      power = pick(pseudoPool, u => tf(u) * 1.5 + monsterScore(u) + natB(u));
-      if (power) { ptag = "pseudo"; pwhy = `A pseudo-legendary monster — the raw power your ${S.monsterLean === "monster" ? "fearsome streak" : "ambition"} demands.`; }
+    const crownPool = S.crownTier === "mythical" ? mythPool.concat(legendPool) : S.crownTier === "legendary" ? legendPool : normalPool;
+    // per-slot config: pool + a scorer (teamT = types already on the team)
+    const cfgs = [
+      { key: "signature", pool: normalPool, score: (u) => (u.t1 === S.topType ? 5 : u.t2 === S.topType ? 4 : tf(u)) + archFit(u, S) + natB(u) },
+      { key: "partner",   pool: normalPool, score: (u) => tf(u) * 1.2 + cuteScore(u) * (S.monsterLean === "cute" ? 2 : 0.6) - monsterScore(u) * 0.4 + natB(u) },
+      { key: "powerhouse", pool: S.wantsPseudo && pseudoPool.length ? pseudoPool : normalPool,
+        score: (u) => tf(u) * 1.4 + (S.wantsPseudo ? monsterScore(u) * 1.3 : Math.max(u.stats[1], u.stats[3]) / 20 + (u.bst >= 520 ? 2 : 0)) + natB(u) },
+      { key: "guardian",  pool: normalPool, score: (u, tt) => (isWall(archetype(u.stats)) ? 6 : 0) + (u.stats[0] * (u.stats[2] + u.stats[4])) / 1400 + (!tt.has(u.t1) ? 2 : 0) + natB(u) },
+      { key: "wildcard",  pool: normalPool, score: (u, tt) => (!tt.has(u.t1) ? 9 : 0) + (u.t2 && !tt.has(u.t2) ? 3 : 0) + (S.monsterLean === "cute" ? cuteScore(u) : S.monsterLean === "monster" ? monsterScore(u) : 1) },
+      { key: "crown",     pool: crownPool,  score: (u) => tf(u) * 1.5 + natB(u) + (tagOf(u) ? 1 : 0) },
+    ];
+    // pass 1 — pick the default six, sequentially, keeping them distinct
+    const used = new Set(), slots = [];
+    // signature is forced to `you` (your hero identity)
+    used.add(you.id); slots.push({ key: "signature", pick: you });
+    for (let i = 1; i < cfgs.length; i++) {
+      const cfg = cfgs[i], tt = typesOf([...used]);
+      let best = null, bv = -1e9;
+      for (const u of cfg.pool) { if (used.has(u.id)) continue; const s = cfg.score(u, tt) + rnd() * 3; if (s > bv) { bv = s; best = u; } }
+      if (!best) best = cfg.pool.find(u => !used.has(u.id)) || normalPool[0];
+      used.add(best.id); slots.push({ key: cfg.key, pick: best });
     }
-    if (!power) { power = pick(normalPool, u => tf(u) * 1.2 + Math.max(u.stats[1], u.stats[3]) / 20 + (u.bst >= 520 ? 2 : 0) + natB(u));
-      pwhy = `Your heavy hitter — ${S.topType} force, straight down the middle.`; }
-    add(power, "POWERHOUSE", pwhy, ptag);
-
-    // 4 · GUARDIAN — a defensive anchor; you protect what matters
-    add(pick(normalPool, u => (isWall(archetype(u.stats)) ? 6 : 0) + (u.stats[0] * (u.stats[2] + u.stats[4])) / 1400 + (!teamT.has(u.t1) ? 2 : 0) + natB(u)),
-      "GUARDIAN", "Your shield. You protect what matters — and so does it.");
-
-    // 5 · WILDCARD — a new type, coloured by your taste
-    add(pick(normalPool, u => (!teamT.has(u.t1) ? 3 : 0) * 3 + (u.t2 && !teamT.has(u.t2) ? 2 : 0) +
-      (S.monsterLean === "cute" ? cuteScore(u) : S.monsterLean === "monster" ? monsterScore(u) : 1)),
-      "WILDCARD", "The unexpected one — because you were never just one thing.");
-
-    // 6 · CROWN — a mythical / legendary if you'd truly wield one, else a true equal
-    let crown = null, ctag = null, tier = S.crownTier;
-    if (tier === "mythical" && mythPool.length) { crown = pick(mythPool, u => tf(u) * 1.5 + natB(u)); if (crown) ctag = "mythical"; }
-    if (!crown && (tier === "mythical" || tier === "legendary") && legendPool.length) { crown = pick(legendPool, u => tf(u) * 1.5 + natB(u)); if (crown) { ctag = "legendary"; tier = "legendary"; } }
-    if (!crown) { crown = pick(normalPool, u => tf(u) + (!teamT.has(u.t1) ? 3 : 0) + natB(u)); tier = "none"; }
-    add(crown, tier === "none" ? "TRUE SIXTH" : "CROWN",
-      ctag === "mythical" ? "A mythical chose YOU — the divine reveals itself only to the rare few."
-        : ctag === "legendary" ? "You WOULD wield a legend. Ambition like yours never settles for less."
-        : "No idols. Your sixth is an equal, not a god on a leash — and that's the whole point.",
-      ctag);
-
-    const destiny = { tier, crown, ctag, mythical: ctag === "mythical", legendary: ctag === "legendary",
-      pseudo: members.some(m => m.tag === "pseudo"), monsterLean: S.monsterLean };
-    return { members: members.slice(0, 6), destiny };
+    // pass 2 — each slot's ranked top-5 alternatives (excluding the other picks)
+    const pickIds = slots.map(s => s.pick.id);
+    slots.forEach((slot, i) => {
+      const cfg = cfgs[i], exclude = new Set(pickIds.filter((_, j) => j !== i));
+      const tt = typesOf(pickIds.filter((_, j) => j !== i));
+      const ranked = cfg.pool.filter(u => !exclude.has(u.id))
+        .map(u => [u, cfg.score(u, tt) + (mulberry32((hashSeed(String(u.id)) ^ Math.imul(salt + 3, 0x85EBCA77)) >>> 0)()) * 2])
+        .sort((a, b) => b[1] - a[1]).map(x => x[0]);
+      slot.candidates = [slot.pick, ...ranked.filter(u => u.id !== slot.pick.id)].slice(0, 5);
+    });
+    return { you, salt, slots };
   };
+
+  // role label / rationale / tag derived from a slot's CURRENT pick (so swaps update)
+  const ROLE_LABEL = { signature: "SIGNATURE", partner: "FIRST PARTNER", powerhouse: "POWERHOUSE", guardian: "GUARDIAN", wildcard: "WILDCARD", crown: "CROWN" };
+  const slotRole = (key, u) => key === "crown" ? (tagOf(u) === "legendary" || tagOf(u) === "mythical" ? "CROWN" : "TRUE SIXTH") : ROLE_LABEL[key];
+  const slotWhy = (key, u, S) => {
+    const t = tagOf(u);
+    switch (key) {
+      case "signature": return "The Pokémon you'd be — your very heart on the field.";
+      case "partner":   return S.monsterLean === "cute" ? "The gentle first partner you'd treasure — soft heart, fierce loyalty." : "The friend you'd start your whole journey with — loyal to the very end.";
+      case "powerhouse": return t === "pseudo" ? `A pseudo-legendary monster — the raw power your ${S.monsterLean === "monster" ? "fearsome streak" : "ambition"} demands.` : `Your heavy hitter — ${S.topType} force, straight down the middle.`;
+      case "guardian":  return "Your shield. You protect what matters — and so does it.";
+      case "wildcard":  return "The unexpected one — because you were never just one thing.";
+      case "crown":     return t === "mythical" ? "A mythical chose YOU — the divine reveals itself only to the rare few." : t === "legendary" ? "You WOULD wield a legend. Ambition like yours never settles for less." : "No idols. Your sixth is an equal, not a god on a leash — and that's the whole point.";
+    }
+    return "";
+  };
+  const partyDestiny = (state, S) => {
+    const picks = state.slots.map(s => s.pick), tags = picks.map(tagOf);
+    const crown = state.slots.find(s => s.key === "crown").pick;
+    return { crown, legendary: tags.includes("legendary"), mythical: tags.includes("mythical"), pseudo: tags.includes("pseudo"), monsterLean: S.monsterLean };
+  };
+
+  // ---- party zone: destiny read + a swappable, ranked party (tap a slot for top 5) ----
+  const memBadge = tag => tag ? `<span class="pm-badge">${tag === "mythical" ? "MYTHICAL" : tag === "legendary" ? "LEGENDARY" : "PSEUDO"}</span>` : "";
+  const partyZoneHTML = () => {
+    const st = partyState; if (!st) return "";
+    const S = st.S, region = st.region, d = partyDestiny(st, S);
+    const rows = st.slots.map(slot => {
+      const u = slot.pick, tag = tagOf(u), role = slotRole(slot.key, u), why = slotWhy(slot.key, u, S);
+      const swappable = slot.key !== "signature", open = st.openSlot === slot.key;
+      const main =
+        `<div class="pm-art"><img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="${displayName(u.ident)}">${memBadge(tag)}</div>
+         <div class="pm-body">
+           <div class="pm-top"><span class="pm-role">${role}</span><span class="pm-dots">${typeDots(u)}</span></div>
+           <div class="pm-name">${displayName(u.ident)}</div>
+           <div class="pm-why">${why}</div>
+         </div>
+         ${swappable ? `<span class="pm-swap">${open ? "▲" : "⇅ TOP&nbsp;5"}</span>` : ""}`;
+      const head = swappable ? `<button class="pm-main" data-open="${slot.key}">${main}</button>` : `<div class="pm-main">${main}</div>`;
+      const tray = (swappable && open) ? `<div class="pm-tray">${slot.candidates.map((c, ci) =>
+        `<button class="alt${c.id === u.id ? " cur" : ""}" data-slot="${slot.key}" data-alt="${c.id}">
+           <span class="alt-rank">#${ci + 1}</span>
+           <img src="${SPRITE(c.id)}" onerror="${SPRITE_FALLBACK(c.dexno)}" alt="">
+           <span class="alt-name">${displayName(c.ident)}</span>
+           ${tagOf(c) ? `<span class="alt-tag tt-${tagOf(c)}">${tagOf(c).charAt(0).toUpperCase()}</span>` : ""}
+         </button>`).join("")}</div>` : "";
+      return `<div class="pmon${tag ? " has-tag tag-" + tag : ""}${open ? " open" : ""}" style="--tc:${TYPE_HEX[u.t1]}">${head}${tray}</div>`;
+    }).join("");
+    return `
+      <div class="destiny-card">
+        <div class="facet-h"><span class="fh-ic">✵</span>DESTINY READ</div>
+        <div class="destiny-line">${destinyLine(d, S)}</div>
+        <div class="destiny-tags">
+          <span class="dtag ${d.legendary ? "on leg" : d.mythical ? "on myth" : "off"}">${d.mythical ? "◆ MYTHICAL" : "◆ LEGENDARY"}</span>
+          <span class="dtag ${d.pseudo ? "on pseudo" : "off"}">▲ PSEUDO-LEGEND</span>
+          <span class="dtag on lean-${d.monsterLean}">${d.monsterLean === "monster" ? "☠ MONSTERS" : d.monsterLean === "cute" ? "♡ CUTIES" : "◑ BALANCED"}</span>
+        </div>
+      </div>
+      <div class="party-card">
+        <div class="facet-h"><span class="fh-ic">▦</span>YOUR PARTY OF SIX <span class="tc-region">${region.name}-forward</span>
+          <button class="reshuffle-btn" id="reshuffleBtn">⟳ RESHUFFLE</button></div>
+        <div class="party-list">${rows}</div>
+        <div class="party-hint">Tap a slot for its <b>ranked top 5</b> and swap freely — or reshuffle the whole party.</div>
+      </div>`;
+  };
+  const renderPartyZone = () => { const z = $("#partyZone"); if (z) z.innerHTML = partyZoneHTML(); };
+
+  // ---- MATCH YOUR TEAM: enter your real six, score how "you" it is ----
+  const MATCH_CAP = 40;
+  const matchZoneHTML = () => `
+    <div class="match-card">
+      <div class="facet-h"><span class="fh-ic">◎</span>MATCH YOUR TEAM <span class="tc-region" id="matchCount">${matchTeam.length}/6</span></div>
+      <div class="match-sub">Enter your real party — we'll score how <b>you</b> it actually is.</div>
+      <div class="mt-search"><span class="mt-glyph" aria-hidden="true"></span><input id="matchSearch" type="text" autocomplete="off" autocapitalize="off" spellcheck="false" placeholder="ADD A POKÉMON — NAME / NO."><button class="mt-clear" id="matchClear" aria-label="Clear">×</button></div>
+      <div class="mt-results" id="matchResults"></div>
+      <div id="matchBody">${matchBodyHTML()}</div>
+    </div>`;
+  const matchBodyHTML = () => {
+    const chips = matchTeam.map(id => { const u = byId.get(id);
+      return `<div class="mt-chip" style="--tc:${TYPE_HEX[u.t1]}"><img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt=""><span>${displayName(u.ident)}</span><button class="mt-x" data-mrm="${id}" aria-label="Remove">×</button></div>`; }).join("");
+    return `<div class="mt-chips">${chips || `<span class="mt-empty">no units yet</span>`}</div>${matchTeam.length ? matchScoreHTML() : ""}`;
+  };
+  const matchScoreHTML = () => {
+    const S = partyState.S, units = matchTeam.map(id => byId.get(id));
+    const partyDex = new Set(partyState.slots.map(s => s.pick.dexno));
+    let sum = 0, legends = 0; const rows = [];
+    units.forEach(u => {
+      const tag = tagOf(u);
+      const onType = (u.t1 === S.topType || u.t2 === S.topType) ? 2 : (S.secondType && (u.t1 === S.secondType || u.t2 === S.secondType)) ? 1 : 0;
+      const taste = S.monsterLean === "monster" ? (monsterScore(u) >= 3 ? 1 : 0.3) : S.monsterLean === "cute" ? (cuteScore(u) >= 2 ? 1 : 0.3) : 0.7;
+      let legA = 0.7; if (tag === "legendary" || tag === "mythical") { legends++; legA = S.crownTier !== "none" ? 1 : 0.15; } else if (tag === "pseudo") legA = S.wantsPseudo ? 1 : 0.4;
+      const inP = partyDex.has(u.dexno) ? 1 : 0;
+      sum += (onType / 2) * 38 + taste * 24 + legA * 22 + inP * 16;
+      rows.push({ u, onType, tag, inP });
+    });
+    let pct = Math.round(sum / units.length);
+    if (S.crownTier === "none" && legends >= 2) pct -= 12;
+    if (S.crownTier !== "none" && legends === 0) pct -= 8;
+    pct = clamp(pct, 3, 99);
+    const tier = pct >= 85 ? "SO you" : pct >= 70 ? "very you" : pct >= 55 ? "mostly you" : pct >= 40 ? "a bit of a stretch" : "fighting your nature";
+    const perMon = rows.map(r => `<div class="mm-row" style="--tc:${TYPE_HEX[r.u.t1]}">
+        <img src="${SPRITE(r.u.id)}" onerror="${SPRITE_FALLBACK(r.u.dexno)}" alt="">
+        <span class="mm-n">${displayName(r.u.ident)}</span>
+        <span class="mm-flags">${r.onType >= 2 ? '<b class="ok">on-type</b>' : r.onType === 1 ? '<b class="mid">near-type</b>' : '<b class="off">off-type</b>'}${r.inP ? ' <b class="ok">in your party</b>' : ""}${r.tag ? ` <b class="tt-${r.tag}">${r.tag}</b>` : ""}</span>
+      </div>`).join("");
+    return `<div class="mt-score">
+      <div class="mts-meter"><div class="mts-fill ${pct >= 70 ? "hi" : pct >= 45 ? "mid" : "lo"}" style="width:${pct}%"></div><span class="mts-pct">${pct}%</span></div>
+      <div class="mts-verdict">This team is <b>${tier}</b>.</div>
+      <div class="mm-list">${perMon}</div>
+    </div>`;
+  };
+  const renderMatchBody = () => { const b = $("#matchBody"); if (b) b.innerHTML = matchBodyHTML(); const c = $("#matchCount"); if (c) c.textContent = matchTeam.length + "/6"; };
+  const renderMatchResults = (q) => {
+    const res = $("#matchResults"); if (!res) return;
+    const nq = norm(q), digits = q.replace(/\D/g, "");
+    if (!nq && !digits) { res.innerHTML = ""; res.classList.remove("show"); return; }
+    let list = DEX.filter(u => (nq && u.key.includes(nq)) || (digits && (String(u.dexno).includes(digits) || String(u.id).includes(digits))));
+    list.sort((a, b) => (nq ? (b.key.startsWith(nq) - a.key.startsWith(nq)) : 0) || a.dexno - b.dexno);
+    list = list.slice(0, MATCH_CAP);
+    res.classList.add("show");
+    res.innerHTML = list.length ? list.map(u => { const has = matchTeam.includes(u.id), full = matchTeam.length >= 6;
+      return `<button class="mtr-row${has ? " added" : ""}" data-madd="${u.id}" ${has || full ? "disabled" : ""}>
+        <img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt=""><span class="mtr-n">${displayName(u.ident)}</span><span class="mtr-t">${typeDots(u)}</span><span class="mtr-p">${has ? "✓" : "+"}</span></button>`; }).join("")
+      : `<div class="mtr-empty">no units match</div>`;
+  };
+  const addMatch = (id) => { if (matchTeam.includes(id) || matchTeam.length >= 6 || !byId.has(id)) return;
+    matchTeam.push(id); renderMatchBody(); renderMatchResults($("#matchSearch") ? $("#matchSearch").value : ""); sfx.pick(); };
 
   // --------------------------------------------------------------- render ---
   const app = $("#app");
@@ -632,16 +792,17 @@
     const S = score();
     const rnd = mulberry32(hashSeed(answers.join("")) >>> 0);
     const you = pickMon(S.topType, S.topStrat, S.topGen, null, rnd, S.secondType, S.topForm);
-    const party = buildParty(you, S, rnd);
-    const team = party.members, destiny = party.destiny;
     const region = REGIONS[S.topGen - 1];
+    partyState = buildParty(you, S, 0);
+    partyState.S = S; partyState.region = region; partyState.openSlot = null;
     const strat = STRATS[S.topStrat];
     const form = FORMS[S.topForm] || FORMS.base;
     const youIsForm = formOf(you.ident) !== "base";
     const yArch = archetype(you.stats).toLowerCase();
     const title = trainerTitle(S), nature = natureFor(you, S), move = signatureMove(you, S);
     const rivalType = RIVAL_TYPE[S.topType] || "fighting", rivalStratKey = RIVAL_STRAT[S.topStrat] || "balanced";
-    const rival = pickMon(rivalType, rivalStratKey, 0, new Set(team.map(m => m.u.id)), rnd);
+    const rival = pickMon(rivalType, rivalStratKey, 0, new Set(partyState.slots.map(s => s.pick.id)), rnd);
+    lastProfile = { you, S, region, strat, form, title, nature, move, rival, rivalType };
     setType(S.topType); sfx.reveal();
 
     const typeLine = S.specialize
@@ -700,28 +861,9 @@
           </div>
         </div>
 
-        <div class="destiny-card">
-          <div class="facet-h"><span class="fh-ic">✵</span>DESTINY READ</div>
-          <div class="destiny-line">${destinyLine(destiny, S)}</div>
-          <div class="destiny-tags">
-            <span class="dtag ${destiny.legendary ? "on leg" : destiny.mythical ? "on myth" : "off"}">${destiny.mythical ? "◆ MYTHICAL" : "◆ LEGENDARY"}</span>
-            <span class="dtag ${destiny.pseudo ? "on pseudo" : "off"}">▲ PSEUDO-LEGEND</span>
-            <span class="dtag on lean-${destiny.monsterLean}">${destiny.monsterLean === "monster" ? "☠ MONSTERS" : destiny.monsterLean === "cute" ? "♡ CUTIES" : "◑ BALANCED"}</span>
-          </div>
-        </div>
+        <div id="partyZone">${partyZoneHTML()}</div>
 
-        <div class="party-card">
-          <div class="facet-h"><span class="fh-ic">▦</span>YOUR PARTY OF SIX <span class="tc-region">${region.name}-forward</span></div>
-          <div class="party-list">${team.map(m =>
-            `<div class="pmon${m.tag ? " has-tag tag-" + m.tag : ""}" style="--tc:${TYPE_HEX[m.u.t1]}">
-               <div class="pm-art"><img src="${SPRITE(m.u.id)}" onerror="${SPRITE_FALLBACK(m.u.dexno)}" alt="${displayName(m.u.ident)}">${m.tag ? `<span class="pm-badge">${m.tag === "mythical" ? "MYTHICAL" : m.tag === "legendary" ? "LEGENDARY" : "PSEUDO"}</span>` : ""}</div>
-               <div class="pm-body">
-                 <div class="pm-top"><span class="pm-role">${m.role}</span><span class="pm-dots">${typeDots(m.u)}</span></div>
-                 <div class="pm-name">${displayName(m.u.ident)}</div>
-                 <div class="pm-why">${m.why}</div>
-               </div>
-             </div>`).join("")}</div>
-        </div>
+        <div id="matchZone">${matchZoneHTML()}</div>
 
         <div class="rival-card" style="--tc:${TYPE_HEX[rivalType]}">
           <div class="rc-sprite"><img src="${SPRITE(rival.id)}" onerror="${SPRITE_FALLBACK(rival.dexno)}" alt="${displayName(rival.ident)}"></div>
@@ -738,11 +880,9 @@
         </div>
         <div class="res-foot">wasapok.com/pokequiz · answers live in the link — share it and a friend sees exactly this</div>
       </div>`;
-    show("results");
-    $("#retakeBtn").addEventListener("click", restart);
-    $("#shareBtn").addEventListener("click", () => copyProfile({ you, S, region, strat, form, team, destiny, title, nature, move, rival, rivalType }));
+    show("results");                     // retake / share / party / match are delegated in wire()
     if (!prefersReduced) requestAnimationFrame(() => requestAnimationFrame(() => {
-      el.querySelectorAll(".pmon, .facet, .hero-card, .destiny-card").forEach((n, i) => { n.style.animationDelay = (i * 60) + "ms"; n.classList.add("pop"); });
+      el.querySelectorAll(".pmon, .facet, .hero-card, .destiny-card, .match-card").forEach((n, i) => { n.style.animationDelay = (i * 55) + "ms"; n.classList.add("pop"); });
     }));
   };
 
@@ -773,9 +913,12 @@
       `<div class="tbar"><span class="tbar-l">${t}</span><div class="tbar-t"><div class="tbar-f" style="width:${(S.ty[t] / max * 100).toFixed(0)}%;background:${TYPE_HEX[t]}"></div></div></div>`).join("");
   };
 
-  const copyProfile = ({ you, S, region, strat, form, team, destiny, title, nature, move, rival, rivalType }) => {
-    const crownTxt = destiny.mythical ? `mythical (${displayName(destiny.crown.ident)})`
-      : destiny.legendary ? `legendary (${displayName(destiny.crown.ident)})` : "none — no idols";
+  const copyProfile = () => {
+    const p = lastProfile; if (!p || !partyState) return;
+    const { you, S, region, strat, form, title, nature, move, rival, rivalType } = p;
+    const d = partyDestiny(partyState, S);
+    const crownTxt = d.mythical ? `mythical (${displayName(d.crown.ident)})`
+      : d.legendary ? `legendary (${displayName(d.crown.ident)})` : "none — no idols";
     const txt =
 `MY TRAINER PROFILE — wasapok.com/pokequiz
 ★ Title:  ${title}
@@ -785,8 +928,8 @@
 ◈ Form:   ${form.name}
 ⚔ Style:  ${strat.name}
 ✧ Kit:    ${nature.name} nature · ${move ? move.name : "—"}
-✵ Crown:  ${crownTxt}${destiny.pseudo ? " · + pseudo-legend monster" : ""} · ${destiny.monsterLean}
-▦ Party:  ${team.map(m => displayName(m.u.ident)).join(", ")}
+✵ Crown:  ${crownTxt}${d.pseudo ? " · + pseudo-legend monster" : ""} · ${d.monsterLean}
+▦ Party:  ${partyState.slots.map(s => displayName(s.pick.ident)).join(", ")}
 ⚡ Rival:  ${displayName(rival.ident)} (${rivalType})
 Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     const btn = $("#shareBtn");
@@ -796,15 +939,28 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
   };
   const fallbackCopy = (txt, done) => { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch {} ta.remove(); done(); };
 
-  const restart = () => { answers = []; qi = 0; setType(null); try { location.hash = ""; } catch {} show("intro"); };
+  const restart = () => { answers = []; qi = 0; partyState = null; matchTeam = []; setType(null); try { location.hash = ""; } catch {} show("intro"); };
 
   // ---------------------------------------------------------------- events --
-  const startQuiz = () => { answers = []; qi = 0; setType(null); show("quiz"); renderQuestion(); };
+  const startQuiz = () => { answers = []; qi = 0; partyState = null; matchTeam = []; setType(null); show("quiz"); renderQuestion(); };
   const wire = () => {
     $("#beginBtn").addEventListener("click", startQuiz);
     $("#qStage").addEventListener("click", e => { const b = e.target.closest(".opt"); if (b) answer(+b.dataset.i); });
     $("#qBack").addEventListener("click", () => { if (qi > 0) { qi--; sfx.back(); const lt = leadingType(); setType(lt); renderQuestion(); } });
     $("#qRestart").addEventListener("click", restart);
+    // results-page delegation (party swap/reshuffle · match-your-team · share/retake)
+    const results = $("#results");
+    results.addEventListener("input", e => { if (e.target.id === "matchSearch") { const c = $("#matchClear"); if (c) c.classList.toggle("show", e.target.value.length > 0); renderMatchResults(e.target.value); } });
+    results.addEventListener("click", e => {
+      if (e.target.closest("#retakeBtn")) { restart(); return; }
+      if (e.target.closest("#shareBtn")) { copyProfile(); return; }
+      if (e.target.closest("#reshuffleBtn")) { if (!partyState) return; partyState.salt++; partyState.slots = buildParty(partyState.you, partyState.S, partyState.salt).slots; partyState.openSlot = null; renderPartyZone(); sfx.pick(); return; }
+      const alt = e.target.closest("[data-alt]"); if (alt) { const slot = partyState.slots.find(s => s.key === alt.dataset.slot); const c = slot && slot.candidates.find(u => u.id === +alt.dataset.alt); if (c) { slot.pick = c; partyState.openSlot = null; renderPartyZone(); sfx.select(); } return; }
+      const op = e.target.closest("[data-open]"); if (op) { partyState.openSlot = partyState.openSlot === op.dataset.open ? null : op.dataset.open; renderPartyZone(); return; }
+      const madd = e.target.closest("[data-madd]"); if (madd && !madd.disabled) { addMatch(+madd.dataset.madd); return; }
+      const mrm = e.target.closest("[data-mrm]"); if (mrm) { matchTeam = matchTeam.filter(x => x !== +mrm.dataset.mrm); renderMatchBody(); renderMatchResults($("#matchSearch") ? $("#matchSearch").value : ""); return; }
+      if (e.target.closest("#matchClear")) { const inp = $("#matchSearch"); if (inp) inp.value = ""; e.target.closest("#matchClear").classList.remove("show"); renderMatchResults(""); return; }
+    });
     addEventListener("keydown", e => {
       if (!$("#quiz").classList.contains("active")) return;
       const k = e.key.toUpperCase();
@@ -831,8 +987,12 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     wire();
     if (location.hash === "#quiz") { startQuiz(); return; }   // dev/preview hook
     // deep-link: #r=<answer indices> jumps straight to a shared result
-    const m = /(?:^|[#&])r=([0-4]{1,48})/.exec(location.hash);
-    if (m && m[1].length === QUESTIONS.length) { answers = m[1].split("").map(Number); qi = QUESTIONS.length; renderResults(); }
+    const m = /(?:^|[#&])r=([0-4]{1,60})/.exec(location.hash);
+    if (m && m[1].length === QUESTIONS.length) {
+      answers = m[1].split("").map(Number); qi = QUESTIONS.length; renderResults();
+      const op = /open=(\w+)/.exec(location.hash); if (op && partyState) { partyState.openSlot = op[1]; renderPartyZone(); }
+      const mt = /match=([\d,]+)/.exec(location.hash); if (mt) { matchTeam = mt[1].split(",").map(Number).filter(id => byId.has(id)).slice(0, 6); renderMatchBody(); }
+    }
   }
   boot();
 })();
