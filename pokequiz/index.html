@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>Trainer Profile</title>
-<meta name="description" content="A deep 41-question quiz that scans your full trainer identity — your Pokémon, type, region, form, strategy — and builds your party of six, deciding whether you'd wield a legendary, mythical or pseudo-legend based on who you are and what you love.">
+<meta name="description" content="Two Pokémon quizzes: a deep 47-question Trainer Profile that scans your full identity and builds your party of six (legendary, mythical or pseudo included) — plus a Type Specialist quiz that finds exactly which Pokémon of a chosen type you'd be and the squad you'd raise.">
 <meta name="theme-color" content="#11131a">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -35,9 +35,24 @@
         <li><span class="fi">▦</span>Your full <b>party of six</b>, member by member</li>
       </ul>
       <button class="btn-begin" id="beginBtn" type="button">Begin analysis <span class="arw">→</span></button>
+      <button class="btn-alt" id="typeBtn" type="button"><span class="ba-ic">✦</span> Or: which <b>Pokémon of a type</b> are you?</button>
       <div class="intro-foot" id="introFoot"></div>
     </div>
   </section>
+
+  <!-- ===== TYPE SELECT (for the Type Specialist quiz) ===== -->
+  <section class="scene typeselect" id="typeselect">
+    <div class="ts-inner">
+      <button class="ts-back" id="tsBack" type="button">← back</button>
+      <div class="kicker">POKÉQUIZ · TYPE SPECIALIST</div>
+      <h2 class="ts-title">Choose your type.</h2>
+      <p class="ts-sub">Pick the type you're drawn to — then a focused quiz finds exactly which <b>one</b> of it you'd be, and the squad you'd raise.</p>
+      <div class="ts-grid" id="tsGrid"></div>
+    </div>
+  </section>
+
+  <!-- ===== TYPE RESULTS ===== -->
+  <section class="scene typeresults" id="typeresults" aria-live="polite"></section>
 
   <!-- ===== QUIZ ===== -->
   <section class="scene quiz" id="quiz">

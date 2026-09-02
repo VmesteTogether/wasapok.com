@@ -444,6 +444,9 @@
   let answers = [];            // chosen option index per question
   let qi = 0;
   let partyState = null, lastProfile = null, matchTeam = [];   // results-page interactive state
+  let activeQuiz = "trainer";  // "trainer" (full profile) or "type" (Type Specialist)
+  let typeChoice = null, typeState = null;
+  const activeQ = () => activeQuiz === "type" ? TYPE_Q : QUESTIONS;
   const nativeIn = (u, gen) => NATIVE_OK && NATIVE[gen] && NATIVE[gen].has(u.dexno);
   const prefersReduced = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
@@ -738,7 +741,252 @@
   const addMatch = (id) => { if (matchTeam.includes(id) || matchTeam.length >= 6 || !byId.has(id)) return;
     matchTeam.push(id); renderMatchBody(); renderMatchResults($("#matchSearch") ? $("#matchSearch").value : ""); sfx.pick(); };
 
-  // --------------------------------------------------------------- render ---
+  // ============================================================================
+  //  TYPE SPECIALIST — a second quiz: pick a TYPE, then find which one of it you'd
+  //  be + the squad you'd raise, all within that type. Multiple options requestable.
+  // ============================================================================
+  const TYPE_Q = [
+    { q:"In a battle, your instinct is to…", o:[
+      { a:"Hit hard and end it fast", role:"off", phys:1 },
+      { a:"Outlast and grind them down", role:"def" },
+      { a:"Zip around, untouchable", role:"spd" },
+      { a:"Enable and empower my ally", role:"sup" },
+      { a:"Confuse, trap, and control", role:"trk" } ] },
+    { q:"Your power comes from…", o:[
+      { a:"Brute physical muscle", phys:2, role:"off" },
+      { a:"Focused mental/energy force", phys:-2, role:"off" },
+      { a:"Raw speed and precision", phys:1, role:"spd" },
+      { a:"Sheer toughness", phys:1, role:"def" },
+      { a:"A bit of everything", role:"sup" } ] },
+    { q:"Your presence is…", o:[
+      { a:"Towering and imposing", big:2, vibe:"fierce" },
+      { a:"Small but scrappy", big:-2 },
+      { a:"Sleek and unassuming", big:0, vibe:"graceful" },
+      { a:"Ancient and colossal", big:2, vibe:"noble", grand:1 },
+      { a:"Odd and hard to place", vibe:"eerie" } ] },
+    { q:"People describe you as…", o:[
+      { a:"Fierce and intimidating", vibe:"fierce", phys:1 },
+      { a:"Adorable and sweet", vibe:"cute" },
+      { a:"Elegant and graceful", vibe:"graceful" },
+      { a:"Strange and mysterious", vibe:"eerie" },
+      { a:"Noble and dignified", vibe:"noble" } ] },
+    { q:"Your ideal fight ends with…", o:[
+      { a:"A single knockout blow", role:"off", phys:1 },
+      { a:"Them collapsing, exhausted", role:"def" },
+      { a:"You never once getting hit", role:"spd" },
+      { a:"Your partner landing the win", role:"sup" },
+      { a:"Them beating themselves", role:"trk" } ] },
+    { q:"Pick a battle cry.", o:[
+      { a:"A deafening roar", vibe:"fierce", big:1 },
+      { a:"A cheerful, bright chirp", vibe:"cute" },
+      { a:"Silence — power speaks for you", vibe:"noble" },
+      { a:"A blur too fast to hear", role:"spd" },
+      { a:"An unsettling whisper", vibe:"eerie" } ] },
+    { q:"You'd rather be…", o:[
+      { a:"Feared", vibe:"fierce", big:1 },
+      { a:"Adored", vibe:"cute" },
+      { a:"Respected", vibe:"noble" },
+      { a:"Underestimated", role:"spd", vibe:"cute" },
+      { a:"A mystery", vibe:"eerie", role:"trk" } ] },
+    { q:"Your build is…", o:[
+      { a:"All offense — a glass cannon", role:"off", phys:1 },
+      { a:"A living fortress", role:"def", big:1 },
+      { a:"Balanced and reliable", role:"sup" },
+      { a:"Fast and fragile", role:"spd" },
+      { a:"A slow, unstoppable juggernaut", role:"off", big:1, phys:1 } ] },
+    { q:"The strongest of your type would…", o:[
+      { a:"Be a world-shaking legend — that's me", grand:3, vibe:"noble", big:1 },
+      { a:"Be a fearsome monster — also me", vibe:"fierce", grand:1 },
+      { a:"Be a beloved icon", vibe:"cute" },
+      { a:"Be a clever specialist", role:"trk" },
+      { a:"Be a humble, tireless workhorse", grand:-2, role:"def" } ] },
+    { q:"You evolve by…", o:[
+      { a:"Rage and relentless training", vibe:"fierce", role:"off", phys:1 },
+      { a:"Deep bonds and love", vibe:"cute", role:"sup" },
+      { a:"An ancient ritual", vibe:"eerie", grand:1 },
+      { a:"Sheer stubborn persistence", role:"def" },
+      { a:"A sudden flash of insight", role:"spd", phys:-1 } ] },
+    { q:"Your signature is…", o:[
+      { a:"A devastating physical strike", phys:2, role:"off" },
+      { a:"An overwhelming energy blast", phys:-2, role:"off" },
+      { a:"An impenetrable defense", role:"def" },
+      { a:"A reality-bending trick", role:"trk", phys:-1 },
+      { a:"Blinding, decisive speed", role:"spd" } ] },
+    { q:"At your very heart, you are…", o:[
+      { a:"A predator", vibe:"fierce", role:"off" },
+      { a:"A guardian", role:"def", vibe:"noble" },
+      { a:"A companion", vibe:"cute", role:"sup" },
+      { a:"A trickster", role:"trk", vibe:"eerie" },
+      { a:"A force of nature", grand:2, big:1, vibe:"noble" } ] },
+  ];
+  const ROLE_ARCH = {
+    off: ["PHYS SWEEPER","SPEC SWEEPER","PHYS ATTACKER","SPEC ATTACKER","WALLBREAKER","SPEC BREAKER","MIXED ATTACKER"],
+    def: ["FORTRESS","PHYS WALL","SPEC WALL","BULKY PIVOT"],
+    spd: ["SCOUT","PHYS SWEEPER","SPEC SWEEPER"],
+    sup: ["BULKY PIVOT","SPEC WALL","ALL-ROUNDER"],
+    trk: ["ALL-ROUNDER","SCOUT","BULKY PIVOT"],
+  };
+  const GRACE_T = new Set(["fairy","psychic","flying","ice","water"]);
+  const EERIE_T = new Set(["ghost","dark","poison","bug","psychic"]);
+  const scoreType = () => {
+    const role = {}, vibe = {}; let phys = 0, big = 0, grand = 0;
+    answers.forEach((oi, i) => { const o = TYPE_Q[i].o[oi]; if (!o) return;
+      if (o.role) role[o.role] = (role[o.role] || 0) + 2;
+      if (o.vibe) vibe[o.vibe] = (vibe[o.vibe] || 0) + 2;
+      phys += o.phys || 0; big += o.big || 0; grand += o.grand || 0;
+    });
+    const topRole = Object.keys(role).sort((a, b) => role[b] - role[a])[0] || "off";
+    const topVibe = Object.keys(vibe).sort((a, b) => vibe[b] - vibe[a])[0] || "balanced";
+    return { role, vibe, topRole, topVibe, phys, big, grand, wantsLegend: grand >= 5 };
+  };
+  const typePool = (type, allowLegend) => DEX.filter(u => (u.t1 === type || u.t2 === type) && !BATTLE_ONLY.test(u.ident) && formOf(u.ident) === "base" && u.bst >= 300 && (allowLegend || !LEGENDARY.has(u.dexno)));
+  // rank the species of `type` by fit to the reader's within-type personality
+  const rankType = (type, S2, exclude, rnd, roleOverride) => {
+    const role = roleOverride || S2.topRole, arches = ROLE_ARCH[role] || [];
+    const pool = typePool(type, S2.wantsLegend);
+    return pool.filter(u => !exclude || !exclude.has(u.id)).map(u => {
+      const a = archetype(u.stats); let s = arches[0] === a ? 5 : arches.includes(a) ? 3 : 0;
+      s += S2.phys > 0 ? (u.stats[1] >= u.stats[3] ? 2 : 0) : S2.phys < 0 ? (u.stats[3] >= u.stats[1] ? 2 : 0) : 0.5;
+      if (S2.topVibe === "fierce") s += monsterScore(u) * 0.8;
+      else if (S2.topVibe === "cute") s += cuteScore(u) * 0.9;
+      else if (S2.topVibe === "graceful") s += (u.stats[5] >= 90 ? 1.5 : 0) + (GRACE_T.has(u.t1) || GRACE_T.has(u.t2) ? 1.5 : 0) - monsterScore(u) * 0.2;
+      else if (S2.topVibe === "eerie") s += (EERIE_T.has(u.t1) || EERIE_T.has(u.t2) ? 2 : 0) + (tagOf(u) === "pseudo" ? 1 : 0);
+      else if (S2.topVibe === "noble") s += (u.bst >= 500 ? 1.5 : 0) + (tagOf(u) ? 1 : 0);
+      s += S2.big > 0 ? u.bst / 140 : S2.big < 0 ? (520 - u.bst) / 170 : u.bst / 320;
+      if (tagOf(u) === "legendary" || tagOf(u) === "mythical") s += S2.wantsLegend ? 4 : -100;
+      s += (mulberry32((hashSeed(String(u.id)) ^ Math.imul((S2.salt || 0) + 5, 0x27d4eb2f)) >>> 0)()) * 2.4;
+      return [u, s];
+    }).sort((a, b) => b[1] - a[1]).map(x => x[0]);
+  };
+
+  const TYPE_LIST = ["normal","fire","water","electric","grass","ice","fighting","poison",
+    "ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy"];
+  const openTypeSelect = () => {
+    setType(null);
+    $("#tsGrid").innerHTML = TYPE_LIST.map(t =>
+      `<button class="ts-cell" data-tsel="${t}" style="--tc:${TYPE_HEX[t]}"><span class="tsc-dot"></span><span class="tsc-name">${t}</span></button>`).join("");
+    show("typeselect");
+  };
+  const startTypeQuiz = (type) => { typeChoice = type; activeQuiz = "type"; answers = []; qi = 0; setType(type); show("quiz"); renderQuestion(); };
+
+  // build the type squad state: featured "you'd be" list + 4 swappable squad slots
+  const SQUAD_META = [
+    { key: "ace",    label: "YOUR ACE",  sub: "the one you'd be" },
+    { key: "muscle", label: "MUSCLE",    sub: "raw power",       role: "off" },
+    { key: "anchor", label: "ANCHOR",    sub: "holds the line",  role: "def" },
+    { key: "wild",   label: "WILDCARD",  sub: "your curveball",  role: "trk" },
+  ];
+  const buildTypeSquad = (S2, salt) => {
+    S2 = { ...S2, salt };
+    const rnd = mulberry32((hashSeed(answers.join("")) ^ Math.imul(salt + 1, 0x9E3779B1)) >>> 0);
+    const youdbe = rankType(typeChoice, S2, null, rnd).slice(0, 8);
+    const feature = youdbe[0];
+    const used = new Set([feature.id]);
+    const slots = [{ key: "ace", pick: feature, candidates: youdbe.slice(0, 5) }];
+    for (let i = 1; i < SQUAD_META.length; i++) {
+      const ranked = rankType(typeChoice, S2, used, rnd, SQUAD_META[i].role);
+      const pick = ranked[0] || DEX.find(u => (u.t1 === typeChoice || u.t2 === typeChoice) && !used.has(u.id));
+      if (pick) used.add(pick.id);
+      const cands = [pick, ...ranked.filter(u => u.id !== (pick ? pick.id : -1))].filter(Boolean).slice(0, 5);
+      slots.push({ key: SQUAD_META[i].key, pick, candidates: cands });
+    }
+    return { type: typeChoice, S2, salt, youdbe, featureIdx: 0, slots, openSlot: null, legends: !!S2.wantsLegend };
+  };
+
+  const ROLE_WORD = { off: "attacker", def: "wall", spd: "speedster", sup: "supporter", trk: "trickster" };
+  const VIBE_WORD = { fierce: "fierce", cute: "sweet-natured", graceful: "graceful", eerie: "eerie", noble: "noble", balanced: "well-rounded" };
+  const whyType = (u, S2) => {
+    const t = tagOf(u);
+    const cls = t === "legendary" || t === "mythical" ? "legendary " : t === "pseudo" ? "monstrous " : "";
+    return `A ${VIBE_WORD[S2.topVibe] || "true"} ${cls}${ROLE_WORD[S2.topRole] || "all-rounder"} — the ${typeChoice}-type that's most <b>you</b>.`;
+  };
+  const typeResultsHTML = () => {
+    const st = typeState, S2 = st.S2, type = st.type;
+    const feat = st.youdbe[st.featureIdx] || st.slots[0].pick, ft = tagOf(feat);
+    const options = st.youdbe.map((u, i) =>
+      `<button class="tob${i === st.featureIdx ? " sel" : ""}" data-feat="${i}" style="--tc:${TYPE_HEX[u.t1]}" title="${displayName(u.ident)}">
+         <img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="${displayName(u.ident)}"><span class="tob-r">#${i + 1}</span></button>`).join("");
+    const rows = st.slots.map(slot => {
+      const u = slot.pick, tag = tagOf(u), swappable = slot.key !== "ace", open = st.openSlot === slot.key;
+      const meta = SQUAD_META.find(m => m.key === slot.key);
+      const main =
+        `<div class="pm-art"><img src="${SPRITE(u.id)}" onerror="${SPRITE_FALLBACK(u.dexno)}" alt="${displayName(u.ident)}">${memBadge(tag)}</div>
+         <div class="pm-body">
+           <div class="pm-top"><span class="pm-role">${meta.label}</span><span class="pm-dots">${typeDots(u)}</span></div>
+           <div class="pm-name">${displayName(u.ident)}</div>
+           <div class="pm-why">${meta.sub} · ${archetype(u.stats).toLowerCase()}</div>
+         </div>
+         ${swappable ? `<span class="pm-swap">${open ? "▲" : "⇅ TOP&nbsp;5"}</span>` : ""}`;
+      const head = swappable ? `<button class="pm-main" data-open="${slot.key}">${main}</button>` : `<div class="pm-main">${main}</div>`;
+      const tray = (swappable && open) ? `<div class="pm-tray">${slot.candidates.map((c, ci) =>
+        `<button class="alt${c.id === u.id ? " cur" : ""}" data-slot="${slot.key}" data-alt="${c.id}"><span class="alt-rank">#${ci + 1}</span><img src="${SPRITE(c.id)}" onerror="${SPRITE_FALLBACK(c.dexno)}" alt=""><span class="alt-name">${displayName(c.ident)}</span>${tagOf(c) ? `<span class="alt-tag tt-${tagOf(c)}">${tagOf(c).charAt(0).toUpperCase()}</span>` : ""}</button>`).join("")}</div>` : "";
+      return `<div class="pmon${tag ? " has-tag tag-" + tag : ""}${open ? " open" : ""}" style="--tc:${TYPE_HEX[u.t1]}">${head}${tray}</div>`;
+    }).join("");
+    return `<div class="res-wrap">
+      <div class="res-top">POKÉQUIZ · ${type.toUpperCase()} SPECIALIST</div>
+      <div class="hero-card" style="--tc:${TYPE_HEX[feat.t1]}">
+        <div class="hc-aura"></div>
+        <div class="hc-kick">AS A ${type.toUpperCase()} TRAINER, YOU'D BE</div>
+        <div class="hc-body">
+          <div class="hc-sprite"><img src="${SPRITE(feat.id)}" onerror="${SPRITE_FALLBACK(feat.dexno)}" alt="${displayName(feat.ident)}"></div>
+          <div class="hc-meta">
+            <div class="hc-name">${displayName(feat.ident)}</div>
+            <div class="hc-types">${typeChip(feat.t1)}${feat.t2 ? typeChip(feat.t2) : ""}${ft ? `<span class="hc-title" style="border-color:var(--tc)">${ft === "pseudo" ? "PSEUDO" : ft.toUpperCase()}</span>` : ""}</div>
+            <div class="hc-why">${whyType(feat, S2)}</div>
+          </div>
+        </div>
+      </div>
+      <div class="options-card">
+        <div class="facet-h"><span class="fh-ic">◓</span>MORE OPTIONS <span class="tc-region">tap to feature</span></div>
+        <div class="tob-strip">${options}</div>
+      </div>
+      <div class="party-card">
+        <div class="facet-h"><span class="fh-ic">▦</span>YOUR ${type.toUpperCase()} SQUAD
+          <button class="reshuffle-btn" id="tReshuffle">⟳ RESHUFFLE</button></div>
+        <div class="party-list">${rows}</div>
+        <div class="party-hint">Tap a slot for its <b>top 5</b> · <button class="mini-tog" id="tLegends">${st.S2.wantsLegend ? "◆ legends ON" : "◇ allow legends"}</button></div>
+      </div>
+      <div class="res-actions">
+        <button class="ra-btn primary" id="tCopy" type="button">Copy result</button>
+        <button class="ra-btn" id="tChangeType" type="button">Change type</button>
+        <button class="ra-btn" id="tRetake" type="button">Home</button>
+      </div>
+      <div class="res-foot">wasapok.com/pokequiz · Type Specialist — a ${TYPE_Q.length}-question read within ${type}</div>
+    </div>`;
+  };
+  const paintTypeResults = (pop) => {
+    const el = $("#typeresults"); el.innerHTML = typeResultsHTML();
+    if (pop && !prefersReduced) requestAnimationFrame(() => requestAnimationFrame(() => {
+      el.querySelectorAll(".pmon, .hero-card, .options-card").forEach((n, i) => { n.style.animationDelay = (i * 55) + "ms"; n.classList.add("pop"); });
+    }));
+  };
+  const renderTypeResults = () => {
+    const S2 = scoreType(); S2.salt = 0;
+    typeState = buildTypeSquad(S2, 0);
+    setType(typeChoice); sfx.reveal();
+    paintTypeResults(true); show("typeresults");
+  };
+  const copyTypeProfile = () => {
+    const st = typeState, feat = st.youdbe[st.featureIdx];
+    const txt =
+`MY ${st.type.toUpperCase()} SPECIALIST — wasapok.com/pokequiz
+◓ I'd be: ${displayName(feat.ident).toUpperCase()}
+▦ Squad:  ${st.slots.map(s => displayName(s.pick.ident)).join(", ")}
+Take it: ${location.origin}/pokequiz/#t=${st.type}.${answers.join("")}`;
+    const btn = $("#tCopy"), done = () => { btn.textContent = "Copied! ✓"; setTimeout(() => btn.textContent = "Copy result", 1800); };
+    if (navigator.clipboard) navigator.clipboard.writeText(txt).then(done).catch(() => fallbackCopy(txt, done));
+    else fallbackCopy(txt, done);
+  };
+  const typeResultsClick = (e) => {
+    if (e.target.closest("#tChangeType")) { openTypeSelect(); return; }
+    if (e.target.closest("#tRetake")) { restart(); return; }
+    if (e.target.closest("#tCopy")) { copyTypeProfile(); return; }
+    if (e.target.closest("#tLegends")) { const s = typeState.S2; s.wantsLegend = !s.wantsLegend; typeState = buildTypeSquad(s, typeState.salt + 1); paintTypeResults(false); sfx.select(); return; }
+    if (e.target.closest("#tReshuffle")) { const s = typeState.S2; typeState = buildTypeSquad(s, typeState.salt + 1); paintTypeResults(false); sfx.pick(); return; }
+    const feat = e.target.closest("[data-feat]"); if (feat) { typeState.featureIdx = +feat.dataset.feat; typeState.slots[0].pick = typeState.youdbe[typeState.featureIdx]; typeState.slots[0].candidates = typeState.youdbe.slice(0, 5); paintTypeResults(false); sfx.select(); return; }
+    const alt = e.target.closest("[data-alt]"); if (alt) { const slot = typeState.slots.find(s => s.key === alt.dataset.slot); const c = slot && slot.candidates.find(u => u.id === +alt.dataset.alt); if (c) { slot.pick = c; typeState.openSlot = null; paintTypeResults(false); sfx.select(); } return; }
+    const op = e.target.closest("[data-open]"); if (op) { typeState.openSlot = typeState.openSlot === op.dataset.open ? null : op.dataset.open; paintTypeResults(false); return; }
+  };
   const app = $("#app");
   const setType = t => {                             // tint the whole UI toward a type
     app.dataset.type = t || "none";
@@ -750,10 +998,10 @@
   const typeDots = u => [u.t1, u.t2].filter(Boolean).map(t => `<i style="background:${TYPE_HEX[t]}"></i>`).join("");
 
   const renderQuestion = () => {
-    const Q = QUESTIONS[qi];
+    const QS = activeQ(), Q = QS[qi];
     $("#qNum").textContent = "Q" + (qi + 1);
-    $("#qCount").textContent = "/ " + QUESTIONS.length;
-    $("#qpFill").style.width = ((qi) / QUESTIONS.length * 100) + "%";
+    $("#qCount").textContent = "/ " + QS.length;
+    $("#qpFill").style.width = ((qi) / QS.length * 100) + "%";
     $("#qBack").style.visibility = qi === 0 ? "hidden" : "visible";
     const stage = $("#qStage");
     stage.innerHTML =
@@ -770,22 +1018,24 @@
 
   const answer = (i) => {
     answers[qi] = i; sfx.pick();
-    const lt = leadingType(); if (lt) setType(lt);
-    if (qi < QUESTIONS.length - 1) { qi++; renderQuestion(); }
+    if (activeQuiz === "type") setType(typeChoice); else { const lt = leadingType(); if (lt) setType(lt); }
+    if (qi < activeQ().length - 1) { qi++; renderQuestion(); }
     else { $("#qpFill").style.width = "100%"; finish(); }
   };
 
   // ---- crunch → results ----
   const CRUNCH_LINES = ["Reading your profile…", "Cross-checking the dex…", "Scouting your region…", "Drafting your team…", "Locking it in…"];
+  const CRUNCH_TYPE = ["Reading your soul…", "Sifting the species…", "Narrowing it down…", "Finding your match…", "Locking it in…"];
   const finish = () => {
     show("crunch");
+    const lines = activeQuiz === "type" ? CRUNCH_TYPE : CRUNCH_LINES;
     const el = $("#crunchTxt"); let k = 0;
-    el.textContent = CRUNCH_LINES[0];
-    const iv = setInterval(() => { k = (k + 1) % CRUNCH_LINES.length; el.textContent = CRUNCH_LINES[k]; }, 340);
+    el.textContent = lines[0];
+    const iv = setInterval(() => { k = (k + 1) % lines.length; el.textContent = lines[k]; }, 340);
     const dur = prefersReduced ? 200 : 1550;
-    setTimeout(() => { clearInterval(iv); renderResults(); }, dur);
+    setTimeout(() => { clearInterval(iv); if (activeQuiz === "type") renderTypeResults(); else renderResults(); }, dur);
     // stash a shareable code
-    try { location.hash = "r=" + answers.join(""); } catch {}
+    try { location.hash = activeQuiz === "type" ? "t=" + typeChoice + "." + answers.join("") : "r=" + answers.join(""); } catch {}
   };
 
   const renderResults = () => {
@@ -939,14 +1189,14 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
   };
   const fallbackCopy = (txt, done) => { const ta = document.createElement("textarea"); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand("copy"); } catch {} ta.remove(); done(); };
 
-  const restart = () => { answers = []; qi = 0; partyState = null; matchTeam = []; setType(null); try { location.hash = ""; } catch {} show("intro"); };
+  const restart = () => { answers = []; qi = 0; partyState = null; matchTeam = []; activeQuiz = "trainer"; typeChoice = null; typeState = null; setType(null); try { location.hash = ""; } catch {} show("intro"); };
 
   // ---------------------------------------------------------------- events --
   const startQuiz = () => { answers = []; qi = 0; partyState = null; matchTeam = []; setType(null); show("quiz"); renderQuestion(); };
   const wire = () => {
     $("#beginBtn").addEventListener("click", startQuiz);
     $("#qStage").addEventListener("click", e => { const b = e.target.closest(".opt"); if (b) answer(+b.dataset.i); });
-    $("#qBack").addEventListener("click", () => { if (qi > 0) { qi--; sfx.back(); const lt = leadingType(); setType(lt); renderQuestion(); } });
+    $("#qBack").addEventListener("click", () => { if (qi > 0) { qi--; sfx.back(); if (activeQuiz === "type") setType(typeChoice); else setType(leadingType()); renderQuestion(); } });
     $("#qRestart").addEventListener("click", restart);
     // results-page delegation (party swap/reshuffle · match-your-team · share/retake)
     const results = $("#results");
@@ -963,11 +1213,17 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     });
     addEventListener("keydown", e => {
       if (!$("#quiz").classList.contains("active")) return;
-      const k = e.key.toUpperCase();
-      if ("ABCDE".includes(k)) { const i = "ABCDE".indexOf(k); if (QUESTIONS[qi].o[i]) answer(i); }
-      else if ("12345".includes(e.key)) { const i = +e.key - 1; if (QUESTIONS[qi].o[i]) answer(i); }
+      const Q = activeQ()[qi], k = e.key.toUpperCase();
+      if ("ABCDE".includes(k)) { const i = "ABCDE".indexOf(k); if (Q.o[i]) answer(i); }
+      else if ("12345".includes(e.key)) { const i = +e.key - 1; if (Q.o[i]) answer(i); }
       else if (e.key === "Backspace") { if (qi > 0) { qi--; renderQuestion(); } }
     });
+
+    // Type Specialist quiz: intro CTA → type grid → quiz → type results
+    $("#typeBtn").addEventListener("click", openTypeSelect);
+    $("#tsBack").addEventListener("click", () => { setType(null); show("intro"); });
+    $("#tsGrid").addEventListener("click", e => { const b = e.target.closest("[data-tsel]"); if (b) startTypeQuiz(b.dataset.tsel); });
+    $("#typeresults").addEventListener("click", typeResultsClick);
   };
 
   // ------------------------------------------------------------------ boot --
@@ -985,7 +1241,13 @@ Take it: ${location.origin}/pokequiz/#r=${answers.join("")}`;
     const qt = $("#qTotal"); if (qt) qt.textContent = QUESTIONS.length;
     $("#introFoot").textContent = `${DEX.length} species on file · ${QUESTIONS.length} questions · ~${Math.max(2, Math.round(QUESTIONS.length * 8 / 60))} min`;
     wire();
-    if (location.hash === "#quiz") { startQuiz(); return; }   // dev/preview hook
+    if (location.hash === "#quiz") { startQuiz(); return; }             // dev/preview hook
+    if (location.hash === "#typeselect") { openTypeSelect(); return; }   // dev/preview hook
+    // Type Specialist share: #t=<type>.<answers>
+    const tm = /(?:^|[#&])t=([a-z]+)\.([0-4]{1,20})/.exec(location.hash);
+    if (tm && TYPE_LIST.includes(tm[1]) && tm[2].length === TYPE_Q.length) {
+      typeChoice = tm[1]; activeQuiz = "type"; answers = tm[2].split("").map(Number); qi = TYPE_Q.length; renderTypeResults(); return;
+    }
     // deep-link: #r=<answer indices> jumps straight to a shared result
     const m = /(?:^|[#&])r=([0-4]{1,60})/.exec(location.hash);
     if (m && m[1].length === QUESTIONS.length) {

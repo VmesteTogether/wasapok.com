@@ -296,6 +296,37 @@ button.pm-main:active{background:color-mix(in srgb,var(--tc) 8%,transparent)}
 .mm-flags .ok{color:#062012;background:#62d67a}.mm-flags .mid{color:#2a1e00;background:#f6c343}.mm-flags .off{color:#fff;background:#7a5a5a}
 .mm-flags .tt-legendary{background:#ffd24a;color:#3a2e00}.mm-flags .tt-mythical{background:#f08fd0;color:#3a1030}.mm-flags .tt-pseudo{background:#6a53e6;color:#fff}
 
+/* TYPE SPECIALIST — intro alt CTA + type select + type results */
+.btn-alt{margin-top:14px;display:inline-flex;align-items:center;gap:9px;font-family:var(--f-body);font-size:14px;color:var(--muted);background:transparent;border:1px solid var(--line);border-radius:100px;padding:11px 22px;cursor:pointer;transition:border-color .15s,color .15s,transform .12s}
+.btn-alt:hover{border-color:var(--type);color:var(--ink);transform:translateY(-1px)}
+.btn-alt b{color:var(--type);font-weight:650}
+.ba-ic{color:var(--type);transition:color .6s}
+
+.typeselect.active{min-height:100dvh;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:60px 22px 44px;position:relative}
+.ts-inner{max-width:540px;width:100%;text-align:center;animation:rise .5s cubic-bezier(.2,.8,.2,1) both}
+.ts-back{position:absolute;top:20px;left:20px;background:transparent;border:1px solid var(--line);color:var(--muted);font-family:var(--f-mono);font-size:11px;letter-spacing:.06em;padding:7px 13px;border-radius:100px;cursor:pointer}
+.ts-back:hover{color:var(--ink);border-color:var(--type)}
+.ts-title{font-family:var(--f-disp);font-weight:700;font-size:clamp(32px,7vw,50px);line-height:1;letter-spacing:-.02em;margin-top:6px}
+.ts-sub{color:var(--muted);font-size:15.5px;margin:14px auto 26px;max-width:40ch}.ts-sub b{color:var(--ink)}
+.ts-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px}
+@media(min-width:440px){ .ts-grid{grid-template-columns:repeat(3,1fr)} }
+.ts-cell{display:flex;align-items:center;gap:9px;justify-content:center;padding:14px 8px;border-radius:12px;background:var(--bg2);border:1px solid var(--line);border-left:3px solid var(--tc);cursor:pointer;color:var(--ink);font-family:var(--f-lab);font-weight:600;font-size:13px;text-transform:uppercase;letter-spacing:.04em;transition:transform .12s,background .15s}
+.ts-cell:hover{transform:translateY(-2px);background:color-mix(in srgb,var(--tc) 18%,var(--bg2))}
+.ts-cell:active{transform:translateY(0) scale(.98)}
+.tsc-dot{width:13px;height:13px;border-radius:50%;background:var(--tc);flex:0 0 auto;box-shadow:0 0 8px color-mix(in srgb,var(--tc) 60%,transparent)}
+
+.typeresults{padding:0}
+.options-card{background:var(--bg2);border:1px solid var(--line);border-radius:18px;padding:18px 20px;margin-bottom:12px}
+.tob-strip{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch}
+.tob-strip::-webkit-scrollbar{height:0}
+.tob{position:relative;flex:0 0 auto;width:66px;height:66px;border-radius:12px;background:var(--bg3);border:1px solid var(--line);cursor:pointer;display:grid;place-items:center;padding:0;transition:transform .12s,box-shadow .15s}
+.tob img{width:54px;height:54px;object-fit:contain}
+.tob:hover{transform:translateY(-2px)}
+.tob.sel{border-color:var(--tc);box-shadow:0 0 0 2px var(--tc)}
+.tob-r{position:absolute;top:3px;left:5px;font-family:var(--f-mono);font-size:8px;color:var(--faint)}
+.mini-tog{background:transparent;border:0;color:var(--type);font-family:var(--f-mono);font-size:9.5px;letter-spacing:.04em;cursor:pointer;padding:0;margin-left:8px}
+.mini-tog:hover{text-decoration:underline}
+
 @media (prefers-reduced-motion: reduce){
   *{animation:none !important;transition:background .3s,color .3s !important}
   .hc-sprite img{animation:none}
