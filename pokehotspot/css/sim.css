@@ -1,0 +1,163 @@
+/* =============================================================================
+   POKÉHOTSPOT — sim.css
+   The SPAR station: theater eligibility + 100-engagement combat projection.
+   Palette-tinted (--accent) clinical read, four states: deploy/running/results/inspect.
+   ========================================================================== */
+#station-sim { padding: 0; }
+.sim-scr { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; }
+.sim-scr.scroll { padding: 12px 12px 20px; gap: 10px; }
+.sim-in { animation: sim-fade .28s ease both; }
+@keyframes sim-fade { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
+
+/* ============================ EMPTY ============================ */
+.sim-empty { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; padding: 20px; }
+.se-ic { width: 64px; height: 64px; border-radius: 20px; display: grid; place-items: center; color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--bg2)); border: 1px solid var(--glass-brd); }
+.se-ic svg { width: 32px; height: 32px; }
+.sim-empty h3 { font: 700 18px "Chakra Petch"; letter-spacing: .16em; color: var(--ink); }
+.sim-empty p { font: 400 12px "Chakra Petch"; color: var(--ink-dim); max-width: 230px; }
+.se-cta { display: flex; gap: 8px; }
+
+/* ============================ DEPLOY ============================ */
+.sim-kicker { display: flex; align-items: center; justify-content: space-between;
+  font: 700 9.5px "Share Tech Mono"; letter-spacing: .14em; color: var(--ink-mute); }
+.sim-kicker span:first-child { color: var(--accent); }
+.sim-team { display: grid; grid-template-columns: repeat(6, 1fr); gap: 4px; }
+.sim-mcap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 5px 2px 4px;
+  border-radius: 10px; background: var(--bg2); border: 1px solid var(--line); }
+.smc-idx { font: 700 7px "Share Tech Mono"; color: var(--ink-mute); }
+.sim-mcap img { width: 38px; height: 38px; object-fit: contain; }
+.smc-n { font: 600 7.5px "Chakra Petch"; color: var(--ink-dim); text-align: center; line-height: 1.1; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+.sim-elig-head { display: flex; align-items: baseline; justify-content: space-between; margin-top: 2px; }
+.sim-elig-head h3 { font: 700 12px "Chakra Petch"; letter-spacing: .12em; color: var(--ink); }
+.sim-elig-cnt { font: 700 9px "Share Tech Mono"; letter-spacing: .06em; color: var(--ink-mute); }
+.sim-th-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.sim-th { position: relative; display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 9px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--line); transition: border-color .14s, background .16s; }
+.sim-th.locked { opacity: .5; }
+.sim-th.legal:active { transform: scale(.96); }
+.sim-th.sel { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg2)); box-shadow: inset 0 0 0 1px var(--accent); }
+.sim-th.sel.warn { border-color: var(--warn); box-shadow: inset 0 0 0 1px var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--bg2)); }
+.sth-g { font: 700 8px "Share Tech Mono"; letter-spacing: .08em; color: var(--ink-mute); }
+.sth-n { font: 700 12px "Chakra Petch"; letter-spacing: .04em; color: var(--ink); }
+.sim-th.sel .sth-n { color: var(--accent); }
+.sim-th.sel.warn .sth-n { color: var(--warn); }
+.sim-nat { margin-top: 2px; font: 700 8px "Share Tech Mono"; letter-spacing: .02em; color: var(--accent); }
+.sim-nat.full { color: var(--good); } .sim-nat.none { color: var(--ink-mute); }
+.sim-th-lock { position: absolute; top: 7px; right: 8px; font-size: 9px; color: var(--ink-mute); }
+
+.sim-native { display: flex; align-items: center; gap: 8px; padding: 8px 11px; border-radius: 11px; background: var(--bg2); border: 1px solid var(--line); }
+.sim-native .sn-k { font: 700 9px "Share Tech Mono"; letter-spacing: .06em; color: var(--accent); white-space: nowrap; }
+.sim-native.full .sn-k { color: var(--good); }
+.sim-native .sn-v { font: 400 10.5px "Chakra Petch"; color: var(--ink-dim); }
+.sim-native .sn-v b { color: var(--ink); }
+
+.sim-note { display: flex; align-items: flex-start; gap: 8px; padding: 9px 11px; border-radius: 11px;
+  background: color-mix(in srgb, var(--accent) 7%, var(--bg2)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line)); }
+.sim-note.warn { background: color-mix(in srgb, var(--warn) 8%, var(--bg2)); border-color: color-mix(in srgb, var(--warn) 40%, var(--line)); }
+.sn-ic { flex: none; color: var(--accent); font-size: 12px; }
+.sim-note.warn .sn-ic { color: var(--warn); }
+.sim-note span:last-child { font: 400 10.5px/1.5 "Chakra Petch"; color: var(--ink-dim); }
+.sim-note b { color: var(--ink); } .sim-note i { color: var(--ink-mute); font-style: normal; }
+
+.sim-legtog { display: flex; align-items: center; justify-content: space-between; padding: 10px 12px; border-radius: 13px;
+  background: var(--bg2); border: 1px solid var(--line); }
+.slt-l { display: inline-flex; align-items: center; gap: 7px; font: 700 10.5px "Chakra Petch"; letter-spacing: .06em; color: var(--ink-dim); }
+.slt-ic { color: var(--ink-mute); }
+.sim-legtog.on .slt-l { color: var(--ink); } .sim-legtog.on .slt-ic { color: var(--warn); }
+.sim-switch { width: 40px; height: 22px; border-radius: 11px; background: var(--bg1); border: 1px solid var(--line); position: relative; transition: background .18s; }
+.sim-legtog.on .sim-switch { background: var(--accent); border-color: transparent; }
+.ssw-knob { position: absolute; top: 2px; left: 2px; width: 16px; height: 16px; border-radius: 50%; background: var(--ink-mute); transition: transform .18s, background .18s; }
+.sim-legtog.on .ssw-knob { transform: translateX(18px); background: var(--accent-ink); }
+
+.sim-run-btn { display: flex; flex-direction: column; align-items: center; gap: 1px; width: 100%; padding: 12px; border-radius: 15px;
+  background: linear-gradient(180deg, var(--accent), color-mix(in srgb, var(--accent) 72%, #000)); color: var(--accent-ink);
+  box-shadow: 0 0 18px var(--glow); transition: transform .12s; }
+.sim-run-btn span { font: 700 13px "Chakra Petch"; letter-spacing: .1em; }
+.sim-run-btn b { font: 400 8.5px "Share Tech Mono"; letter-spacing: .06em; opacity: .82; }
+.sim-run-btn:active { transform: scale(.97); }
+.sim-run-btn.warn { background: linear-gradient(180deg, var(--warn), color-mix(in srgb, var(--warn) 72%, #000)); box-shadow: 0 0 18px color-mix(in srgb, var(--warn) 45%, transparent); }
+
+/* ============================ RUNNING ============================ */
+.sim-running { align-items: center; justify-content: center; gap: 14px; padding: 20px; text-align: center; }
+.sr-tl { font: 700 12px "Chakra Petch"; letter-spacing: .18em; color: var(--ink); }
+.sr-th { font: 700 9px "Share Tech Mono"; letter-spacing: .1em; color: var(--accent); }
+.sr-big { font: 700 64px "Chakra Petch"; color: var(--ink); line-height: 1; letter-spacing: .02em; display: flex; align-items: baseline; gap: 4px; }
+.sr-big small { font: 400 16px "Share Tech Mono"; color: var(--ink-mute); }
+.sr-bar { width: 80%; max-width: 280px; height: 6px; border-radius: 3px; background: var(--bg2); overflow: hidden; border: 1px solid var(--line); }
+.sr-bar-fill { height: 100%; width: 0%; background: var(--accent); box-shadow: 0 0 10px var(--glow); }
+.sr-tally { display: flex; gap: 26px; }
+.srt { display: flex; flex-direction: column; align-items: center; }
+.srt b { font: 700 22px "Chakra Petch"; } .srt span { font: 700 8px "Share Tech Mono"; letter-spacing: .1em; color: var(--ink-mute); }
+.srt.w b { color: var(--good); } .srt.l b { color: var(--danger); }
+.sr-scroll { font: 400 10px "Share Tech Mono"; letter-spacing: .04em; color: var(--ink-mute); height: 14px; }
+.sr-scroll b { color: var(--ink-dim); }
+
+/* ============================ RESULTS ============================ */
+.sim-results.scroll { align-items: center; text-align: center; }
+.sim-results > * { width: 100%; }
+.sr-k { font: 700 9px "Share Tech Mono"; letter-spacing: .12em; color: var(--accent); }
+.sr-k.warn { color: var(--warn); }
+.sim-res-score { font: 700 52px "Chakra Petch"; color: var(--ink); line-height: 1; letter-spacing: .01em; }
+.sim-res-score small { font: 400 13px "Share Tech Mono"; color: var(--ink-mute); }
+.sim-res-tier { font: 700 20px "Chakra Petch"; letter-spacing: .14em; color: var(--accent); }
+.sim-res-sub { font: 400 11px "Chakra Petch"; color: var(--ink-dim); }
+.sim-rmeter { height: 10px; border-radius: 5px; background: var(--bg2); overflow: hidden; border: 1px solid var(--line); margin: 2px 0; }
+.srm-fill { height: 100%; width: 0%; border-radius: 5px; background: linear-gradient(90deg, var(--danger), var(--warn) 45%, var(--good)); transition: width .7s cubic-bezier(.3,.9,.25,1); }
+.sim-split { display: flex; gap: 8px; }
+.ssp { flex: 1; padding: 10px; border-radius: 13px; background: var(--bg2); border: 1px solid var(--line); }
+.ssp b { display: block; font: 700 26px "Chakra Petch"; line-height: 1; }
+.ssp span { font: 700 8px "Share Tech Mono"; letter-spacing: .1em; color: var(--ink-mute); }
+.ssp.w b { color: var(--good); } .ssp.l b { color: var(--danger); }
+.sim-callouts { display: flex; flex-direction: column; gap: 6px; }
+.sim-callout { display: flex; align-items: center; gap: 8px; padding: 9px 11px; border-radius: 11px; background: var(--bg2); border: 1px solid var(--line); text-align: left; }
+.sco-l { font: 700 8.5px "Share Tech Mono"; letter-spacing: .08em; color: var(--ink-mute); width: 68px; flex: none; }
+.sco-pip { width: 9px; height: 9px; border-radius: 50%; flex: none; background: var(--tc, var(--ink-mute)); }
+.sim-callout b { font: 700 13px "Chakra Petch"; color: var(--ink); }
+.sim-callout i { font: 400 10px "Chakra Petch"; color: var(--ink-mute); font-style: normal; margin-left: auto; text-align: right; }
+.sim-res-foot { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.sim-btn-2 { height: 38px; border-radius: 13px; font: 600 11px "Chakra Petch"; letter-spacing: .08em; color: var(--ink-dim);
+  background: var(--glass); border: 1px solid var(--glass-brd); }
+.sim-btn-2:active { transform: scale(.97); color: var(--accent); }
+
+/* ============================ INSPECT ============================ */
+.sim-inspect { padding: 0; }
+.si-head { flex: none; display: flex; align-items: center; gap: 8px; padding: 10px 12px 8px; }
+.si-nav { width: 32px; height: 32px; flex: none; border-radius: 10px; font: 700 18px "Share Tech Mono"; color: var(--ink-dim);
+  background: var(--glass); border: 1px solid var(--glass-brd); }
+.si-nav:active { transform: scale(.9); color: var(--accent); }
+.si-count { flex: 1; text-align: center; }
+.sic-n { font: 700 11px "Chakra Petch"; letter-spacing: .06em; color: var(--ink); } .sic-n b { color: var(--accent); }
+.sic-s { font: 400 8.5px "Share Tech Mono"; letter-spacing: .06em; color: var(--ink-mute); }
+.si-close { width: 30px; height: 30px; flex: none; border-radius: 9px; font-size: 18px; color: var(--ink-mute); background: var(--bg2); border: 1px solid var(--line); }
+.si-body { flex: 1; min-height: 0; padding: 4px 12px 12px; display: flex; flex-direction: column; gap: 10px; }
+.sim-verdict { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px; border-radius: 15px; border: 1px solid; }
+.sim-verdict.won { background: color-mix(in srgb, var(--good) 10%, var(--bg2)); border-color: color-mix(in srgb, var(--good) 45%, transparent); }
+.sim-verdict.lost { background: color-mix(in srgb, var(--danger) 10%, var(--bg2)); border-color: color-mix(in srgb, var(--danger) 45%, transparent); }
+.sv-tag { font: 700 22px "Chakra Petch"; letter-spacing: .14em; }
+.sim-verdict.won .sv-tag { color: var(--good); } .sim-verdict.lost .sv-tag { color: var(--danger); }
+.sv-sub { font: 400 9.5px "Share Tech Mono"; letter-spacing: .06em; color: var(--ink-mute); }
+.sim-side { padding: 9px 11px; border-radius: 13px; background: var(--bg2); border: 1px solid var(--line); }
+.ss-lbl { display: flex; justify-content: space-between; font: 700 9px "Share Tech Mono"; letter-spacing: .08em; margin-bottom: 7px; }
+.ss-lbl.ours { color: var(--accent); } .ss-lbl.theirs { color: var(--danger); }
+.ss-lbl span:last-child { color: var(--ink-mute); }
+.sim-tokrow { display: flex; gap: 5px; flex-wrap: wrap; }
+.sim-tok { position: relative; width: 44px; height: 44px; border-radius: 10px; display: grid; place-items: center; background: var(--bg1); border: 1px solid var(--line); }
+.sim-tok img { width: 40px; height: 40px; object-fit: contain; }
+.sim-tok.ko { opacity: .35; filter: grayscale(1); }
+.sim-tok.ko::after { content: "✕"; position: absolute; inset: 0; display: grid; place-items: center; color: var(--danger); font: 700 16px "Share Tech Mono"; }
+.stk-dex { position: absolute; bottom: 1px; right: 3px; font: 700 6.5px "Share Tech Mono"; color: var(--ink-mute); }
+.sim-why { padding: 10px 12px; border-radius: 13px; background: color-mix(in srgb, var(--accent) 6%, var(--bg2)); border: 1px solid var(--line); border-left: 3px solid var(--accent); }
+.sw-k { font: 700 9px "Share Tech Mono"; letter-spacing: .1em; color: var(--accent); margin-bottom: 4px; }
+.sw-txt { font: 400 12px/1.5 "Chakra Petch"; color: var(--ink-dim); }
+.sw-txt b { color: var(--ink); } .sw-txt em { color: var(--danger); font-style: normal; }
+.si-foot { flex: none; display: flex; align-items: center; justify-content: space-between; padding: 8px 12px 12px; }
+.sim-loss-tog { display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px; border-radius: 11px;
+  font: 700 9.5px "Share Tech Mono"; letter-spacing: .06em; color: var(--ink-dim); background: var(--bg2); border: 1px solid var(--line); }
+.slt-box { width: 13px; height: 13px; border-radius: 4px; border: 1.5px solid var(--ink-mute); }
+.sim-loss-tog.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.sim-loss-tog.on .slt-box { background: var(--accent-ink); border-color: var(--accent-ink); }
+.si-hint { font: 400 8.5px "Share Tech Mono"; letter-spacing: .06em; color: var(--ink-mute); }
+.si-hint b { color: var(--ink-dim); }

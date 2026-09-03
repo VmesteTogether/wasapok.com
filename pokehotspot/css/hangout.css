@@ -1,0 +1,129 @@
+/* =============================================================================
+   POKÉHOTSPOT — hangout.css
+   The living diorama: your six as billboarded sprites in a selectable locale,
+   idle-bobbing under a day/night sky. Tap a 'mon → it hops and cries.
+   ========================================================================== */
+.stage {
+  position: relative; flex: 1 1 auto; min-height: 0;
+  margin: 4px 10px 0; border-radius: 30px; overflow: hidden;
+  border: 1px solid var(--glass-brd);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), var(--shadow);
+  isolation: isolate;
+}
+
+/* --- sky (locale + time of day drive the gradient) --- */
+.stage-sky { position: absolute; inset: 0; z-index: 0; transition: background 1.2s ease; }
+.stage-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; z-index: 1; transition: background 1s ease; }
+
+/* locale skins (self-contained, no external art) */
+.stage[data-loc="route"]     .stage-sky   { background: linear-gradient(180deg, #8fd0ff 0%, #cfeeff 46%, #eafaf0 62%); }
+.stage[data-loc="route"]     .stage-ground{ background: linear-gradient(180deg, #7fca6a, #5aa74e 60%, #468a3e); }
+.stage[data-loc="beach"]     .stage-sky   { background: linear-gradient(180deg, #7fd6ff 0%, #bff0ff 44%, #e7fbff 60%); }
+.stage[data-loc="beach"]     .stage-ground{ background: linear-gradient(180deg, #6fd0e8 0 20%, #f2e2b0 20%, #e8d295 100%); }
+.stage[data-loc="cave"]      .stage-sky   { background: radial-gradient(120% 90% at 50% 20%, #2a3550, #10131f 75%); }
+.stage[data-loc="cave"]      .stage-ground{ background: linear-gradient(180deg, #3a3550, #241f36 60%, #191426); }
+.stage[data-loc="pokecenter"] .stage-sky   { background: linear-gradient(180deg, #ffe3ea 0%, #ffd0dc 50%, #fff2f5 64%); }
+.stage[data-loc="pokecenter"] .stage-ground{ background: linear-gradient(180deg, #f4c3ce, #e79fb2 70%); }
+.stage[data-loc="meadow"]    .stage-sky   { background: linear-gradient(180deg, #ffd98a 0%, #ffeeba 40%, #f4ffe0 60%); }
+.stage[data-loc="meadow"]    .stage-ground{ background: linear-gradient(180deg, #9fd66a, #7dbb54 60%, #66a046); }
+.stage[data-loc="summit"]    .stage-sky   { background: linear-gradient(180deg, #b7d6ff 0%, #e9f4ff 46%, #ffffff 62%); }
+.stage[data-loc="summit"]    .stage-ground{ background: linear-gradient(180deg, #eef6ff, #cfe0f0 60%, #b6cbe0); }
+
+/* time-of-day wash sits over the locale sky */
+.stage-sky::after {
+  content: ""; position: absolute; inset: 0; transition: opacity 1.4s, background 1.4s;
+  background: var(--tod-wash, transparent); opacity: var(--tod-op, 0);
+  mix-blend-mode: multiply;
+}
+.stage.tod-dawn  { --tod-wash: linear-gradient(180deg,#ff9a76,#ffd7a1); --tod-op:.28; }
+.stage.tod-day   { --tod-op:0; }
+.stage.tod-dusk  { --tod-wash: linear-gradient(180deg,#ff7a5c,#7a5ea8); --tod-op:.34; }
+.stage.tod-night { --tod-wash: linear-gradient(180deg,#0b1636,#243056); --tod-op:.6; }
+
+/* sun/moon + drifting clouds for life */
+.stage-orb { position: absolute; z-index: 0; width: 46px; height: 46px; border-radius: 50%;
+  right: 22px; top: 22px; filter: blur(.3px); transition: background 1.2s, box-shadow 1.2s, opacity 1s; }
+.stage.tod-day  .stage-orb, .stage.tod-dawn .stage-orb { background: radial-gradient(circle at 40% 35%, #fff6d0, #ffdf7a); box-shadow: 0 0 30px 8px rgba(255,220,120,.6); }
+.stage.tod-dusk .stage-orb { background: radial-gradient(circle at 40% 35%, #ffd9c0, #ff9a6a); box-shadow: 0 0 26px 6px rgba(255,140,90,.5); }
+.stage.tod-night .stage-orb { background: radial-gradient(circle at 60% 40%, #f2f6ff, #c8d4ee); box-shadow: 0 0 22px 5px rgba(200,215,255,.5); }
+.cloud { position: absolute; z-index: 0; height: 16px; border-radius: 12px; background: rgba(255,255,255,.7);
+  filter: blur(1px); animation: drift linear infinite; }
+.cloud::before, .cloud::after { content:""; position:absolute; background: inherit; border-radius: 50%; }
+.cloud::before { width: 22px; height: 22px; left: 8px; top: -8px; }
+.cloud::after  { width: 16px; height: 16px; right: 10px; top: -6px; }
+.stage.tod-night .cloud { background: rgba(180,195,230,.35); }
+@keyframes drift { from { transform: translateX(-60px); } to { transform: translateX(420px); } }
+
+/* --- the party of billboarded sprites --- */
+.stage-scene { position: absolute; inset: 0; z-index: 2; }
+.mon {
+  position: absolute; transform: translate(-50%, -100%);
+  display: flex; flex-direction: column; align-items: center;
+  cursor: pointer; -webkit-tap-highlight-color: transparent;
+}
+.mon-shadow {
+  position: absolute; bottom: -3px; left: 50%; transform: translateX(-50%);
+  width: 62%; height: 12px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0,0,0,.42), transparent);
+  animation: shBob 3.2s ease-in-out infinite;
+}
+.mon-spr {
+  width: 82px; height: 82px; object-fit: contain;
+  image-rendering: pixelated; image-rendering: crisp-edges;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,.28));
+  animation: monBob 3.2s ease-in-out infinite;
+  transform-origin: bottom center;
+}
+@keyframes monBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
+@keyframes shBob  { 0%,100% { transform: translateX(-50%) scale(1) } 50% { transform: translateX(-50%) scale(.86) } }
+
+/* lead marker */
+.mon-lead { position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
+  font-size: 13px; color: #ffd45a; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+
+/* hop + cry reaction */
+.mon.hop .mon-spr { animation: monHop .62s cubic-bezier(.3,1.4,.5,1); }
+@keyframes monHop {
+  0% { transform: translateY(0) scaleY(1) scaleX(1); }
+  18% { transform: translateY(2px) scaleY(.82) scaleX(1.14); }
+  46% { transform: translateY(-34px) scaleY(1.14) scaleX(.9); }
+  70% { transform: translateY(0) scaleY(.9) scaleX(1.08); }
+  100% { transform: translateY(0) scaleY(1) scaleX(1); }
+}
+.mon .cry-ring {
+  position: absolute; top: 30%; left: 50%; width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--accent); transform: translate(-50%,-50%) scale(.4); opacity: 0; pointer-events: none;
+}
+.mon.hop .cry-ring { animation: cryRing .6s ease-out; }
+@keyframes cryRing { 0% { opacity:.9; transform: translate(-50%,-50%) scale(.4) } 100% { opacity:0; transform: translate(-50%,-50%) scale(2.6) } }
+
+/* locale tab (bottom-left of stage) */
+.locale-tab {
+  position: absolute; z-index: 5; left: 12px; bottom: 12px;
+  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px 0 10px;
+  border-radius: 15px; background: rgba(10,14,20,.5); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.18); color: #fff;
+  font: 600 10px "Share Tech Mono"; letter-spacing: .12em;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+}
+.locale-tab:active { transform: scale(.94); }
+.lt-ico { width: 12px; height: 12px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 8px var(--glow); }
+
+/* time chip (bottom-right of stage) */
+.time-chip {
+  position: absolute; z-index: 5; right: 12px; bottom: 12px;
+  height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px;
+  border-radius: 15px; background: rgba(10,14,20,.42); backdrop-filter: blur(10px);
+  border: 1px solid rgba(255,255,255,.14); color: #fff;
+  font: 600 10px "Share Tech Mono"; letter-spacing: .1em;
+}
+
+/* empty state */
+.stage-empty {
+  position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 8px; text-align: center;
+  background: rgba(6,10,16,.35); backdrop-filter: blur(2px);
+}
+.stage-empty[hidden] { display: none; }   /* class display would otherwise beat UA [hidden] */
+.stage-empty p { font: 700 16px "Chakra Petch"; letter-spacing: .18em; color: var(--ink); }
+.stage-empty span { font: 600 11px "Share Tech Mono"; color: var(--ink-dim); max-width: 220px; }

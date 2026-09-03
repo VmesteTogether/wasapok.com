@@ -1,0 +1,134 @@
+/* =============================================================================
+   POKÉHOTSPOT — dex.css
+   The omniscient poke-device: a spotlight "screen" over a searchable, region-
+   filterable index. Tap a 'mon → cry; open it → the full catch/stat readout.
+   ========================================================================== */
+#station-dex { gap: 10px; }
+
+/* --- spotlight screen (the preserved "screen" motif) --- */
+.dex-screen {
+  position: relative; flex: none; height: 210px; border-radius: 24px; overflow: hidden;
+  background:
+    radial-gradient(120% 90% at 50% 0%, hsl(var(--tint) 60% 22% / .5), transparent 70%),
+    linear-gradient(180deg, #0e1420, #070b12);
+  border: 1px solid var(--glass-brd);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), inset 0 0 40px rgba(0,0,0,.5);
+  display: flex; align-items: center; gap: 8px; padding: 12px;
+}
+.dxs-scanline { position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.03) 0 1px, transparent 1px 3px); opacity:.6; }
+.dxs-figure { position: relative; width: 150px; height: 100%; flex: none; display: grid; place-items: center; }
+.dxs-spr { width: 148px; height: 148px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4));
+  transition: transform .3s; }
+.dxs-figure:active .dxs-spr { transform: scale(.94); }
+.dxs-cryhint { position: absolute; bottom: 2px; left: 50%; transform: translateX(-50%);
+  font: 600 8px "Share Tech Mono"; letter-spacing: .14em; color: var(--ink-mute); }
+.dxs-cry .dxs-spr { animation: dxsCry .5s ease; }
+@keyframes dxsCry { 0%,100%{transform:none} 30%{transform:translateY(-8px) rotate(-3deg)} 60%{transform:translateY(0) rotate(2deg)} }
+
+.dxs-meta { flex: 1; min-width: 0; align-self: stretch; display: flex; flex-direction: column; padding: 6px 2px; }
+.dxs-no { font: 600 10px "Share Tech Mono"; letter-spacing: .1em; color: var(--accent); }
+.dxs-name { font: 700 22px "Chakra Petch"; text-transform: capitalize; line-height: 1.05; margin: 2px 0 5px; }
+.dxs-types { display: flex; gap: 5px; margin-bottom: 8px; }
+.dxs-regs { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: auto; }
+.dxs-reg { font: 700 8px "Share Tech Mono"; letter-spacing: .06em; padding: 2px 6px; border-radius: 6px;
+  background: rgba(255,255,255,.08); color: var(--ink-dim); border: 1px solid var(--line); }
+.dxs-reg.none { color: var(--ink-mute); }
+.dxs-acts { display: flex; gap: 6px; margin-top: 8px; }
+.dxs-btn { flex: 1; height: 34px; border-radius: 11px; font: 700 11px "Chakra Petch"; letter-spacing: .08em;
+  display: inline-flex; align-items: center; justify-content: center; gap: 4px;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--ink-dim); transition: transform .1s; }
+.dxs-btn:active { transform: scale(.95); }
+.dxs-btn.primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; box-shadow: 0 0 14px var(--glow); }
+.dxs-btn:disabled { opacity: .45; }
+
+/* --- controls --- */
+.dex-controls { flex: none; display: flex; flex-direction: column; gap: 8px; }
+.dex-chips { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
+.dex-chips::-webkit-scrollbar { display: none; }
+.dchip {
+  flex: none; height: 28px; padding: 0 11px; border-radius: 14px;
+  font: 700 10px "Share Tech Mono"; letter-spacing: .08em; color: var(--ink-dim);
+  background: var(--glass); border: 1px solid var(--glass-brd); transition: color .12s, background .16s;
+}
+.dchip.sel { color: var(--accent-ink); background: var(--accent); border-color: transparent; box-shadow: 0 0 10px var(--glow); }
+
+/* --- list --- */
+.dex-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 5px; padding-right: 2px; }
+.dex-row {
+  display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 14px;
+  background: var(--glass); border: 1px solid transparent; text-align: left; width: 100%;
+  transition: border-color .12s, transform .1s;
+}
+.dex-row:active { transform: scale(.985); }
+.dex-row.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--glow); }
+.dex-row.inteam { border-color: var(--good); }
+.dxr-spr { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.dxr-main { flex: 1; min-width: 0; }
+.dxr-name { font: 700 14px "Chakra Petch"; text-transform: capitalize; }
+.dxr-sub { display: flex; gap: 5px; margin-top: 2px; align-items: center; }
+.dxr-no { font: 600 9px "Share Tech Mono"; color: var(--ink-mute); }
+.dxr-regdots { display: inline-flex; gap: 3px; margin-left: auto; }
+.dxr-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .8; }
+.dex-foot { flex: none; text-align: center; padding: 8px 0 2px; font: 600 10px "Share Tech Mono"; color: var(--ink-mute); }
+
+/* info-sheet content (shared, styled here) */
+.is-hero { display: flex; align-items: center; gap: 14px; margin-bottom: 12px; }
+.is-cry { position: relative; width: 116px; height: 116px; flex: none; display: grid; place-items: center;
+  border-radius: 22px; background: radial-gradient(circle at 50% 35%, hsl(var(--tint) 50% 20% / .5), transparent 70%); }
+.is-cry:active { transform: scale(.96); }
+.is-spr { width: 108px; height: 108px; object-fit: contain; filter: drop-shadow(0 6px 10px rgba(0,0,0,.4)); }
+.is-cry.cry-anim .is-spr { animation: dxsCry .5s ease; }
+.is-idwrap { flex: 1; min-width: 0; }
+.is-no { font: 600 10px "Share Tech Mono"; letter-spacing: .1em; color: var(--accent); }
+.is-name { font: 700 24px "Chakra Petch"; text-transform: capitalize; line-height: 1.05; margin: 2px 0 6px; }
+.is-types { display: flex; gap: 5px; }
+.is-bst { font: 600 10px "Share Tech Mono"; color: var(--ink-dim); margin-top: 7px; }
+.is-sec { margin-top: 14px; }
+.is-sec-h { font: 700 10px "Share Tech Mono"; letter-spacing: .16em; color: var(--ink-mute); margin-bottom: 8px; }
+.reg-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.reg-chip { font: 700 9px "Share Tech Mono"; letter-spacing: .06em; padding: 4px 9px; border-radius: 9px;
+  background: rgba(255,255,255,.06); border: 1px solid var(--line); color: var(--ink); }
+.reg-none { font: 600 10px "Share Tech Mono"; color: var(--ink-mute); line-height: 1.5; }
+.catch-note { margin-top: 9px; padding: 10px 12px; border-radius: 14px; background: var(--bg2); border: 1px solid var(--line); }
+.cn-tag { display: inline-block; font: 700 8px "Share Tech Mono"; letter-spacing: .1em; padding: 2px 7px; border-radius: 6px;
+  background: var(--accent); color: var(--accent-ink); margin-bottom: 6px; }
+.cn-tag.cn-legendary, .cn-tag.cn-mythical { background: #ffd45a; color: #241600; }
+.cn-line { display: flex; gap: 8px; font: 600 11px "Chakra Petch"; color: var(--ink-dim); margin-top: 3px; line-height: 1.4; }
+.cn-line span { flex: none; width: 42px; font: 700 9px "Share Tech Mono"; color: var(--ink-mute); letter-spacing: .08em; padding-top: 2px; }
+.is-stats { display: flex; flex-direction: column; gap: 5px; }
+.is-stat { display: flex; align-items: center; gap: 8px; }
+.iss-l { width: 34px; font: 700 9px "Share Tech Mono"; color: var(--ink-mute); }
+.iss-track { flex: 1; height: 8px; border-radius: 4px; background: var(--bg2); overflow: hidden; }
+.iss-fill { display: block; height: 100%; border-radius: 4px; transition: width .5s cubic-bezier(.3,.9,.25,1); }
+.iss-v { width: 30px; text-align: right; font: 700 12px "Share Tech Mono"; }
+.def-grid { display: flex; flex-direction: column; gap: 7px; }
+.def-row { display: flex; gap: 8px; align-items: flex-start; }
+.def-row > span { flex: none; width: 58px; font: 700 9px "Share Tech Mono"; letter-spacing: .08em; padding-top: 3px; }
+.def-row > div { display: flex; flex-wrap: wrap; gap: 4px; }
+.def-weak > span { color: var(--danger); }
+.def-res > span { color: var(--good); }
+.def-imm > span { color: var(--accent); }
+.is-learn { font: 600 11px "Chakra Petch"; color: var(--ink-dim); }
+.is-act { width: 100%; height: 48px; border-radius: 16px; font: 700 14px "Chakra Petch"; letter-spacing: .1em;
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 18px var(--glow); }
+.is-act.ghost { background: var(--bg2); color: var(--danger); border: 1px solid var(--line); box-shadow: none; }
+.is-act:disabled { opacity: .5; box-shadow: none; }
+
+/* move picker rows */
+.mp-row { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 11px;
+  background: var(--bg2); border: 1px solid var(--line); }
+.mpr-name { flex: 1; font: 700 13px "Chakra Petch"; text-transform: capitalize; text-align: left; }
+.mpr-cat { font: 700 9px "Share Tech Mono"; width: 18px; text-align: center; color: var(--ink-mute); }
+.mpr-P { color: var(--t-fire); } .mpr-S { color: var(--t-water); } .mpr-N { color: var(--ink-mute); }
+.mpr-pow { width: 28px; text-align: right; font: 700 12px "Share Tech Mono"; color: var(--ink-dim); }
+.mp-empty { text-align: center; color: var(--ink-mute); padding: 20px; font: 600 12px "Chakra Petch"; }
+
+/* capsule move buttons */
+.cm-move { display: flex; align-items: center; gap: 7px; height: 38px; padding: 0 10px; border-radius: 11px;
+  background: var(--bg2); border: 1px solid var(--line); font: 700 11px "Chakra Petch"; }
+.cm-move.empty { color: var(--ink-mute); justify-content: center; }
+.cmv-plus { font-size: 14px; }
+.cmv-type { width: 10px; height: 10px; border-radius: 50%; background: var(--tc,#888); flex: none; }
+.cmv-name { flex: 1; text-align: left; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.cmv-pow { font: 700 10px "Share Tech Mono"; color: var(--ink-mute); }

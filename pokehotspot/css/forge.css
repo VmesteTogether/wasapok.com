@@ -1,0 +1,127 @@
+/* =============================================================================
+   POKÉHOTSPOT — forge.css
+   Also hosts the shared "station coming online" placeholder (global scope).
+   ========================================================================== */
+.station-soon { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; text-align: center; }
+.station-soon .ss-ico { width: 72px; height: 72px; border-radius: 22px; display: grid; place-items: center;
+  background: linear-gradient(180deg, var(--plastic-hi), var(--plastic-lo)); border: 1px solid rgba(255,255,255,.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.14), var(--shadow); color: var(--accent); }
+.station-soon .ss-ico svg { width: 34px; height: 34px; }
+.station-soon h3 { font: 700 20px "Chakra Petch"; letter-spacing: .16em; }
+.station-soon p { font: 600 11px "Share Tech Mono"; letter-spacing: .16em; color: var(--ink-mute); }
+
+/* --- forge views --- */
+.forge-view { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 10px; }
+.forge-view[hidden] { display: none; }
+
+.pool-bar { display: flex; align-items: center; gap: 8px; }
+.pool-lbl { font: 700 13px "Chakra Petch"; letter-spacing: .16em; }
+.pool-tally { font: 700 12px "Share Tech Mono"; color: var(--accent); }
+.pool-bar .pill { margin-left: auto; height: 30px; font-size: 11px; }
+
+.forge-hits { flex: none; max-height: 168px; display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+.fr-hit { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 12px;
+  background: var(--glass); border: 1px solid var(--glass-brd); text-align: left; }
+.fr-hit img { width: 34px; height: 34px; image-rendering: pixelated; }
+.frh-name { flex: 1; font: 700 11px "Chakra Petch"; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.frh-add { color: var(--accent); font-size: 16px; }
+.frh-chk { color: var(--good); }
+.fr-hit.in { border-color: var(--good); }
+.fr-empty { grid-column: 1/-1; text-align: center; color: var(--ink-mute); padding: 10px; font: 600 11px "Share Tech Mono"; }
+
+.pool-grid { flex: 1 1 auto; min-height: 0; display: grid; grid-template-columns: repeat(3, 1fr);
+  grid-auto-rows: min-content; gap: 8px; align-content: start; }
+.pool-hint { grid-column: 1/-1; text-align: center; color: var(--ink-dim); padding: 24px 16px;
+  font: 600 12px "Chakra Petch"; line-height: 1.6; }
+.pool-cap { position: relative; display: flex; flex-direction: column; align-items: center; gap: 2px;
+  padding: 8px 4px 6px; border-radius: 16px; background: var(--glass); border: 1px solid var(--glass-brd); }
+.pool-cap.locked { border-color: #ffd45a; box-shadow: 0 0 0 1px #ffd45a55; }
+.pool-cap img { width: 54px; height: 54px; image-rendering: pixelated; }
+.pc-name { font: 700 9px "Chakra Petch"; text-transform: capitalize; text-align: center; line-height: 1.1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; color: var(--ink-dim); }
+.pc-lock { position: absolute; left: 3px; top: 3px; width: 22px; height: 22px; font-size: 11px; border-radius: 8px; }
+.pc-del { position: absolute; right: 3px; top: 3px; width: 22px; height: 22px; font-size: 15px; color: var(--ink-mute);
+  border-radius: 8px; background: rgba(0,0,0,.25); }
+
+.forge-go { flex: none; height: 56px; border-radius: 18px; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  background: var(--accent); color: var(--accent-ink); box-shadow: 0 0 22px var(--glow); }
+.forge-go span { font: 700 16px "Chakra Petch"; letter-spacing: .1em; }
+.forge-go b { font: 600 9px "Share Tech Mono"; letter-spacing: .12em; opacity: .8; }
+.forge-go:disabled { background: var(--bg2); color: var(--ink-mute); box-shadow: none; }
+.forge-go.forging { opacity: .8; }
+
+/* --- ranked list --- */
+#forgeMode { flex: none; align-self: stretch; }
+#forgeMode .seg-opt { flex: 1; font-size: 10px; }
+.team-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 8px; }
+.team-card { display: flex; flex-direction: column; gap: 6px; padding: 10px 12px; border-radius: 18px;
+  background: var(--glass); border: 1px solid var(--glass-brd); }
+.team-card:active { transform: scale(.99); }
+.tc-rank { display: flex; align-items: center; gap: 8px; }
+.tc-tier { width: 26px; height: 26px; border-radius: 9px; display: grid; place-items: center;
+  font: 800 15px "Chakra Petch"; color: #0a0e14; }
+.tier-S{background:linear-gradient(180deg,#ffe58a,#ffca3a)} .tier-A{background:linear-gradient(180deg,#8ff0b0,#3ecf7a)}
+.tier-B{background:linear-gradient(180deg,#8fe6ff,#39c0e6)} .tier-C{background:linear-gradient(180deg,#9fb8ff,#5b8cff)}
+.tier-D{background:linear-gradient(180deg,#ffcf8f,#ff9a3a)} .tier-E{background:linear-gradient(180deg,#c0c6cf,#8a94a3)}
+.tc-no { font: 700 12px "Share Tech Mono"; color: var(--ink-mute); }
+.tc-mons { display: flex; justify-content: space-between; }
+.tc-mons img { width: 46px; height: 46px; image-rendering: pixelated; }
+.tc-foot { display: flex; align-items: center; gap: 8px; }
+.tc-score { font: 800 18px "Chakra Petch"; color: var(--accent); }
+.tc-verdict { font: 600 11px "Chakra Petch"; color: var(--ink-dim); }
+.tc-verdict b { color: var(--ink); }
+
+/* --- team detail --- */
+.team-detail-bar { display: flex; align-items: center; gap: 10px; flex: none; }
+.team-detail-bar .pill { height: 30px; }
+.team-badge { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.tb-score { font: 800 20px "Chakra Petch"; color: var(--accent); }
+.tb-mode { font: 700 9px "Share Tech Mono"; color: var(--ink-mute); letter-spacing: .1em; }
+.team-hero { flex: none; display: grid; grid-template-columns: repeat(6,1fr); gap: 2px; padding: 6px 0; }
+.th-mon { display: flex; flex-direction: column; align-items: center; }
+.th-mon img { width: 100%; max-width: 54px; image-rendering: pixelated; }
+.th-mon span { font: 700 7px "Chakra Petch"; text-transform: capitalize; color: var(--ink-mute); text-align: center;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.tabs { flex: none; display: flex; gap: 4px; }
+.tab { flex: 1; height: 32px; border-radius: 11px; font: 700 11px "Chakra Petch"; letter-spacing: .08em;
+  color: var(--ink-dim); background: var(--bg2); border: 1px solid var(--line); }
+.tab.sel { color: var(--accent-ink); background: var(--accent); border-color: transparent; }
+.team-tab-body { flex: 1 1 auto; min-height: 0; padding-top: 4px; }
+.adopt-btn { flex: none; height: 50px; border-radius: 16px; margin-top: 8px;
+  background: var(--accent); color: var(--accent-ink); font: 700 14px "Chakra Petch"; letter-spacing: .1em; box-shadow: 0 0 18px var(--glow); }
+.adopt-btn.done { background: var(--good); color: #04170d; }
+
+/* cover tab */
+.cov-summary { display: flex; justify-content: space-between; margin-bottom: 10px; }
+.cs-item { display: flex; flex-direction: column; align-items: center; font: 600 9px "Share Tech Mono"; color: var(--ink-mute); }
+.cs-item b { font: 800 16px "Chakra Petch"; color: var(--ink); }
+.cov-rows { display: flex; flex-direction: column; gap: 4px; }
+.cov-row { display: flex; align-items: center; gap: 8px; }
+.cov-row .tchip { width: 56px; }
+.cov-bar { flex: 1; height: 12px; display: flex; align-items: center; gap: 2px; }
+.cb-w { height: 8px; background: var(--danger); border-radius: 3px; }
+.cb-r { height: 8px; background: var(--good); border-radius: 3px; }
+.cov-net { width: 42px; text-align: right; font: 700 11px "Share Tech Mono"; }
+.cov-neg .cov-net { color: var(--danger); } .cov-pos .cov-net { color: var(--good); } .cov-even .cov-net { color: var(--ink-mute); }
+
+/* moves tab */
+.mv-unit { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.mv-head { display: flex; align-items: center; gap: 8px; }
+.mv-head img { width: 36px; height: 36px; image-rendering: pixelated; }
+.mv-head span { font: 700 13px "Chakra Petch"; text-transform: capitalize; }
+.mv-arch { margin-left: auto; font: 600 8px "Share Tech Mono"; color: var(--ink-mute); letter-spacing: .08em; }
+.mv-set { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; margin-top: 6px; }
+.mv-move { display: flex; align-items: center; justify-content: space-between; padding: 5px 9px; border-radius: 10px;
+  font: 700 10px "Chakra Petch"; text-transform: capitalize; color: var(--ink);
+  background: color-mix(in srgb, var(--tc, #888) 18%, transparent); border: 1px solid color-mix(in srgb, var(--tc,#888) 45%, transparent); }
+.mv-move b { font: 700 9px "Share Tech Mono"; color: var(--ink-dim); }
+.mv-none { grid-column: 1/-1; color: var(--ink-mute); font: 600 10px "Share Tech Mono"; }
+
+/* stats tab */
+.st-team { margin-bottom: 12px; }
+.stt-h { font: 700 10px "Share Tech Mono"; letter-spacing: .12em; color: var(--ink-mute); margin-bottom: 8px; }
+.st-units { display: flex; flex-direction: column; gap: 6px; }
+.stu-h { display: flex; align-items: center; gap: 8px; }
+.stu-h img { width: 30px; height: 30px; image-rendering: pixelated; }
+.stu-h span { flex: 1; font: 700 12px "Chakra Petch"; text-transform: capitalize; }
+.stu-h b { font: 800 14px "Share Tech Mono"; color: var(--accent); }

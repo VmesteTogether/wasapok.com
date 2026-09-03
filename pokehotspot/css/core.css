@@ -1,0 +1,440 @@
+/* =============================================================================
+   POKÉHOTSPOT — core.css
+   The device chassis, palette engine, orbital dock, station transitions and the
+   shared component kit. Aesthetic: PokéCenter × iOS — dark glass over molded
+   plastic, tactile, palette-swappable. Heir to Pokemeter's gunmetal HUD.
+   ========================================================================== */
+
+/* ------------------------------------------------------------------ reset -- */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; }
+body {
+  background: #05070a;
+  font-family: "Chakra Petch", system-ui, sans-serif;
+  color: var(--ink);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+button { font-family: inherit; color: inherit; background: none; border: none; cursor: pointer; }
+input { font-family: inherit; }
+img { -webkit-user-drag: none; user-select: none; }
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* ------------------------------------------------------- palette tokens ---- */
+/* Every palette is a dark-glass base with a distinct accent + ambient tint, so
+   switching visibly re-moods the whole device while contrast stays stable.
+   A palette = one [data-palette] block overriding accent/glow/tint tokens. */
+.device {
+  --bg0: #05070a;          /* deepest well */
+  --bg1: #0b0f16;          /* device floor */
+  --bg2: #121824;          /* raised panel */
+  --glass: rgba(28, 38, 54, 0.55);
+  --glass-hi: rgba(255, 255, 255, 0.10);
+  --glass-brd: rgba(140, 170, 200, 0.16);
+  --line: rgba(150, 180, 210, 0.12);
+
+  --ink: #eaf3fb;
+  --ink-dim: #9fb2c6;
+  --ink-mute: #61748a;
+
+  --accent: #35e6ff;
+  --accent-2: #38e0d0;
+  --accent-ink: #04121a;
+  --glow: rgba(53, 230, 255, 0.55);
+  --tint: 190;             /* hue used for the ambient wash */
+
+  --plastic: #18202e;      /* molded-plastic body for dock caps */
+  --plastic-hi: #29354a;
+  --plastic-lo: #0b1019;
+
+  --danger: #ff5d6c;
+  --good: #54d98c;
+  --warn: #ffb84d;
+
+  --radius: 22px;
+  --shadow: 0 18px 40px rgba(0, 0, 0, 0.5);
+
+  /* type palette (modern vibrant) */
+  --t-normal:#a0a29f; --t-fire:#ff7043; --t-water:#4a90da; --t-electric:#f6c945;
+  --t-grass:#5ec877; --t-ice:#79d0d8; --t-fighting:#e0526b; --t-poison:#b45fd6;
+  --t-ground:#dba552; --t-flying:#92a8e6; --t-psychic:#fb6a8f; --t-bug:#a5c93a;
+  --t-rock:#cbb87e; --t-ghost:#7b6bc4; --t-dragon:#6a7bff; --t-dark:#6b6a78;
+  --t-steel:#7aa0b4; --t-fairy:#f38fd0;
+}
+
+.device[data-palette="aqua"]     { --accent:#35e6ff; --accent-2:#38e0d0; --accent-ink:#04121a; --glow:rgba(53,230,255,.55); --tint:188; }
+.device[data-palette="cherry"]   { --accent:#ff5a6a; --accent-2:#ff8a7a; --accent-ink:#2a0608; --glow:rgba(255,90,106,.5);  --tint:354; }
+.device[data-palette="marigold"] { --accent:#ffb020; --accent-2:#ffcf5a; --accent-ink:#241600; --glow:rgba(255,176,32,.5);  --tint:40;  }
+.device[data-palette="leaf"]     { --accent:#54d98c; --accent-2:#8ce6a8; --accent-ink:#04170d; --glow:rgba(84,217,140,.5);  --tint:150; }
+.device[data-palette="orchid"]   { --accent:#b98cff; --accent-2:#d0b4ff; --accent-ink:#160a2a; --glow:rgba(185,140,255,.5); --tint:266; }
+.device[data-palette="dusk"]     { --accent:#5b8cff; --accent-2:#8ab0ff; --accent-ink:#050f28; --glow:rgba(91,140,255,.5);  --tint:222; }
+.device[data-palette="rose"]     { --accent:#ff7ab8; --accent-2:#ffabd2; --accent-ink:#2a0818; --glow:rgba(255,122,184,.5); --tint:328; }
+.device[data-palette="mono"]     { --accent:#cfe0ea; --accent-2:#eef5fb; --accent-ink:#0a1016; --glow:rgba(207,224,234,.4); --tint:205; }
+
+/* ----------------------------------------------------------- chassis ------- */
+.device-wrap {
+  position: fixed; inset: 0;
+  display: grid; place-items: center;
+  transform-origin: top left;
+}
+.device {
+  position: relative;
+  width: 390px; height: 844px;
+  background:
+    radial-gradient(120% 80% at 50% -8%, hsl(var(--tint) 55% 12% / 0.9), transparent 60%),
+    linear-gradient(180deg, var(--bg1), var(--bg0));
+  overflow: hidden;
+  border-radius: 46px;
+  box-shadow: 0 40px 90px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.04);
+  isolation: isolate;
+  user-select: none;
+}
+/* full-bleed when installed to the Home Screen, or when the dev fill toggle is on */
+body.standalone .device-wrap, body.fs .device-wrap { display: block; }
+body.standalone .device, body.fs .device {
+  width: 100dvw; height: 100dvh; border-radius: 0; box-shadow: none;
+}
+body.standalone .device { padding-top: env(safe-area-inset-top); }
+
+/* --------------------------------------------------------- ambient --------- */
+.amb { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
+.amb-wash {
+  background:
+    radial-gradient(90% 60% at 20% 0%, hsl(var(--tint) 70% 40% / .10), transparent 55%),
+    radial-gradient(80% 60% at 100% 100%, hsl(var(--tint) 70% 45% / .08), transparent 55%);
+}
+.amb-grid {
+  background-image:
+    linear-gradient(var(--line) 1px, transparent 1px),
+    linear-gradient(90deg, var(--line) 1px, transparent 1px);
+  background-size: 34px 34px; opacity: .35;
+  mask-image: radial-gradient(120% 90% at 50% 30%, #000 40%, transparent 85%);
+}
+.amb-scan {
+  background: repeating-linear-gradient(0deg, rgba(255,255,255,.02) 0 1px, transparent 1px 3px);
+  opacity: .5; mix-blend-mode: overlay;
+}
+.amb-vign { box-shadow: inset 0 0 120px rgba(0,0,0,.6); }
+.amb-glow {
+  background: radial-gradient(60% 40% at 50% 42%, var(--glow), transparent 70%);
+  opacity: .10; filter: blur(20px);
+}
+
+/* ---------------------------------------------------------- status bar ----- */
+.statusbar {
+  position: relative; z-index: 40;
+  height: 44px; padding: 0 26px;
+  display: flex; align-items: center; justify-content: space-between;
+  font: 600 15px "Chakra Petch"; color: var(--ink);
+}
+.statusbar .sb-right { display: inline-flex; align-items: center; gap: 6px; }
+body.standalone .statusbar, body.fs .statusbar { visibility: hidden; height: env(safe-area-inset-top); }
+
+.home-indicator {
+  position: absolute; z-index: 60; left: 50%; bottom: 8px; transform: translateX(-50%);
+  width: 134px; height: 5px; border-radius: 3px; background: rgba(255,255,255,.5);
+}
+body.standalone .home-indicator { display: none; }
+
+/* =============================================================================
+   HOME LAYER — the living hub
+   ========================================================================== */
+.home {
+  position: absolute; inset: 0; z-index: 10;
+  display: flex; flex-direction: column;
+  transition: transform .5s cubic-bezier(.5,0,.2,1), opacity .38s ease, filter .38s ease;
+}
+.device.station-open .home {
+  transform: scale(.9); opacity: 0; filter: blur(10px); pointer-events: none;
+}
+
+/* crown */
+.crown {
+  position: relative; z-index: 12;
+  height: 46px; margin-top: 2px; padding: 0 16px;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.crown-brand { display: inline-flex; align-items: center; gap: 9px; }
+.cb-mark {
+  width: 22px; height: 22px; border-radius: 50%;
+  background:
+    linear-gradient(180deg, var(--accent) 0 50%, #f4f8fb 50% 100%);
+  box-shadow: inset 0 0 0 2px var(--bg0), 0 0 10px var(--glow);
+  position: relative;
+}
+.cb-mark::after {
+  content: ""; position: absolute; inset: 0; border-radius: 50%;
+  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35);
+}
+.cb-mark::before {
+  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: 7px; height: 7px; border-radius: 50%; background: var(--bg0);
+  box-shadow: 0 0 0 2px #f4f8fb; z-index: 2;
+}
+.cb-word { font: 700 15px "Chakra Petch"; letter-spacing: .16em; color: var(--ink); }
+.crown-right { display: inline-flex; align-items: center; gap: 10px; }
+.party-fill {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: 28px; padding: 0 11px; border-radius: 14px;
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  backdrop-filter: blur(10px);
+  font: 600 13px "Share Tech Mono"; color: var(--ink-dim);
+}
+.party-fill b { color: var(--accent); font-size: 15px; }
+.pf-slash { color: var(--ink-mute); }
+.pf-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--glow); }
+.crown-btn {
+  width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px;
+  color: var(--ink-dim); background: var(--glass); border: 1px solid var(--glass-brd);
+  transition: transform .12s, color .12s;
+}
+.crown-btn:active { transform: scale(.9); color: var(--accent); }
+
+/* --------------------------------------------------------- orbital dock ---- */
+.dock { position: absolute; inset: 0; z-index: 14; pointer-events: none; }
+.dock-btn {
+  position: absolute; pointer-events: auto;
+  width: 62px; height: 62px; border-radius: 20px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+  color: var(--ink-dim);
+  background:
+    linear-gradient(180deg, var(--plastic-hi), var(--plastic) 55%, var(--plastic-lo));
+  border: 1px solid rgba(255,255,255,.08);
+  box-shadow:
+    0 10px 22px rgba(0,0,0,.5),
+    inset 0 1px 0 rgba(255,255,255,.14),
+    inset 0 -2px 4px rgba(0,0,0,.4);
+  transition: transform .16s cubic-bezier(.34,1.56,.64,1), color .16s, box-shadow .16s;
+}
+.dock-btn::before { /* glossy plastic sheen */
+  content: ""; position: absolute; inset: 1px 1px 45% 1px; border-radius: 18px 18px 40% 40%;
+  background: linear-gradient(180deg, rgba(255,255,255,.16), transparent);
+  pointer-events: none;
+}
+.db-glow {
+  position: absolute; inset: -2px; border-radius: 22px; opacity: 0;
+  box-shadow: 0 0 20px 2px var(--glow); transition: opacity .2s; pointer-events: none;
+}
+.dock-btn:hover { color: var(--ink); }
+.dock-btn:active { transform: scale(.9); }
+.dock-btn:active .db-glow, .dock-btn:focus-visible .db-glow { opacity: .8; }
+.dock-btn:active { color: var(--accent); }
+.db-ico { width: 27px; height: 27px; }
+.db-lbl { font: 600 8.5px "Share Tech Mono"; letter-spacing: .14em; opacity: .85; }
+
+.dock-btn.pos-tl { left: 14px;  top: 96px; }
+.dock-btn.pos-tr { right: 14px; top: 96px; }
+.dock-btn.pos-tc { left: 50%; top: 70px; transform: translateX(-50%); }
+.dock-btn.pos-tc:active { transform: translateX(-50%) scale(.9); }
+.dock-btn.pos-bl { left: 14px;  bottom: 86px; }
+.dock-btn.pos-br { right: 14px; bottom: 86px; }
+
+/* --------------------------------------------------------- palette rail ---- */
+.palette-rail {
+  position: absolute; z-index: 15; left: 50%; bottom: 30px; transform: translateX(-50%);
+  display: inline-flex; align-items: center; gap: 9px;
+  padding: 8px 12px; border-radius: 20px;
+  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: blur(12px);
+  box-shadow: var(--shadow);
+}
+.pal-dot {
+  width: 18px; height: 18px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.25);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.4), 0 2px 4px rgba(0,0,0,.4);
+  transition: transform .14s;
+}
+.pal-dot:active { transform: scale(.85); }
+.pal-dot.sel { border-color: #fff; transform: scale(1.15); box-shadow: 0 0 10px 1px currentColor; }
+
+/* =============================================================================
+   STATION LAYER — a station grows from its glyph, home recedes behind
+   ========================================================================== */
+.station-layer {
+  position: absolute; inset: 0; z-index: 20;
+  display: flex; flex-direction: column;
+  opacity: 0; transform: scale(1.08); transform-origin: 50% 50%;
+  pointer-events: none;
+  transition: opacity .34s ease, transform .42s cubic-bezier(.3,.9,.25,1);
+  background:
+    radial-gradient(120% 80% at 50% -8%, hsl(var(--tint) 55% 12% / 0.95), transparent 60%),
+    linear-gradient(180deg, var(--bg1), var(--bg0));
+}
+.device.station-open .station-layer { opacity: 1; transform: scale(1); pointer-events: auto; }
+
+.station-bar {
+  position: relative; z-index: 3; flex: none;
+  height: 52px; padding: 0 12px; margin-top: 2px;
+  display: flex; align-items: center; gap: 10px;
+}
+.st-back {
+  width: 40px; height: 40px; border-radius: 13px; flex: none;
+  display: grid; place-items: center; color: var(--ink);
+  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: blur(10px);
+  transition: transform .12s, color .12s;
+}
+.st-back:active { transform: scale(.88); color: var(--accent); }
+.st-title { display: flex; align-items: center; gap: 8px; font: 700 16px "Chakra Petch"; letter-spacing: .12em; }
+.st-ico { display: inline-flex; color: var(--accent); }
+.st-ico svg { width: 20px; height: 20px; }
+.st-aux { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+
+.station {
+  flex: 1 1 auto; min-height: 0; position: relative;
+  display: flex; flex-direction: column;
+  padding: 0 12px 12px;
+}
+.station[hidden] { display: none; }
+
+/* =============================================================================
+   SHARED COMPONENT KIT
+   ========================================================================== */
+/* sprite */
+.spr { image-rendering: auto; object-fit: contain; }
+
+/* type chip */
+.tchip {
+  display: inline-flex; align-items: center; justify-content: center;
+  height: 18px; padding: 0 8px; border-radius: 9px;
+  font: 700 9.5px "Share Tech Mono"; letter-spacing: .1em; text-transform: uppercase;
+  color: #fff; background: var(--tc, #888);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.28), inset 0 -1px 3px rgba(0,0,0,.3);
+}
+.tc-normal{--tc:var(--t-normal)}.tc-fire{--tc:var(--t-fire)}.tc-water{--tc:var(--t-water)}
+.tc-electric{--tc:var(--t-electric)}.tc-grass{--tc:var(--t-grass)}.tc-ice{--tc:var(--t-ice)}
+.tc-fighting{--tc:var(--t-fighting)}.tc-poison{--tc:var(--t-poison)}.tc-ground{--tc:var(--t-ground)}
+.tc-flying{--tc:var(--t-flying)}.tc-psychic{--tc:var(--t-psychic)}.tc-bug{--tc:var(--t-bug)}
+.tc-rock{--tc:var(--t-rock)}.tc-ghost{--tc:var(--t-ghost)}.tc-dragon{--tc:var(--t-dragon)}
+.tc-dark{--tc:var(--t-dark)}.tc-steel{--tc:var(--t-steel)}.tc-fairy{--tc:var(--t-fairy)}
+
+/* glass panel */
+.glass {
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  backdrop-filter: blur(14px) saturate(1.3); border-radius: var(--radius);
+  box-shadow: inset 0 1px 0 var(--glass-hi), var(--shadow);
+}
+
+/* pill button / segmented */
+.pill {
+  height: 34px; padding: 0 14px; border-radius: 17px;
+  display: inline-flex; align-items: center; gap: 6px;
+  font: 600 12px "Chakra Petch"; letter-spacing: .08em; color: var(--ink-dim);
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  transition: transform .12s, color .12s, background .18s;
+}
+.pill:active { transform: scale(.94); }
+.pill.on { color: var(--accent-ink); background: var(--accent); border-color: transparent; box-shadow: 0 0 14px var(--glow); }
+
+.seg { display: inline-flex; padding: 3px; gap: 2px; border-radius: 15px; background: var(--bg2); border: 1px solid var(--line); }
+.seg-opt {
+  height: 28px; padding: 0 12px; border-radius: 12px;
+  font: 600 11px "Chakra Petch"; letter-spacing: .06em; color: var(--ink-dim);
+  transition: color .14s, background .18s;
+}
+.seg-opt.sel { color: var(--accent-ink); background: var(--accent); box-shadow: 0 0 10px var(--glow); }
+
+/* search field */
+.field {
+  display: flex; align-items: center; gap: 8px; height: 42px; padding: 0 12px;
+  border-radius: 14px; background: var(--bg2); border: 1px solid var(--line);
+}
+.field:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px var(--glow); }
+.field input { flex: 1; background: none; border: none; outline: none; color: var(--ink);
+  font: 600 13px "Share Tech Mono"; letter-spacing: .04em; }
+.field input::placeholder { color: var(--ink-mute); }
+.si-glyph { width: 15px; height: 15px; flex: none; border-radius: 50%;
+  border: 2px solid var(--ink-mute); position: relative; }
+.si-glyph::after { content: ""; position: absolute; right: -4px; bottom: -4px; width: 6px; height: 2px;
+  background: var(--ink-mute); transform: rotate(45deg); border-radius: 1px; }
+.si-clear { width: 22px; height: 22px; border-radius: 50%; color: var(--ink-mute);
+  font-size: 18px; line-height: 1; display: grid; place-items: center; }
+
+/* scroll areas */
+.scroll { overflow-y: auto; overscroll-behavior: contain; -webkit-overflow-scrolling: touch; }
+.scroll::-webkit-scrollbar { width: 5px; }
+.scroll::-webkit-scrollbar-thumb { background: var(--glass-brd); border-radius: 3px; }
+
+/* =============================================================================
+   OVERLAYS (capsule menu · move picker · info sheet · settings)
+   ========================================================================== */
+.overlay {
+  position: absolute; inset: 0; z-index: 50;
+  display: flex; align-items: flex-end; justify-content: center;
+  background: rgba(3,6,10,.5); backdrop-filter: blur(3px);
+  opacity: 0; pointer-events: none; transition: opacity .25s;
+}
+.overlay[aria-hidden="false"] { opacity: 1; pointer-events: auto; }
+.overlay > * { transform: translateY(20px); transition: transform .3s cubic-bezier(.3,.9,.25,1); }
+.overlay[aria-hidden="false"] > * { transform: none; }
+
+/* capsule menu */
+.cm-panel { width: calc(100% - 20px); max-width: 370px; margin-bottom: 14px; padding: 16px;
+  border-radius: 26px; background: var(--glass); border: 1px solid var(--glass-brd);
+  backdrop-filter: blur(22px) saturate(1.4); box-shadow: var(--shadow); }
+.cm-head { display: flex; align-items: center; gap: 12px; }
+.cm-sprite { width: 60px; height: 60px; }
+.cm-id { flex: 1; min-width: 0; }
+.cm-slot { font: 600 10px "Share Tech Mono"; color: var(--ink-mute); letter-spacing: .12em; }
+.cm-name { font: 700 20px "Chakra Petch"; text-transform: capitalize; }
+.cm-types { display: flex; gap: 5px; margin-top: 3px; }
+.cm-close { width: 30px; height: 30px; font-size: 22px; color: var(--ink-mute); align-self: flex-start; }
+.cm-acts { display: flex; gap: 8px; margin: 14px 0; }
+.cm-act { flex: 1; height: 44px; border-radius: 14px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 1px; font: 600 10px "Chakra Petch";
+  letter-spacing: .08em; color: var(--ink-dim); background: var(--bg2); border: 1px solid var(--line);
+  transition: transform .12s; }
+.cm-act span { font-size: 15px; color: var(--accent); }
+.cm-act:active { transform: scale(.93); }
+.cm-act.danger span { color: var(--danger); }
+.cm-moves-head { font: 600 10px "Share Tech Mono"; letter-spacing: .14em; color: var(--ink-mute);
+  margin-bottom: 8px; display: flex; justify-content: space-between; }
+.cm-mh-sub { color: var(--ink-mute); text-transform: none; }
+.cm-moves { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+
+/* move picker + info sheet + settings share a bottom-sheet base */
+.mp-panel, .is-panel, .set-panel {
+  width: 100%; max-height: 88%; display: flex; flex-direction: column;
+  border-radius: 28px 28px 0 0; background: var(--glass);
+  border: 1px solid var(--glass-brd); border-bottom: none;
+  backdrop-filter: blur(24px) saturate(1.4); box-shadow: 0 -20px 50px rgba(0,0,0,.5);
+  padding: 14px 14px calc(18px + env(safe-area-inset-bottom));
+}
+.is-grip { width: 40px; height: 4px; border-radius: 2px; background: var(--glass-brd);
+  margin: -4px auto 8px; }
+.mp-head, .set-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+.mp-back { width: 34px; height: 34px; border-radius: 11px; display: grid; place-items: center;
+  background: var(--bg2); border: 1px solid var(--line); color: var(--ink); }
+.mp-title, .set-head { font: 700 15px "Chakra Petch"; letter-spacing: .1em; }
+.set-head { justify-content: space-between; }
+.set-close, .is-close { width: 30px; height: 30px; font-size: 22px; color: var(--ink-mute); }
+.is-close { position: absolute; right: 14px; top: 12px; z-index: 2; }
+.mp-search { margin-bottom: 10px; }
+.mp-search { display: flex; align-items: center; gap: 8px; height: 40px; padding: 0 12px;
+  border-radius: 13px; background: var(--bg2); border: 1px solid var(--line); }
+.mp-search input { flex: 1; background: none; border: none; outline: none; color: var(--ink);
+  font: 600 13px "Share Tech Mono"; }
+.mp-results { overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.mp-foot, .moveFoot { font: 600 10px "Share Tech Mono"; color: var(--ink-mute); padding-top: 8px; text-align: center; }
+.is-body { overflow-y: auto; }
+.is-foot { padding-top: 10px; }
+.set-body { overflow-y: auto; }
+
+/* =============================================================================
+   FIT TOGGLE (dev)
+   ========================================================================== */
+.fit-toggle {
+  position: fixed; z-index: 100; right: 14px; bottom: 14px;
+  width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+  color: #cfe0ea; background: rgba(20,26,36,.7); border: 1px solid rgba(150,180,210,.2);
+  backdrop-filter: blur(8px);
+}
+.ic-compress { display: none; }
+body.fs .ic-expand { display: none; }
+body.fs .ic-compress { display: block; }
+body.standalone .fit-toggle { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { animation-duration: .001ms !important; transition-duration: .06s !important; }
+}

@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>PokéHotspot</title>
+<meta name="description" content="One device for your team — hang out with your six, browse the omniscient dex, forge, audit, quiz and spar. A PokéCenter in glass and plastic.">
+<!-- Installable field-device. Standalone (Share → Add to Home Screen) it sheds the
+     drawn shell and fills the device edge-to-edge (body.standalone). Dark glass UI,
+     so black-translucent status bar reads cleanly under the notch. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PokéHotspot">
+<meta name="theme-color" content="#080b11">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600;700&family=Share+Tech+Mono&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/core.css">
+<link rel="stylesheet" href="css/hangout.css">
+<link rel="stylesheet" href="css/dex.css">
+<link rel="stylesheet" href="css/forge.css">
+<link rel="stylesheet" href="css/quiz.css">
+<link rel="stylesheet" href="css/audit.css">
+<link rel="stylesheet" href="css/sim.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='50' cy='50' r='40' fill='none' stroke='%2338e0d0' stroke-width='8'/><path d='M10 50 h80' stroke='%2338e0d0' stroke-width='8'/><circle cx='50' cy='50' r='13' fill='%23080b11' stroke='%2338e0d0' stroke-width='8'/></svg>">
+</head>
+<body>
+
+<div class="device-wrap" id="deviceWrap">
+  <div class="device" id="device">
+
+    <!-- ambient device layers (behind everything) -->
+    <div class="amb amb-wash" aria-hidden="true"></div>
+    <div class="amb amb-grid" aria-hidden="true"></div>
+    <div class="amb amb-scan" aria-hidden="true"></div>
+    <div class="amb amb-vign" aria-hidden="true"></div>
+    <div class="amb amb-glow" aria-hidden="true"></div>
+
+    <!-- drawn status bar — browser preview only, hidden in standalone -->
+    <div class="statusbar">
+      <span id="clock">9:41</span>
+      <span class="sb-right">
+        <svg width="18" height="12" viewBox="0 0 18 12" fill="currentColor"><rect x="0" y="8" width="3" height="4" rx="1"/><rect x="5" y="5.5" width="3" height="6.5" rx="1"/><rect x="10" y="3" width="3" height="9" rx="1"/><rect x="15" y="0" width="3" height="12" rx="1"/></svg>
+        <svg width="17" height="12" viewBox="0 0 17 12" fill="currentColor"><path d="M8.5 12 L11.2 8.8 A4.4 4.4 0 0 0 5.8 8.8 Z"/><path d="M3.6 6.2 A7.4 7.4 0 0 1 13.4 6.2 L15.4 3.9 A10.4 10.4 0 0 0 1.6 3.9 Z" opacity="0.95"/></svg>
+        <svg width="27" height="13" viewBox="0 0 27 13" fill="none"><rect x="0.5" y="0.5" width="23" height="12" rx="3.5" stroke="currentColor" stroke-opacity="0.5"/><rect x="2" y="2" width="20" height="9" rx="2" fill="currentColor"/><path d="M25.5 4.5 V8.5 A2.2 2.2 0 0 0 25.5 4.5Z" fill="currentColor" fill-opacity="0.5"/></svg>
+      </span>
+    </div>
+
+    <!-- ===================================================================
+         HOME LAYER — the living hub. Your six hang out in a diorama at the
+         centre; a ring of symbol-only stations frames it; palette dots sit
+         along the bottom lip. This is the app's ground state.
+         =================================================================== -->
+    <main class="home" id="home">
+
+      <!-- slim home crown: brand mark · party fill · shell/settings -->
+      <div class="crown">
+        <div class="crown-brand" id="crownBrand" title="PokéHotspot">
+          <span class="cb-mark" aria-hidden="true"></span>
+          <span class="cb-word">HOTSPOT</span>
+        </div>
+        <div class="crown-right">
+          <div class="party-fill" id="partyFill" title="Party">
+            <span class="pf-dot" aria-hidden="true"></span>
+            <b id="partyCount">0</b><span class="pf-slash">/6</span>
+          </div>
+          <button class="crown-btn" id="settingsBtn" type="button" aria-label="Settings">
+            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M15.3 4.7l-1.6 1.6M6.3 13.7l-1.6 1.6"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- the diorama stage — locale backdrop + your six as billboarded sprites.
+           Injected by hangout.js. Tap a 'mon's middle → it hops and cries. -->
+      <section class="stage" id="stage" aria-label="Your team, hanging out">
+        <div class="stage-sky" id="stageSky" aria-hidden="true"></div>
+        <div class="stage-scene" id="stageScene"></div>
+        <div class="stage-ground" id="stageGround" aria-hidden="true"></div>
+        <button class="locale-tab" id="localeTab" type="button" aria-label="Change locale">
+          <span class="lt-ico" aria-hidden="true"></span><span class="lt-name" id="localeName">ROUTE</span>
+        </button>
+        <div class="stage-empty" id="stageEmpty" hidden>
+          <p>YOUR&nbsp;SPOT&nbsp;IS&nbsp;EMPTY</p>
+          <span>Forge a team, take the Quiz, or browse the Dex to file your six.</span>
+        </div>
+      </section>
+
+      <!-- orbital dock — five symbol-only stations framing the stage -->
+      <nav class="dock" id="dock" aria-label="Stations">
+        <button class="dock-btn pos-tl" data-station="dex" type="button" aria-label="Dex — find any Pokémon">
+          <span class="db-glow" aria-hidden="true"></span>
+          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M3.9 12h16.2" stroke="currentColor" stroke-width="2.1"/><circle cx="12" cy="12" r="2.7" fill="currentColor"/><path d="M18.2 18.2l6 6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
+          <span class="db-lbl">DEX</span>
+        </button>
+        <button class="dock-btn pos-tr" data-station="forge" type="button" aria-label="Forge — build the best team">
+          <span class="db-glow" aria-hidden="true"></span>
+          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><rect x="3" y="3.5" width="9.5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="15.5" y="3.5" width="9.5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="9.5" height="7" rx="2" fill="currentColor"/><rect x="15.5" y="14" width="9.5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
+          <span class="db-lbl">FORGE</span>
+        </button>
+        <button class="dock-btn pos-tc" data-station="sim" type="button" aria-label="Spar — battle projection">
+          <span class="db-glow" aria-hidden="true"></span>
+          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><path d="M4 4l9.5 9.5M6.5 3.2L3.2 6.5l3 3 3.3-3.3zM4.2 22.5l4.6-4.6M8.8 17.9l1.9 1.9-3.1 3.1H4.7v-2.9z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M24 4l-9.5 9.5M21.5 3.2l3.3 3.3-3 3-3.3-3.3zM23.8 22.5l-4.6-4.6M19.2 17.9l-1.9 1.9 3.1 3.1h2.9v-2.9z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
+          <span class="db-lbl">SPAR</span>
+        </button>
+        <button class="dock-btn pos-bl" data-station="audit" type="button" aria-label="Audit — rate my team">
+          <span class="db-glow" aria-hidden="true"></span>
+          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><path d="M4 20a10 10 0 0 1 20 0" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><path d="M14 20l6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="14" cy="20" r="2.3" fill="currentColor"/></svg>
+          <span class="db-lbl">AUDIT</span>
+        </button>
+        <button class="dock-btn pos-br" data-station="quiz" type="button" aria-label="Quiz — which Pokémon are you">
+          <span class="db-glow" aria-hidden="true"></span>
+          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><circle cx="14" cy="9.5" r="4.4" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M5.5 23a8.5 8.5 0 0 1 17 0" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg>
+          <span class="db-lbl">QUIZ</span>
+        </button>
+      </nav>
+
+      <!-- palette dots — the shell recolours instantly; long-press for the tray -->
+      <div class="palette-rail" id="paletteRail" aria-label="Palette"></div>
+
+    </main>
+
+    <!-- ===================================================================
+         STATION LAYER — a station expands from its dock glyph and the home
+         world recedes behind it. Each station renders into its own panel.
+         =================================================================== -->
+    <div class="station-layer" id="stationLayer" aria-hidden="true">
+
+      <!-- universal station chrome: back + title live here, bodies swap below -->
+      <div class="station-bar" id="stationBar">
+        <button class="st-back" id="stBack" type="button" aria-label="Back to hotspot">
+          <svg viewBox="0 0 22 22" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5L7 11l6.5 6"/></svg>
+        </button>
+        <div class="st-title"><span class="st-ico" id="stIco" aria-hidden="true"></span><span id="stName">STATION</span></div>
+        <div class="st-aux" id="stAux"></div>
+      </div>
+
+      <section class="station" id="station-dex" data-station="dex" hidden></section>
+      <section class="station" id="station-forge" data-station="forge" hidden></section>
+      <section class="station" id="station-sim" data-station="sim" hidden></section>
+      <section class="station" id="station-audit" data-station="audit" hidden></section>
+      <section class="station" id="station-quiz" data-station="quiz" hidden></section>
+    </div>
+
+    <!-- ===================================================================
+         SHARED OVERLAYS — used across stations + the hangout
+         =================================================================== -->
+
+    <!-- capsule menu: long-press a teammate anywhere → moves / lead / release -->
+    <div class="capmenu overlay" id="capMenu" aria-hidden="true">
+      <div class="cm-panel">
+        <div class="cm-head">
+          <img class="cm-sprite" id="cmSprite" src="" alt="">
+          <div class="cm-id">
+            <div class="cm-slot" id="cmSlot">SLOT 01</div>
+            <div class="cm-name" id="cmName">—</div>
+            <div class="cm-types" id="cmTypes"></div>
+          </div>
+          <button class="cm-close" id="cmClose" type="button" aria-label="Close">&times;</button>
+        </div>
+        <div class="cm-acts">
+          <button class="cm-act" data-cm="lead" type="button"><span aria-hidden="true">★</span>LEAD</button>
+          <button class="cm-act" data-cm="inspect" type="button"><span aria-hidden="true">◎</span>DEX</button>
+          <button class="cm-act danger" data-cm="release" type="button"><span aria-hidden="true">⏏</span>RELEASE</button>
+        </div>
+        <div class="cm-moves-head">MOVES <span class="cm-mh-sub" id="cmLearnNote"></span></div>
+        <div class="cm-moves" id="cmMoves"></div>
+      </div>
+    </div>
+
+    <!-- move picker: opened from a move slot in the capsule menu -->
+    <div class="movepick overlay" id="movePick" aria-hidden="true">
+      <div class="mp-panel">
+        <div class="mp-head">
+          <button class="mp-back" id="mpBack" type="button" aria-label="Back"><svg viewBox="0 0 22 22" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5L7 11l6.5 6"/></svg></button>
+          <div class="mp-title">MOVE <b id="mpSlot">1</b></div>
+        </div>
+        <div class="mp-search">
+          <span class="si-glyph" aria-hidden="true"></span>
+          <input id="moveSearch" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="SEARCH MOVES">
+          <button class="si-clear" id="moveClear" type="button" aria-label="Clear">&times;</button>
+        </div>
+        <div class="mp-results" id="moveResults"></div>
+        <div class="mp-foot" id="moveFoot"></div>
+      </div>
+    </div>
+
+    <!-- info sheet: the full dex entry for any species (stats · defence · catch) -->
+    <div class="infosheet overlay" id="infoSheet" aria-hidden="true">
+      <div class="is-panel">
+        <div class="is-grip" aria-hidden="true"></div>
+        <button class="is-close" id="infoClose" type="button" aria-label="Close">&times;</button>
+        <div class="is-body" id="infoBody"></div>
+        <div class="is-foot" id="infoFoot"></div>
+      </div>
+    </div>
+
+    <!-- settings tray: palette grid + locale + reset -->
+    <div class="settings overlay" id="settingsTray" aria-hidden="true">
+      <div class="set-panel">
+        <div class="set-head"><span>SETTINGS</span><button class="set-close" id="setClose" type="button" aria-label="Close">&times;</button></div>
+        <div class="set-body" id="setBody"></div>
+      </div>
+    </div>
+
+    <!-- drawn home indicator — browser preview only, hidden in standalone -->
+    <div class="home-indicator"></div>
+
+  </div>
+</div>
+
+<!-- dev-only: fill the viewport at the device aspect (preview the installed app) -->
+<button class="fit-toggle" id="fitToggle" type="button" aria-label="Fill the screen" title="Fill the screen">
+  <svg class="ic-expand" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 V2 H6 M16 6 V2 H12 M2 12 V16 H6 M16 12 V16 H12"/></svg>
+  <svg class="ic-compress" width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M2 6 H6 V2 M16 6 H12 V2 M2 12 H6 V16 M16 12 H12 V16"/></svg>
+</button>
+
+<script src="js/core.js"></script>
+<script src="js/hangout.js"></script>
+<script src="js/dex.js"></script>
+<script src="js/forge.js"></script>
+<script src="js/quiz.js"></script>
+<script src="js/audit.js"></script>
+<script src="js/sim.js"></script>
+<script>
+  // fill-screen (desktop/browser preview): scale the whole device to fill the
+  // viewport at its 390x844 aspect. A Home-Screen (standalone) launch skips this
+  // and takes the real-app path (body.standalone: full-bleed + env() insets).
+  (() => {
+    const AR_W = 390, AR_H = 844, KEY = "pokehotspot-fillscreen";
+    const wrap = document.getElementById("deviceWrap");
+    const btn = document.getElementById("fitToggle");
+    const fit = () => {
+      if (!document.body.classList.contains("fs")) { wrap.style.transform = ""; return; }
+      const vv = window.visualViewport;
+      const vw = vv ? vv.width : window.innerWidth;
+      const vh = vv ? vv.height : window.innerHeight;
+      const s = Math.min(vw / AR_W, vh / AR_H);
+      wrap.style.transform = "translate(" + (vw - AR_W) / 2 + "px, " + (vh - AR_H) / 2 + "px) scale(" + s + ")";
+    };
+    const setFS = (on, { native = false, persist = true } = {}) => {
+      document.body.classList.toggle("fs", on);
+      btn.setAttribute("aria-label", on ? "Exit full screen" : "Fill the screen");
+      fit();
+      if (persist) { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} }
+      if (native) { try { const el = document.documentElement;
+        if (on && el.requestFullscreen) el.requestFullscreen().catch(() => {});
+        else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
+      } catch {} }
+    };
+    btn.addEventListener("click", () => setFS(!document.body.classList.contains("fs"), { native: true }));
+    addEventListener("resize", fit);
+    addEventListener("orientationchange", fit);
+    if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
+    const standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+    if (standalone) { document.body.classList.add("standalone"); }
+    else { let saved = "0"; try { saved = localStorage.getItem(KEY) || "0"; } catch {} if (saved === "1") setFS(true, { persist: false }); }
+  })();
+</script>
+</body>
+</html>
