@@ -260,42 +260,42 @@
     });
   };
 
-  // ---- station router (home recedes · station grows from its glyph) ----------
-  const stations = {};   // name -> { open(container), close?() }
-  let openName = null;
-  const device = () => $("#device");
+  // ---- view router — the recessed screen swaps between the home diorama and a
+  // station while the top + bottom decks stay put; the active nav key lights. ---
+  const stations = {};   // name -> { title, open(container), close?() }
+  let currentView = "home";
 
-  const openStation = (name, srcEl) => {
-    const mod = stations[name]; if (!mod) return;
-    openName = name;
-    // grow the station layer from the tapped glyph
-    const layer = $("#stationLayer");
-    if (srcEl) {
-      const gb = srcEl.getBoundingClientRect(), db = device().getBoundingClientRect();
-      layer.style.transformOrigin = `${((gb.left+gb.width/2 - db.left)/db.width*100).toFixed(1)}% ${((gb.top+gb.height/2 - db.top)/db.height*100).toFixed(1)}%`;
-    } else layer.style.transformOrigin = "50% 50%";
-    // reveal only the target station body
+  const showView = (name) => {
+    const isStation = name !== "home";
+    if (isStation && !stations[name]) return;
+    // close the outgoing station if it declares a close()
+    if (currentView !== name && currentView !== "home") {
+      const om = stations[currentView]; try { om && om.close && om.close(); } catch {}
+    }
+    currentView = name;
+    // swap the visible view
+    $("#stage").hidden = isStation;
     $$(".station").forEach(s => { s.hidden = s.dataset.station !== name; });
-    layer.setAttribute("aria-hidden", "false");
-    device().classList.add("station-open");
-    // station chrome
-    const glyph = srcEl ? srcEl.querySelector(".db-ico") : null;
-    $("#stIco").innerHTML = glyph ? glyph.outerHTML : "";
-    $("#stName").textContent = mod.title || name.toUpperCase();
-    $("#stAux").innerHTML = "";
-    try { mod.open($(`#station-${name}`)); } catch(e){ console.error(e); }
-    buzz(10);
-  };
-  const closeStation = () => {
-    if (!openName) return;
-    const mod = stations[openName];
-    device().classList.remove("station-open");
-    $("#stationLayer").setAttribute("aria-hidden", "true");
-    try { mod && mod.close && mod.close(); } catch {}
-    openName = null;
-    emit("home");
+    $("#screenHead").hidden = !isStation;
+    // light the active key
+    $$(".navkey").forEach(k => k.classList.toggle("on",
+      (name === "home" && k.dataset.nav === "home") || k.dataset.station === name));
+    if (isStation) {
+      const mod = stations[name], key = $(`.navkey[data-station="${name}"]`);
+      const ico = key ? key.querySelector(".nk-ico svg") : null;
+      $("#stIco").innerHTML = ico ? ico.outerHTML : "";
+      $("#stName").textContent = mod.title || name.toUpperCase();
+      $("#stAux").innerHTML = "";
+      try { mod.open($(`#station-${name}`)); } catch(e){ console.error(e); }
+    } else {
+      emit("home");
+    }
+    // replay the screen-swap flourish
+    const body = $("#screenBody"); body.classList.remove("swap"); void body.offsetWidth; body.classList.add("swap");
     buzz(8);
   };
+  const openStation = (name) => showView(name);   // back-compat (empty-state pills)
+  const closeStation = () => showView("home");
 
   // ---- overlay helpers ------------------------------------------------------
   const openOverlay = sel => { const o = $(sel); if (o) o.setAttribute("aria-hidden","false"); };
@@ -521,24 +521,25 @@
   }
 
   const wireShell = () => {
-    // dock → open stations
+    // nav deck → swap the screen (HOME key or a station key)
     $("#dock").addEventListener("click", e => {
-      const b = e.target.closest(".dock-btn"); if (!b) return;
-      openStation(b.dataset.station, b);
+      const k = e.target.closest(".navkey"); if (!k) return;
+      if (k.dataset.nav === "home") showView("home");
+      else if (k.dataset.station) showView(k.dataset.station);
     });
-    $("#stBack").addEventListener("click", closeStation);
+    $("#stBack").addEventListener("click", () => showView("home"));
     $("#settingsBtn").addEventListener("click", openSettings);
 
-    // back-swipe (right swipe from the left edge) closes a station
+    // back-swipe (right swipe from the left edge of the screen) returns home
     let sx = 0, sy = 0, tracking = false;
-    const layer = $("#stationLayer");
-    layer.addEventListener("touchstart", e => {
-      if (e.touches[0].clientX < 42) { tracking = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }
+    const screen = $("#screen");
+    screen.addEventListener("touchstart", e => {
+      if (currentView !== "home" && e.touches[0].clientX < 42) { tracking = true; sx = e.touches[0].clientX; sy = e.touches[0].clientY; }
     }, { passive: true });
-    layer.addEventListener("touchend", e => {
+    screen.addEventListener("touchend", e => {
       if (!tracking) return; tracking = false;
       const dx = e.changedTouches[0].clientX - sx, dy = Math.abs(e.changedTouches[0].clientY - sy);
-      if (dx > 70 && dy < 60) closeStation();
+      if (dx > 70 && dy < 60) showView("home");
     }, { passive: true });
 
     // overlays: close controls + backdrop

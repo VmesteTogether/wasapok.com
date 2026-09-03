@@ -16,14 +16,15 @@
     { id:"summit",     name:"SNOW SUMMIT" },
     { id:"pokecenter", name:"POKÉ CENTER" },
   ];
-  // feet-anchored spots (x%, y% within the scene; scale). Lead sits front-centre.
+  // feet-anchored spots (x%, y% within the scene; scale). Three depth tiers spread
+  // across the field so the six fill the screen; lead sits biggest, front-centre.
   const SPOTS = [
-    { x:50, y:89, s:1.18 },
-    { x:24, y:84, s:1.02 },
-    { x:76, y:84, s:1.02 },
-    { x:37, y:71, s:0.85 },
-    { x:63, y:71, s:0.85 },
-    { x:50, y:64, s:0.72 },
+    { x:50, y:95, s:1.30 },   // lead — front centre
+    { x:18, y:88, s:1.08 },   // front left
+    { x:82, y:88, s:1.08 },   // front right
+    { x:31, y:71, s:0.96 },   // mid left
+    { x:69, y:71, s:0.96 },   // mid right
+    { x:50, y:53, s:0.82 },   // back centre — near the horizon
   ];
 
   const todClass = () => {

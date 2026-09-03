@@ -319,7 +319,7 @@
   // ---- interactions ---------------------------------------------------------
   const wire = c => c.addEventListener("click", ev => {
     const goto = ev.target.closest("[data-goto]");
-    if (goto) { P.openStation(goto.dataset.goto, document.querySelector(`.dock-btn[data-station="${goto.dataset.goto}"]`)); return; }
+    if (goto) { P.openStation(goto.dataset.goto); return; }
     const th = ev.target.closest(".sim-th");
     if (th) { simTheater = +th.dataset.th; try { localStorage.setItem(SIM_KEY, simTheater); } catch {} buzz(6); renderSim(); return; }
     const btn = ev.target.closest("[data-act]"); if (!btn) return;

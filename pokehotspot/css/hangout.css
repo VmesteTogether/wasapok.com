@@ -13,7 +13,7 @@
 
 /* --- sky (locale + time of day drive the gradient) --- */
 .stage-sky { position: absolute; inset: 0; z-index: 0; transition: background 1.2s ease; }
-.stage-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 42%; z-index: 1; transition: background 1s ease; }
+.stage-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 58%; z-index: 1; transition: background 1s ease; }
 
 /* locale skins (self-contained, no external art) */
 .stage[data-loc="route"]     .stage-sky   { background: linear-gradient(180deg, #8fd0ff 0%, #cfeeff 46%, #eafaf0 62%); }

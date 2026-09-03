@@ -49,99 +49,91 @@
     </div>
 
     <!-- ===================================================================
-         HOME LAYER — the living hub. Your six hang out in a diorama at the
-         centre; a ring of symbol-only stations frames it; palette dots sit
-         along the bottom lip. This is the app's ground state.
+         TOP DECK — fixed hardware header: brand · party gauge · settings.
+         A seated plate, not a floating bar.
          =================================================================== -->
-    <main class="home" id="home">
-
-      <!-- slim home crown: brand mark · party fill · shell/settings -->
-      <div class="crown">
-        <div class="crown-brand" id="crownBrand" title="PokéHotspot">
-          <span class="cb-mark" aria-hidden="true"></span>
-          <span class="cb-word">HOTSPOT</span>
-        </div>
-        <div class="crown-right">
-          <div class="party-fill" id="partyFill" title="Party">
-            <span class="pf-dot" aria-hidden="true"></span>
-            <b id="partyCount">0</b><span class="pf-slash">/6</span>
-          </div>
-          <button class="crown-btn" id="settingsBtn" type="button" aria-label="Settings">
-            <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M15.3 4.7l-1.6 1.6M6.3 13.7l-1.6 1.6"/></svg>
-          </button>
-        </div>
+    <header class="deck deck-top" id="deckTop">
+      <div class="crown-brand" id="crownBrand" title="PokéHotspot">
+        <span class="cb-mark" aria-hidden="true"></span>
+        <span class="cb-word">HOTSPOT</span>
       </div>
-
-      <!-- the diorama stage — locale backdrop + your six as billboarded sprites.
-           Injected by hangout.js. Tap a 'mon's middle → it hops and cries. -->
-      <section class="stage" id="stage" aria-label="Your team, hanging out">
-        <div class="stage-sky" id="stageSky" aria-hidden="true"></div>
-        <div class="stage-scene" id="stageScene"></div>
-        <div class="stage-ground" id="stageGround" aria-hidden="true"></div>
-        <button class="locale-tab" id="localeTab" type="button" aria-label="Change locale">
-          <span class="lt-ico" aria-hidden="true"></span><span class="lt-name" id="localeName">ROUTE</span>
-        </button>
-        <div class="stage-empty" id="stageEmpty" hidden>
-          <p>YOUR&nbsp;SPOT&nbsp;IS&nbsp;EMPTY</p>
-          <span>Forge a team, take the Quiz, or browse the Dex to file your six.</span>
+      <div class="deck-top-right">
+        <div class="party-fill" id="partyFill" title="Party">
+          <span class="pf-dot" aria-hidden="true"></span>
+          <b id="partyCount">0</b><span class="pf-slash">/6</span>
         </div>
-      </section>
-
-      <!-- orbital dock — five symbol-only stations framing the stage -->
-      <nav class="dock" id="dock" aria-label="Stations">
-        <button class="dock-btn pos-tl" data-station="dex" type="button" aria-label="Dex — find any Pokémon">
-          <span class="db-glow" aria-hidden="true"></span>
-          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><circle cx="12" cy="12" r="8.4" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M3.9 12h16.2" stroke="currentColor" stroke-width="2.1"/><circle cx="12" cy="12" r="2.7" fill="currentColor"/><path d="M18.2 18.2l6 6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg>
-          <span class="db-lbl">DEX</span>
+        <button class="crown-btn" id="settingsBtn" type="button" aria-label="Settings">
+          <svg viewBox="0 0 20 20" width="17" height="17" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="10" cy="10" r="2.6"/><path d="M10 2.5v2.2M10 15.3v2.2M2.5 10h2.2M15.3 10h2.2M4.7 4.7l1.6 1.6M13.7 13.7l1.6 1.6M15.3 4.7l-1.6 1.6M6.3 13.7l-1.6 1.6"/></svg>
         </button>
-        <button class="dock-btn pos-tr" data-station="forge" type="button" aria-label="Forge — build the best team">
-          <span class="db-glow" aria-hidden="true"></span>
-          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><rect x="3" y="3.5" width="9.5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="15.5" y="3.5" width="9.5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="9.5" height="7" rx="2" fill="currentColor"/><rect x="15.5" y="14" width="9.5" height="7" rx="2" fill="none" stroke="currentColor" stroke-width="2"/></svg>
-          <span class="db-lbl">FORGE</span>
-        </button>
-        <button class="dock-btn pos-tc" data-station="sim" type="button" aria-label="Spar — battle projection">
-          <span class="db-glow" aria-hidden="true"></span>
-          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><path d="M4 4l9.5 9.5M6.5 3.2L3.2 6.5l3 3 3.3-3.3zM4.2 22.5l4.6-4.6M8.8 17.9l1.9 1.9-3.1 3.1H4.7v-2.9z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M24 4l-9.5 9.5M21.5 3.2l3.3 3.3-3 3-3.3-3.3zM23.8 22.5l-4.6-4.6M19.2 17.9l-1.9 1.9 3.1 3.1h2.9v-2.9z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg>
-          <span class="db-lbl">SPAR</span>
-        </button>
-        <button class="dock-btn pos-bl" data-station="audit" type="button" aria-label="Audit — rate my team">
-          <span class="db-glow" aria-hidden="true"></span>
-          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><path d="M4 20a10 10 0 0 1 20 0" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><path d="M14 20l6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="14" cy="20" r="2.3" fill="currentColor"/></svg>
-          <span class="db-lbl">AUDIT</span>
-        </button>
-        <button class="dock-btn pos-br" data-station="quiz" type="button" aria-label="Quiz — which Pokémon are you">
-          <span class="db-glow" aria-hidden="true"></span>
-          <svg viewBox="0 0 28 28" class="db-ico" aria-hidden="true"><circle cx="14" cy="9.5" r="4.4" fill="none" stroke="currentColor" stroke-width="2.1"/><path d="M5.5 23a8.5 8.5 0 0 1 17 0" fill="none" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg>
-          <span class="db-lbl">QUIZ</span>
-        </button>
-      </nav>
-
-      <!-- palette dots — the shell recolours instantly; long-press for the tray -->
-      <div class="palette-rail" id="paletteRail" aria-label="Palette"></div>
-
-    </main>
+      </div>
+    </header>
 
     <!-- ===================================================================
-         STATION LAYER — a station expands from its dock glyph and the home
-         world recedes behind it. Each station renders into its own panel.
+         SCREEN — the recessed well. The living diorama and every station
+         render inside it; the decks around it never move. A slim head strip
+         carries station chrome (hidden on the home diorama).
          =================================================================== -->
-    <div class="station-layer" id="stationLayer" aria-hidden="true">
+    <div class="screen" id="screen">
 
-      <!-- universal station chrome: back + title live here, bodies swap below -->
-      <div class="station-bar" id="stationBar">
-        <button class="st-back" id="stBack" type="button" aria-label="Back to hotspot">
-          <svg viewBox="0 0 22 22" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5L7 11l6.5 6"/></svg>
+      <div class="screen-head" id="screenHead" hidden>
+        <button class="sh-home" id="stBack" type="button" aria-label="Back to hotspot">
+          <svg viewBox="0 0 22 22" width="19" height="19" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.5 5L7 11l6.5 6"/></svg>
         </button>
-        <div class="st-title"><span class="st-ico" id="stIco" aria-hidden="true"></span><span id="stName">STATION</span></div>
-        <div class="st-aux" id="stAux"></div>
+        <div class="sh-title"><span class="sh-ico" id="stIco" aria-hidden="true"></span><span id="stName">STATION</span></div>
+        <div class="sh-aux" id="stAux"></div>
       </div>
 
-      <section class="station" id="station-dex" data-station="dex" hidden></section>
-      <section class="station" id="station-forge" data-station="forge" hidden></section>
-      <section class="station" id="station-sim" data-station="sim" hidden></section>
-      <section class="station" id="station-audit" data-station="audit" hidden></section>
-      <section class="station" id="station-quiz" data-station="quiz" hidden></section>
+      <div class="screen-body" id="screenBody">
+        <!-- HOME diorama -->
+        <section class="stage view" id="stage" data-view="home" aria-label="Your team, hanging out">
+          <div class="stage-sky" id="stageSky" aria-hidden="true"></div>
+          <div class="stage-scene" id="stageScene"></div>
+          <div class="stage-ground" id="stageGround" aria-hidden="true"></div>
+          <button class="locale-tab" id="localeTab" type="button" aria-label="Change locale">
+            <span class="lt-ico" aria-hidden="true"></span><span class="lt-name" id="localeName">ROUTE</span>
+          </button>
+          <div class="stage-empty" id="stageEmpty" hidden>
+            <p>YOUR&nbsp;SPOT&nbsp;IS&nbsp;EMPTY</p>
+            <span>Forge a team, take the Quiz, or browse the Dex to file your six.</span>
+          </div>
+        </section>
+
+        <!-- station panels — one shown at a time -->
+        <section class="station view" id="station-dex" data-station="dex" hidden></section>
+        <section class="station view" id="station-forge" data-station="forge" hidden></section>
+        <section class="station view" id="station-sim" data-station="sim" hidden></section>
+        <section class="station view" id="station-audit" data-station="audit" hidden></section>
+        <section class="station view" id="station-quiz" data-station="quiz" hidden></section>
+      </div>
     </div>
+
+    <!-- ===================================================================
+         BOTTOM DECK — fixed control panel: HOME + five station keys, seated
+         as molded plastic; the active key lights. Palette strip beneath.
+         =================================================================== -->
+    <nav class="deck deck-bottom" id="deckBottom" aria-label="Navigation">
+      <div class="navrow" id="dock">
+        <button class="navkey on" data-nav="home" type="button" aria-label="Home — your team">
+          <span class="nk-ico"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7"/><path d="M6 10v9h12v-9"/></svg></span><span class="nk-lbl">HOME</span>
+        </button>
+        <button class="navkey" data-station="dex" type="button" aria-label="Dex — find any Pokémon">
+          <span class="nk-ico"><svg viewBox="0 0 28 28" fill="none"><circle cx="12" cy="12" r="8.4" stroke="currentColor" stroke-width="2.1"/><path d="M3.9 12h16.2" stroke="currentColor" stroke-width="2.1"/><circle cx="12" cy="12" r="2.7" fill="currentColor"/><path d="M18.2 18.2l6 6" stroke="currentColor" stroke-width="2.6" stroke-linecap="round"/></svg></span><span class="nk-lbl">DEX</span>
+        </button>
+        <button class="navkey" data-station="forge" type="button" aria-label="Forge — build the best team">
+          <span class="nk-ico"><svg viewBox="0 0 28 28" fill="none"><rect x="3" y="3.5" width="9.5" height="7" rx="2" stroke="currentColor" stroke-width="2"/><rect x="15.5" y="3.5" width="9.5" height="7" rx="2" stroke="currentColor" stroke-width="2"/><rect x="3" y="14" width="9.5" height="7" rx="2" fill="currentColor"/><rect x="15.5" y="14" width="9.5" height="7" rx="2" stroke="currentColor" stroke-width="2"/></svg></span><span class="nk-lbl">FORGE</span>
+        </button>
+        <button class="navkey" data-station="sim" type="button" aria-label="Spar — battle projection">
+          <span class="nk-ico"><svg viewBox="0 0 28 28"><path d="M4 4l9.5 9.5M6.5 3.2L3.2 6.5l3 3 3.3-3.3zM4.2 22.5l4.6-4.6M8.8 17.9l1.9 1.9-3.1 3.1H4.7v-2.9z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/><path d="M24 4l-9.5 9.5M21.5 3.2l3.3 3.3-3 3-3.3-3.3zM23.8 22.5l-4.6-4.6M19.2 17.9l-1.9 1.9 3.1 3.1h2.9v-2.9z" fill="currentColor" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round"/></svg></span><span class="nk-lbl">SPAR</span>
+        </button>
+        <button class="navkey" data-station="audit" type="button" aria-label="Audit — rate my team">
+          <span class="nk-ico"><svg viewBox="0 0 28 28" fill="none"><path d="M4 20a10 10 0 0 1 20 0" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/><path d="M14 20l6-6" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/><circle cx="14" cy="20" r="2.3" fill="currentColor"/></svg></span><span class="nk-lbl">AUDIT</span>
+        </button>
+        <button class="navkey" data-station="quiz" type="button" aria-label="Quiz — which Pokémon are you">
+          <span class="nk-ico"><svg viewBox="0 0 28 28" fill="none"><circle cx="14" cy="9.5" r="4.4" stroke="currentColor" stroke-width="2.1"/><path d="M5.5 23a8.5 8.5 0 0 1 17 0" stroke="currentColor" stroke-width="2.1" stroke-linecap="round"/></svg></span><span class="nk-lbl">QUIZ</span>
+        </button>
+      </div>
+      <div class="palette-rail" id="paletteRail" aria-label="Palette"></div>
+    </nav>
 
     <!-- ===================================================================
          SHARED OVERLAYS — used across stations + the hangout

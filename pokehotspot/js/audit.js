@@ -244,8 +244,7 @@
     c.addEventListener("click", e => {
       // switch to another station from the empty state
       const goto = e.target.closest("[data-goto]");
-      if (goto) { const src = document.querySelector(`.dock-btn[data-station="${goto.dataset.goto}"]`);
-        P.openStation(goto.dataset.goto, src); return; }
+      if (goto) { P.openStation(goto.dataset.goto); return; }
 
       // inspect a member
       const insp = e.target.closest("[data-inspect]");

@@ -78,29 +78,25 @@ img { -webkit-user-drag: none; user-select: none; }
 .device-wrap {
   position: fixed; inset: 0;
   display: grid; place-items: center;
-  transform-origin: top left;
 }
+/* One molded device: a fixed top deck + a recessed screen + a fixed key deck,
+   stacked as physical plates. Nothing floats. The status bar is a real flow item,
+   so the header clears the notch/status area for free (no inset hacks). */
 .device {
   position: relative;
   width: 390px; height: 844px;
-  /* top inset = height of the status area the top chrome must clear (drawn bar in
-     the browser; the notch when installed). See .home / .station-layer padding. */
-  --top-inset: 44px;
+  display: flex; flex-direction: column;
   background:
-    radial-gradient(120% 80% at 50% -8%, hsl(var(--tint) 55% 12% / 0.9), transparent 60%),
-    linear-gradient(180deg, var(--bg1), var(--bg0));
+    radial-gradient(120% 60% at 50% -6%, hsl(var(--tint) 45% 14% / .9), transparent 60%),
+    linear-gradient(180deg, var(--plastic-hi) 0, var(--plastic) 6%, var(--bg1) 16%, var(--bg0));
   overflow: hidden;
   border-radius: 46px;
-  box-shadow: 0 40px 90px rgba(0,0,0,.6), inset 0 0 0 1px rgba(255,255,255,.04);
-  isolation: isolate;
-  user-select: none;
+  box-shadow: 0 40px 90px rgba(0,0,0,.6),
+    inset 0 0 0 1px rgba(255,255,255,.05), inset 0 2px 1px rgba(255,255,255,.08);
+  isolation: isolate; user-select: none;
 }
-/* full-bleed when installed to the Home Screen, or when the dev fill toggle is on */
-body.standalone .device-wrap, body.fs .device-wrap { display: block; }
-body.standalone .device, body.fs .device {
-  width: 100dvw; height: 100dvh; border-radius: 0; box-shadow: none;
-}
-body.standalone .device { --top-inset: env(safe-area-inset-top); }
+body.standalone .device-wrap { display: block; }
+body.standalone .device { width: 100dvw; height: 100dvh; border-radius: 0; box-shadow: none; }
 
 /* --------------------------------------------------------- ambient --------- */
 .amb { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
@@ -128,13 +124,13 @@ body.standalone .device { --top-inset: env(safe-area-inset-top); }
 
 /* ---------------------------------------------------------- status bar ----- */
 .statusbar {
-  position: relative; z-index: 40;
+  position: relative; z-index: 40; flex: none;
   height: 44px; padding: 0 26px;
   display: flex; align-items: center; justify-content: space-between;
   font: 600 15px "Chakra Petch"; color: var(--ink);
 }
 .statusbar .sb-right { display: inline-flex; align-items: center; gap: 6px; }
-body.standalone .statusbar, body.fs .statusbar { visibility: hidden; height: env(safe-area-inset-top); }
+body.standalone .statusbar { visibility: hidden; height: env(safe-area-inset-top); }
 
 .home-indicator {
   position: absolute; z-index: 60; left: 50%; bottom: 8px; transform: translateX(-50%);
@@ -143,154 +139,147 @@ body.standalone .statusbar, body.fs .statusbar { visibility: hidden; height: env
 body.standalone .home-indicator { display: none; }
 
 /* =============================================================================
-   HOME LAYER — the living hub
+   TOP DECK — fixed hardware header: brand · party gauge · settings
    ========================================================================== */
-.home {
-  position: absolute; inset: 0; z-index: 10;
-  padding-top: var(--top-inset);        /* crown clears the status bar / notch */
-  display: flex; flex-direction: column;
-  transition: transform .5s cubic-bezier(.5,0,.2,1), opacity .38s ease, filter .38s ease;
+.deck {
+  position: relative; z-index: 12; flex: none;
+  background: linear-gradient(180deg, var(--plastic-hi), var(--plastic) 58%, var(--plastic-lo));
 }
-.device.station-open .home {
-  transform: scale(.9); opacity: 0; filter: blur(10px); pointer-events: none;
-}
-
-/* crown */
-.crown {
-  position: relative; z-index: 12;
-  height: 46px; margin-top: 2px; padding: 0 16px;
+.deck-top {
+  margin: 4px 8px 0; height: 50px; padding: 0 12px;
   display: flex; align-items: center; justify-content: space-between;
+  border-radius: 5px 5px 16px 16px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), inset 0 -1px 0 rgba(0,0,0,.55), 0 2px 6px rgba(0,0,0,.4);
 }
 .crown-brand { display: inline-flex; align-items: center; gap: 9px; }
 .cb-mark {
   width: 22px; height: 22px; border-radius: 50%;
-  background:
-    linear-gradient(180deg, var(--accent) 0 50%, #f4f8fb 50% 100%);
-  box-shadow: inset 0 0 0 2px var(--bg0), 0 0 10px var(--glow);
-  position: relative;
+  background: linear-gradient(180deg, var(--accent) 0 50%, #f4f8fb 50% 100%);
+  box-shadow: inset 0 0 0 2px var(--bg0), 0 0 10px var(--glow); position: relative;
 }
-.cb-mark::after {
-  content: ""; position: absolute; inset: 0; border-radius: 50%;
-  box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35);
-}
-.cb-mark::before {
-  content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
-  width: 7px; height: 7px; border-radius: 50%; background: var(--bg0);
-  box-shadow: 0 0 0 2px #f4f8fb; z-index: 2;
-}
+.cb-mark::after { content: ""; position: absolute; inset: 0; border-radius: 50%; box-shadow: inset 0 0 0 1.5px rgba(0,0,0,.35); }
+.cb-mark::before { content: ""; position: absolute; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  width: 7px; height: 7px; border-radius: 50%; background: var(--bg0); box-shadow: 0 0 0 2px #f4f8fb; z-index: 2; }
 .cb-word { font: 700 15px "Chakra Petch"; letter-spacing: .16em; color: var(--ink); }
-.crown-right { display: inline-flex; align-items: center; gap: 10px; }
+.deck-top-right { display: inline-flex; align-items: center; gap: 9px; }
 .party-fill {
   display: inline-flex; align-items: center; gap: 5px;
-  height: 28px; padding: 0 11px; border-radius: 14px;
-  background: var(--glass); border: 1px solid var(--glass-brd);
-  backdrop-filter: blur(10px);
+  height: 28px; padding: 0 11px; border-radius: 9px;
+  background: rgba(0,0,0,.35); border: 1px solid var(--glass-brd);
+  box-shadow: inset 0 1px 3px rgba(0,0,0,.5);
   font: 600 13px "Share Tech Mono"; color: var(--ink-dim);
 }
 .party-fill b { color: var(--accent); font-size: 15px; }
 .pf-slash { color: var(--ink-mute); }
 .pf-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--glow); }
 .crown-btn {
-  width: 30px; height: 30px; display: grid; place-items: center; border-radius: 10px;
-  color: var(--ink-dim); background: var(--glass); border: 1px solid var(--glass-brd);
+  width: 32px; height: 32px; display: grid; place-items: center; border-radius: 10px;
+  color: var(--ink-dim);
+  background: linear-gradient(180deg, var(--plastic-hi), var(--plastic-lo));
+  border: 1px solid rgba(255,255,255,.06);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.12), 0 2px 4px rgba(0,0,0,.4);
   transition: transform .12s, color .12s;
 }
-.crown-btn:active { transform: scale(.9); color: var(--accent); }
+.crown-btn:active { transform: translateY(1px) scale(.94); color: var(--accent); }
 
-/* --------------------------------------------------------- orbital dock ---- */
-.dock { position: absolute; inset: 0; z-index: 14; pointer-events: none; }
-.dock-btn {
-  position: absolute; pointer-events: auto;
-  width: 62px; height: 62px; border-radius: 20px;
-  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
-  color: var(--ink-dim);
-  background:
-    linear-gradient(180deg, var(--plastic-hi), var(--plastic) 55%, var(--plastic-lo));
-  border: 1px solid rgba(255,255,255,.08);
-  box-shadow:
-    0 10px 22px rgba(0,0,0,.5),
-    inset 0 1px 0 rgba(255,255,255,.14),
-    inset 0 -2px 4px rgba(0,0,0,.4);
-  transition: transform .16s cubic-bezier(.34,1.56,.64,1), color .16s, box-shadow .16s;
+/* =============================================================================
+   BOTTOM DECK — fixed control panel: HOME + station keys + palette strip
+   ========================================================================== */
+.deck-bottom {
+  margin: 6px 8px 8px; padding: 8px 8px 7px;
+  display: flex; flex-direction: column; gap: 7px;
+  border-radius: 18px;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.10), inset 0 -2px 5px rgba(0,0,0,.55), 0 -2px 8px rgba(0,0,0,.35);
 }
-.dock-btn::before { /* glossy plastic sheen */
-  content: ""; position: absolute; inset: 1px 1px 45% 1px; border-radius: 18px 18px 40% 40%;
-  background: linear-gradient(180deg, rgba(255,255,255,.16), transparent);
-  pointer-events: none;
+.navrow { display: grid; grid-template-columns: repeat(6, 1fr); gap: 6px; }
+.navkey {
+  position: relative; height: 54px; border-radius: 13px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px;
+  color: var(--ink-mute);
+  background: linear-gradient(180deg, var(--plastic-hi), var(--plastic) 55%, var(--plastic-lo));
+  border: 1px solid rgba(255,255,255,.06);
+  box-shadow: 0 3px 6px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,255,255,.13), inset 0 -2px 4px rgba(0,0,0,.42);
+  transition: transform .1s, color .16s, box-shadow .18s;
 }
-.db-glow {
-  position: absolute; inset: -2px; border-radius: 22px; opacity: 0;
-  box-shadow: 0 0 20px 2px var(--glow); transition: opacity .2s; pointer-events: none;
+.navkey::before { content:""; position:absolute; inset:1px 1px 46% 1px; border-radius:12px 12px 40% 40%;
+  background: linear-gradient(180deg, rgba(255,255,255,.15), transparent); pointer-events:none; }
+.navkey:active { transform: translateY(1px) scale(.96); }
+.navkey.on {
+  color: var(--accent-ink);
+  background: linear-gradient(180deg, var(--accent-2), var(--accent) 62%, color-mix(in srgb, var(--accent) 68%, #000));
+  border-color: transparent;
+  box-shadow: 0 0 15px var(--glow), inset 0 1px 0 rgba(255,255,255,.4), inset 0 -2px 5px rgba(0,0,0,.3);
 }
-.dock-btn:hover { color: var(--ink); }
-.dock-btn:active { transform: scale(.9); }
-.dock-btn:active .db-glow, .dock-btn:focus-visible .db-glow { opacity: .8; }
-.dock-btn:active { color: var(--accent); }
-.db-ico { width: 27px; height: 27px; }
-.db-lbl { font: 600 8.5px "Share Tech Mono"; letter-spacing: .14em; opacity: .85; }
+.nk-ico { width: 23px; height: 23px; display: grid; place-items: center; }
+.nk-ico svg { width: 23px; height: 23px; }
+.nk-lbl { font: 700 7px "Share Tech Mono"; letter-spacing: .1em; }
 
-.dock-btn.pos-tl { left: 14px;  top: 96px; }
-.dock-btn.pos-tr { right: 14px; top: 96px; }
-.dock-btn.pos-tc { left: 50%; top: 70px; transform: translateX(-50%); }
-.dock-btn.pos-tc:active { transform: translateX(-50%) scale(.9); }
-.dock-btn.pos-bl { left: 14px;  bottom: 86px; }
-.dock-btn.pos-br { right: 14px; bottom: 86px; }
-
-/* --------------------------------------------------------- palette rail ---- */
+/* palette — a seated dot strip recessed into the deck */
 .palette-rail {
-  position: absolute; z-index: 15; left: 50%; bottom: 30px; transform: translateX(-50%);
-  display: inline-flex; align-items: center; gap: 9px;
-  padding: 8px 12px; border-radius: 20px;
-  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: blur(12px);
-  box-shadow: var(--shadow);
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  height: 22px; border-radius: 11px;
+  background: rgba(0,0,0,.4); box-shadow: inset 0 1px 3px rgba(0,0,0,.6);
 }
 .pal-dot {
-  width: 18px; height: 18px; border-radius: 50%;
-  border: 1.5px solid rgba(255,255,255,.25);
-  box-shadow: inset 0 1px 1px rgba(255,255,255,.4), 0 2px 4px rgba(0,0,0,.4);
+  width: 13px; height: 13px; border-radius: 50%;
+  border: 1.5px solid rgba(255,255,255,.22);
+  box-shadow: inset 0 1px 1px rgba(255,255,255,.4), 0 1px 3px rgba(0,0,0,.5);
   transition: transform .14s;
 }
 .pal-dot:active { transform: scale(.85); }
-.pal-dot.sel { border-color: #fff; transform: scale(1.15); box-shadow: 0 0 10px 1px currentColor; }
+.pal-dot.sel { border-color: #fff; transform: scale(1.25); box-shadow: 0 0 8px 1px currentColor; }
 
 /* =============================================================================
-   STATION LAYER — a station grows from its glyph, home recedes behind
+   SCREEN — the recessed well. The diorama or a station renders inside it while
+   the top + bottom decks stay put. A slim head strip carries station chrome.
    ========================================================================== */
-.station-layer {
-  position: absolute; inset: 0; z-index: 20;
-  padding-top: var(--top-inset);        /* back arrow / title clear the status bar / notch */
-  display: flex; flex-direction: column;
-  opacity: 0; transform: scale(1.08); transform-origin: 50% 50%;
-  pointer-events: none;
-  transition: opacity .34s ease, transform .42s cubic-bezier(.3,.9,.25,1);
-  background:
-    radial-gradient(120% 80% at 50% -8%, hsl(var(--tint) 55% 12% / 0.95), transparent 60%),
-    linear-gradient(180deg, var(--bg1), var(--bg0));
+.screen {
+  position: relative; z-index: 10; flex: 1 1 auto; min-height: 0;
+  margin: 0 8px; display: flex; flex-direction: column; overflow: hidden;
+  border-radius: 22px;
+  background: linear-gradient(180deg, var(--bg1), var(--bg0));
+  box-shadow: inset 0 2px 7px rgba(0,0,0,.75), inset 0 0 0 1px rgba(255,255,255,.03),
+    0 1px 0 rgba(255,255,255,.06);
 }
-.device.station-open .station-layer { opacity: 1; transform: scale(1); pointer-events: auto; }
+.screen::after {   /* recessed bezel shading */
+  content: ""; position: absolute; inset: 0; z-index: 8; pointer-events: none;
+  border-radius: 22px; box-shadow: inset 0 0 26px rgba(0,0,0,.5), inset 0 0 0 1px rgba(0,0,0,.5);
+}
 
-.station-bar {
-  position: relative; z-index: 3; flex: none;
-  height: 52px; padding: 0 12px; margin-top: 2px;
-  display: flex; align-items: center; gap: 10px;
+/* station chrome — shown only when a station is active */
+.screen-head {
+  position: relative; z-index: 6; flex: none;
+  height: 44px; padding: 0 8px 0 6px;
+  display: flex; align-items: center; gap: 8px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(180deg, rgba(18,26,38,.72), rgba(18,26,38,.15));
 }
-.st-back {
-  width: 40px; height: 40px; border-radius: 13px; flex: none;
-  display: grid; place-items: center; color: var(--ink);
-  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: blur(10px);
+.screen-head[hidden] { display: none; }
+.sh-home {
+  width: 36px; height: 36px; border-radius: 11px; flex: none;
+  display: grid; place-items: center; color: var(--ink-dim);
+  background: var(--glass); border: 1px solid var(--glass-brd); backdrop-filter: blur(8px);
   transition: transform .12s, color .12s;
 }
-.st-back:active { transform: scale(.88); color: var(--accent); }
-.st-title { display: flex; align-items: center; gap: 8px; font: 700 16px "Chakra Petch"; letter-spacing: .12em; }
-.st-ico { display: inline-flex; color: var(--accent); }
-.st-ico svg { width: 20px; height: 20px; }
-.st-aux { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
+.sh-home:active { transform: scale(.9); color: var(--accent); }
+.sh-title { display: flex; align-items: center; gap: 8px; font: 700 15px "Chakra Petch"; letter-spacing: .12em; }
+.sh-ico { display: inline-flex; color: var(--accent); }
+.sh-ico svg { width: 19px; height: 19px; }
+.sh-aux { margin-left: auto; display: inline-flex; align-items: center; gap: 8px; }
 
-.station {
-  flex: 1 1 auto; min-height: 0; position: relative;
-  display: flex; flex-direction: column;
-  padding: 0 12px 12px;
-}
+/* the swapping view area — one view visible at a time */
+.screen-body { position: relative; z-index: 2; flex: 1 1 auto; min-height: 0; }
+.view { position: absolute; inset: 0; display: flex; flex-direction: column; }
+.view[hidden] { display: none; }
+.screen-body.swap > .view:not([hidden]) { animation: screenIn .26s cubic-bezier(.3,.9,.25,1) both; }
+@keyframes screenIn { from { opacity: 0; transform: scale(1.025); } to { opacity: 1; transform: none; } }
+/* the diorama fills the well edge-to-edge (the screen supplies the frame);
+   this selector outranks hangout.css's .stage{position:relative} */
+.screen-body .stage { position: absolute; inset: 0; margin: 0; border: 0; border-radius: 0; box-shadow: none; }
+
+/* station panels are views (.view supplies position/flex); default gutter, and
+   the top pad drops content clear of the screen-head strip */
+.station { padding: 8px 12px 12px; }
 .station[hidden] { display: none; }
 
 /* =============================================================================
@@ -424,7 +413,30 @@ body.standalone .home-indicator { display: none; }
 .mp-foot, .moveFoot { font: 600 10px "Share Tech Mono"; color: var(--ink-mute); padding-top: 8px; text-align: center; }
 .is-body { overflow-y: auto; }
 .is-foot { padding-top: 10px; }
-.set-body { overflow-y: auto; }
+.set-body { overflow-y: auto; display: flex; flex-direction: column; gap: 16px; }
+.set-block { display: flex; flex-direction: column; gap: 8px; }
+.set-lbl { font: 700 10px "Share Tech Mono"; letter-spacing: .16em; color: var(--ink-mute); }
+.set-pal { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+.setp {
+  display: flex; align-items: center; gap: 7px; padding: 8px 9px; border-radius: 12px;
+  background: var(--bg2); border: 1px solid var(--line); transition: border-color .14s, transform .12s;
+}
+.setp:active { transform: scale(.95); }
+.setp.sel { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.setp-sw { width: 16px; height: 16px; border-radius: 50%; flex: none; background: var(--c);
+  border: 1.5px solid rgba(255,255,255,.3); box-shadow: 0 0 8px 1px color-mix(in srgb, var(--c) 55%, transparent); }
+.setp-nm { font: 600 10.5px "Chakra Petch"; letter-spacing: .04em; color: var(--ink-dim); text-transform: capitalize; }
+.setp.sel .setp-nm { color: var(--ink); }
+.set-meta { display: flex; flex-wrap: wrap; gap: 6px; }
+.set-meta span { font: 600 9.5px "Share Tech Mono"; letter-spacing: .04em; color: var(--ink-dim);
+  padding: 4px 9px; border-radius: 8px; background: var(--bg2); border: 1px solid var(--line); }
+.set-danger {
+  width: 100%; height: 40px; border-radius: 12px; font: 700 11px "Chakra Petch"; letter-spacing: .1em;
+  color: var(--danger); background: color-mix(in srgb, var(--danger) 10%, var(--bg2));
+  border: 1px solid color-mix(in srgb, var(--danger) 40%, var(--line)); transition: transform .12s, background .16s;
+}
+.set-danger:active { transform: scale(.97); background: color-mix(in srgb, var(--danger) 20%, var(--bg2)); }
+.set-foot { font: 400 9px "Share Tech Mono"; letter-spacing: .06em; color: var(--ink-mute); text-align: center; }
 
 /* =============================================================================
    FIT TOGGLE (dev)
