@@ -83,6 +83,9 @@ img { -webkit-user-drag: none; user-select: none; }
 .device {
   position: relative;
   width: 390px; height: 844px;
+  /* top inset = height of the status area the top chrome must clear (drawn bar in
+     the browser; the notch when installed). See .home / .station-layer padding. */
+  --top-inset: 44px;
   background:
     radial-gradient(120% 80% at 50% -8%, hsl(var(--tint) 55% 12% / 0.9), transparent 60%),
     linear-gradient(180deg, var(--bg1), var(--bg0));
@@ -97,7 +100,7 @@ body.standalone .device-wrap, body.fs .device-wrap { display: block; }
 body.standalone .device, body.fs .device {
   width: 100dvw; height: 100dvh; border-radius: 0; box-shadow: none;
 }
-body.standalone .device { padding-top: env(safe-area-inset-top); }
+body.standalone .device { --top-inset: env(safe-area-inset-top); }
 
 /* --------------------------------------------------------- ambient --------- */
 .amb { position: absolute; inset: 0; pointer-events: none; z-index: 0; }
@@ -144,6 +147,7 @@ body.standalone .home-indicator { display: none; }
    ========================================================================== */
 .home {
   position: absolute; inset: 0; z-index: 10;
+  padding-top: var(--top-inset);        /* crown clears the status bar / notch */
   display: flex; flex-direction: column;
   transition: transform .5s cubic-bezier(.5,0,.2,1), opacity .38s ease, filter .38s ease;
 }
@@ -254,6 +258,7 @@ body.standalone .home-indicator { display: none; }
    ========================================================================== */
 .station-layer {
   position: absolute; inset: 0; z-index: 20;
+  padding-top: var(--top-inset);        /* back arrow / title clear the status bar / notch */
   display: flex; flex-direction: column;
   opacity: 0; transform: scale(1.08); transform-origin: 50% 50%;
   pointer-events: none;

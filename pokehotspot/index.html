@@ -224,39 +224,41 @@
 <script src="js/audit.js"></script>
 <script src="js/sim.js"></script>
 <script>
-  // fill-screen (desktop/browser preview): scale the whole device to fill the
-  // viewport at its 390x844 aspect. A Home-Screen (standalone) launch skips this
-  // and takes the real-app path (body.standalone: full-bleed + env() insets).
+  // Fit the fixed 390×844 device into the viewport so it is never clipped: scale it
+  // down (never up) to whichever of width/height binds, kept centred by the wrap.
+  // A Home-Screen (standalone) launch instead goes full-bleed with safe-area insets
+  // (body.standalone, in CSS). The corner button toggles native fullscreen.
   (() => {
-    const AR_W = 390, AR_H = 844, KEY = "pokehotspot-fillscreen";
-    const wrap = document.getElementById("deviceWrap");
+    const AR_W = 390, AR_H = 844;
+    const device = document.getElementById("device");
     const btn = document.getElementById("fitToggle");
+    const standalone = (navigator.standalone === true) ||
+      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
+
     const fit = () => {
-      if (!document.body.classList.contains("fs")) { wrap.style.transform = ""; return; }
+      if (standalone) { device.style.transform = ""; return; }   // full-bleed via CSS
       const vv = window.visualViewport;
       const vw = vv ? vv.width : window.innerWidth;
       const vh = vv ? vv.height : window.innerHeight;
-      const s = Math.min(vw / AR_W, vh / AR_H);
-      wrap.style.transform = "translate(" + (vw - AR_W) / 2 + "px, " + (vh - AR_H) / 2 + "px) scale(" + s + ")";
+      const s = Math.min(vw / AR_W, vh / AR_H, 1);
+      device.style.transform = s < 1 ? "scale(" + s + ")" : "";
     };
-    const setFS = (on, { native = false, persist = true } = {}) => {
-      document.body.classList.toggle("fs", on);
-      btn.setAttribute("aria-label", on ? "Exit full screen" : "Fill the screen");
-      fit();
-      if (persist) { try { localStorage.setItem(KEY, on ? "1" : "0"); } catch {} }
-      if (native) { try { const el = document.documentElement;
-        if (on && el.requestFullscreen) el.requestFullscreen().catch(() => {});
-        else if (!on && document.fullscreenElement && document.exitFullscreen) document.exitFullscreen();
-      } catch {} }
-    };
-    btn.addEventListener("click", () => setFS(!document.body.classList.contains("fs"), { native: true }));
+
+    if (standalone) document.body.classList.add("standalone");
+    fit();
     addEventListener("resize", fit);
     addEventListener("orientationchange", fit);
     if (window.visualViewport) window.visualViewport.addEventListener("resize", fit);
-    const standalone = (navigator.standalone === true) ||
-      (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches);
-    if (standalone) { document.body.classList.add("standalone"); }
-    else { let saved = "0"; try { saved = localStorage.getItem(KEY) || "0"; } catch {} if (saved === "1") setFS(true, { persist: false }); }
+
+    // corner button → native fullscreen toggle (desktop immersion)
+    btn.addEventListener("click", () => {
+      try {
+        if (!document.fullscreenElement && document.documentElement.requestFullscreen)
+          document.documentElement.requestFullscreen().catch(() => {});
+        else if (document.fullscreenElement && document.exitFullscreen)
+          document.exitFullscreen();
+      } catch {}
+    });
   })();
 </script>
 </body>
