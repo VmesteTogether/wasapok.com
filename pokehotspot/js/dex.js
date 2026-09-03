@@ -11,6 +11,8 @@
   const REG_SHORT = { 1:"KAN", 2:"JOH", 3:"HOE", 4:"SIN", 5:"UNO", 6:"KAL", 7:"ALO", 8:"GAL", 9:"PAL" };
   const CAP = 140;
   let built = false, region = 0, query = "", focus = null;
+  // picker state — the row centred under the glass lens is the live focus
+  let rowsCache = [], rowEls = [], rowH = 54, rowStep = 59, padY = 0, curIdx = -1, magRow = null, ticking = false;
 
   const baseSet = () => {
     let list = P.DEX;
@@ -24,7 +26,14 @@
     focus = u; if (!u) return;
     const inTeam = P.state.team.some(t => t && t.id === u.id);
     const regs = P.REGION_OF.get(u.dexno) || [];
-    $("#dxsSpr").src = HOME(u.id); $("#dxsSpr").setAttribute("onerror", spriteFallback(u.dexno));
+    // instant: the small list sprite is already cached, so the spotlight tracks
+    // the scroll in real time; upgrade to the crisp HOME render once it loads
+    const spr = $("#dxsSpr");
+    spr.style.imageRendering = "pixelated";
+    spr.src = SPRITE(u.id); spr.setAttribute("onerror", spriteFallback(u.dexno));
+    const hi = new Image();
+    hi.onload = () => { if (focus && focus.id === u.id) { spr.src = HOME(u.id); spr.style.imageRendering = "auto"; } };
+    hi.src = HOME(u.id);
     $("#dxsNo").textContent = `Nº ${String(u.dexno).padStart(4,"0")} · GEN ${P.ROMAN[u.gen-1]}`;
     $("#dxsName").textContent = u.name;
     $("#dxsTypes").innerHTML = P.typeChips(u);
@@ -34,15 +43,54 @@
     const fileBtn = $("#dxsFile");
     fileBtn.disabled = inTeam || P.partyCount() >= 6;
     fileBtn.textContent = inTeam ? "✓ ON TEAM" : (P.partyCount() >= 6 ? "TEAM FULL" : "▸ FILE");
-    // reflect the focused row
-    P.$$(".dex-row", $("#dexList")).forEach(r => r.classList.toggle("on", +r.dataset.id === u.id));
+  };
+
+  // ---- picker: scroll the list, the centred row lands under the lens and
+  // fills the spotlight live (no click needed). ------------------------------
+  const measure = () => {
+    const listEl = $("#dexList"); if (!listEl) return;
+    rowEls = [...listEl.querySelectorAll(".dex-row")];
+    rowH = rowEls.length ? (rowEls[0].offsetHeight || rowH) : rowH;
+    padY = Math.max(0, listEl.clientHeight / 2 - rowH / 2);
+    listEl.style.paddingTop = padY + "px";
+    listEl.style.paddingBottom = padY + "px";
+  };
+  // read live layout (offsetTop) so centring is exact regardless of measure timing
+  const rowCenter = i => rowEls[i].offsetTop + rowEls[i].offsetHeight / 2;
+  const centeredIndex = () => {
+    const listEl = $("#dexList"); if (!rowEls.length) return 0;
+    const centerY = listEl.scrollTop + listEl.clientHeight / 2;
+    const step = rowEls[1] ? (rowCenter(1) - rowCenter(0)) : rowEls[0].offsetHeight + 5;
+    const idx = Math.round((centerY - rowCenter(0)) / step);
+    return Math.max(0, Math.min(rowsCache.length - 1, idx));
+  };
+  const focusIndex = (idx) => {
+    if (!rowsCache.length) return;
+    idx = Math.max(0, Math.min(rowsCache.length - 1, idx));
+    curIdx = idx;
+    setFocus(rowsCache[idx]);
+    if (magRow) magRow.classList.remove("mag");
+    magRow = rowEls[idx] || null;
+    if (magRow) magRow.classList.add("mag");
+  };
+  const scrollToIndex = (idx, smooth) => {
+    const listEl = $("#dexList"); if (!rowEls[idx]) return;
+    const top = rowCenter(idx) - listEl.clientHeight / 2;
+    listEl.scrollTo({ top: Math.max(0, top), behavior: smooth ? "smooth" : "auto" });
+  };
+  const onScroll = () => {
+    if (ticking) return; ticking = true;
+    requestAnimationFrame(() => { ticking = false;
+      const idx = centeredIndex();
+      if (idx !== curIdx) { focusIndex(idx); buzz(3); }
+    });
   };
 
   const render = () => {
     const list = baseSet();
-    const rows = list.slice(0, CAP);
+    rowsCache = list.slice(0, CAP);
     const wrap = $("#dexList");
-    wrap.innerHTML = rows.map(u => {
+    wrap.innerHTML = rowsCache.map(u => {
       const inTeam = P.state.team.some(t => t && t.id === u.id);
       const regs = P.REGION_OF.get(u.dexno) || [];
       return `<button class="dex-row ${inTeam?"inteam":""}" data-id="${u.id}">
@@ -57,9 +105,16 @@
     $("#dexFoot").textContent = list.length > CAP
       ? `showing ${CAP} of ${list.length} — refine search or region`
       : `${list.length} ${region?REG_SHORT[region]+" ":""}${list.length===1?"entry":"entries"}`;
-    // keep spotlight coherent
-    if (!focus || !list.some(u => u.id === focus.id)) setFocus(rows[0] || focus);
-    else setFocus(focus);
+    // measure the fresh rows, then centre the lens on the focused (or first)
+    // species so the spotlight stays coherent
+    magRow = null; curIdx = -1;
+    measure();
+    if (rowsCache.length) {
+      let target = 0;
+      if (focus) { const i = rowsCache.findIndex(u => u.id === focus.id); if (i >= 0) target = i; }
+      scrollToIndex(target, false);
+      focusIndex(target);
+    } else setFocus(focus);
   };
 
   const buildChips = () => {
@@ -94,7 +149,10 @@
           <button class="si-clear" id="dexClear" aria-label="Clear">&times;</button></div>
         <div class="dex-chips" id="dexChips"></div>
       </div>
-      <div class="dex-list scroll" id="dexList"></div>
+      <div class="dex-listwrap">
+        <div class="dex-list scroll" id="dexList"></div>
+        <div class="dex-lens" aria-hidden="true"><span class="dxl-caret l">&lsaquo;</span><span class="dxl-caret r">&rsaquo;</span></div>
+      </div>
       <div class="dex-foot" id="dexFoot"></div>`;
 
     buildChips();
@@ -105,8 +163,10 @@
     $("#dexClear").addEventListener("click", () => { $("#dexSearch").value=""; query=""; render(); });
 
     const list = $("#dexList");
+    list.addEventListener("scroll", onScroll, { passive: true });
+    // tap a row → glide it up to the lens (which then focuses it live)
     list.addEventListener("click", e => { const r = e.target.closest(".dex-row"); if (!r) return;
-      const u = P.byId.get(+r.dataset.id); setFocus(u); buzz(6); });
+      const i = rowEls.indexOf(r); if (i >= 0) { scrollToIndex(i, true); buzz(6); } });
     // long-press a row = quick-file
     let lpTimer, lpMoved;
     list.addEventListener("touchstart", e => { const r = e.target.closest(".dex-row"); if (!r) return;
@@ -127,8 +187,7 @@
     title: "DEX",
     open(container) {
       if (!built) build(container);
-      if (!focus) { const pool = P.DEX.slice(0, 151); focus = pool[Math.floor(Math.random()*pool.length)]; }
-      render();
+      render();   // lands on the top of the index (or the last-focused species)
     },
   };
   P.on("team", () => { if (built && !$("#station-dex").hidden) render(); });

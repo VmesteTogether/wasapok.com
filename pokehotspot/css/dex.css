@@ -53,23 +53,58 @@
 }
 .dchip.sel { color: var(--accent-ink); background: var(--accent); border-color: transparent; box-shadow: 0 0 10px var(--glow); }
 
-/* --- list --- */
-.dex-list { flex: 1 1 auto; min-height: 0; display: flex; flex-direction: column; gap: 5px; padding-right: 2px; }
+/* --- list: a picker wheel. The row centred under the glass lens is the live
+   focus (fills the spotlight up top); the ends fade so the centre reads. --- */
+.dex-listwrap { position: relative; flex: 1 1 auto; min-height: 0; }
+.dex-list {
+  position: absolute; inset: 0; overflow-y: auto; overscroll-behavior: contain;
+  display: flex; flex-direction: column; gap: 5px; padding-right: 2px;
+  scroll-snap-type: y proximity;
+  -webkit-mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 87%, transparent 100%);
+          mask-image: linear-gradient(180deg, transparent 0, #000 13%, #000 87%, transparent 100%);
+}
 .dex-row {
+  scroll-snap-align: center;
   display: flex; align-items: center; gap: 10px; padding: 6px 10px; border-radius: 14px;
   background: var(--glass); border: 1px solid transparent; text-align: left; width: 100%;
-  transition: border-color .12s, transform .1s;
+  transition: transform .16s ease, border-color .14s, background .16s, box-shadow .16s;
 }
-.dex-row:active { transform: scale(.985); }
-.dex-row.on { border-color: var(--accent); box-shadow: 0 0 0 2px var(--glow); }
 .dex-row.inteam { border-color: var(--good); }
-.dxr-spr { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; flex: none; }
+/* the magnified row sitting under the lens */
+.dex-row.mag {
+  transform: scale(1.045);
+  border-color: color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--accent) 13%, var(--glass));
+  box-shadow: 0 5px 16px rgba(0,0,0,.42);
+}
+.dex-row.mag .dxr-name { color: var(--ink); }
+.dxr-spr { width: 42px; height: 42px; object-fit: contain; image-rendering: pixelated; flex: none; transition: transform .16s; }
+.dex-row.mag .dxr-spr { transform: scale(1.08); }
 .dxr-main { flex: 1; min-width: 0; }
 .dxr-name { font: 700 14px "Chakra Petch"; text-transform: capitalize; }
 .dxr-sub { display: flex; gap: 5px; margin-top: 2px; align-items: center; }
 .dxr-no { font: 600 9px "Share Tech Mono"; color: var(--ink-mute); }
 .dxr-regdots { display: inline-flex; gap: 3px; margin-left: auto; }
 .dxr-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); opacity: .8; }
+
+/* the glass lens — a fixed focus band the rows scroll under */
+.dex-lens {
+  position: absolute; left: 1px; right: 3px; top: 50%; transform: translateY(-50%);
+  height: 58px; pointer-events: none; z-index: 5; border-radius: 16px;
+  border: 1px solid color-mix(in srgb, var(--accent) 38%, var(--glass-brd));
+  background: linear-gradient(180deg, rgba(255,255,255,.09), rgba(255,255,255,.015) 48%, rgba(255,255,255,.06));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.22), inset 0 -1px 0 rgba(255,255,255,.10),
+    0 0 22px color-mix(in srgb, var(--accent) 24%, transparent);
+}
+.dex-lens::before, .dex-lens::after {
+  content: ""; position: absolute; left: 10px; right: 10px; height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 65%, transparent), transparent);
+}
+.dex-lens::before { top: -1px; } .dex-lens::after { bottom: -1px; }
+.dxl-caret { position: absolute; top: 50%; transform: translateY(-50%); color: var(--accent);
+  font: 700 17px "Chakra Petch"; opacity: .75; text-shadow: 0 0 8px var(--glow); }
+.dxl-caret.l { left: 2px; } .dxl-caret.r { right: 2px; }
+
 .dex-foot { flex: none; text-align: center; padding: 8px 0 2px; font: 600 10px "Share Tech Mono"; color: var(--ink-mute); }
 
 /* info-sheet content (shared, styled here) */
