@@ -1,129 +1,116 @@
 /* =============================================================================
    POKÉHOTSPOT — hangout.css
-   The living diorama: your six as billboarded sprites in a selectable locale,
-   idle-bobbing under a day/night sky. Tap a 'mon → it hops and cries.
+   Home: TOP a 3×2 portrait grid (crisp artwork), BOTTOM the ENDLESS ROUTE —
+   the party's pixel sprites travelling through a parallaxed, day/night locale.
    ========================================================================== */
-.stage {
-  position: relative; flex: 1 1 auto; min-height: 0;
-  margin: 4px 10px 0; border-radius: 30px; overflow: hidden;
-  border: 1px solid var(--glass-brd);
-  box-shadow: inset 0 1px 0 rgba(255,255,255,.08), var(--shadow);
-  isolation: isolate;
-}
+.stage { display: flex; flex-direction: column; }
 
-/* --- sky (locale + time of day drive the gradient) --- */
-.stage-sky { position: absolute; inset: 0; z-index: 0; transition: background 1.2s ease; }
-.stage-ground { position: absolute; left: 0; right: 0; bottom: 0; height: 58%; z-index: 1; transition: background 1s ease; }
-
-/* locale skins (self-contained, no external art) */
-.stage[data-loc="route"]     .stage-sky   { background: linear-gradient(180deg, #8fd0ff 0%, #cfeeff 46%, #eafaf0 62%); }
-.stage[data-loc="route"]     .stage-ground{ background: linear-gradient(180deg, #7fca6a, #5aa74e 60%, #468a3e); }
-.stage[data-loc="beach"]     .stage-sky   { background: linear-gradient(180deg, #7fd6ff 0%, #bff0ff 44%, #e7fbff 60%); }
-.stage[data-loc="beach"]     .stage-ground{ background: linear-gradient(180deg, #6fd0e8 0 20%, #f2e2b0 20%, #e8d295 100%); }
-.stage[data-loc="cave"]      .stage-sky   { background: radial-gradient(120% 90% at 50% 20%, #2a3550, #10131f 75%); }
-.stage[data-loc="cave"]      .stage-ground{ background: linear-gradient(180deg, #3a3550, #241f36 60%, #191426); }
-.stage[data-loc="pokecenter"] .stage-sky   { background: linear-gradient(180deg, #ffe3ea 0%, #ffd0dc 50%, #fff2f5 64%); }
-.stage[data-loc="pokecenter"] .stage-ground{ background: linear-gradient(180deg, #f4c3ce, #e79fb2 70%); }
-.stage[data-loc="meadow"]    .stage-sky   { background: linear-gradient(180deg, #ffd98a 0%, #ffeeba 40%, #f4ffe0 60%); }
-.stage[data-loc="meadow"]    .stage-ground{ background: linear-gradient(180deg, #9fd66a, #7dbb54 60%, #66a046); }
-.stage[data-loc="summit"]    .stage-sky   { background: linear-gradient(180deg, #b7d6ff 0%, #e9f4ff 46%, #ffffff 62%); }
-.stage[data-loc="summit"]    .stage-ground{ background: linear-gradient(180deg, #eef6ff, #cfe0f0 60%, #b6cbe0); }
-
-/* time-of-day wash sits over the locale sky */
-.stage-sky::after {
-  content: ""; position: absolute; inset: 0; transition: opacity 1.4s, background 1.4s;
-  background: var(--tod-wash, transparent); opacity: var(--tod-op, 0);
-  mix-blend-mode: multiply;
+/* =============================== TOP: PORTRAIT GRID ======================== */
+.party-grid {
+  flex: 46 1 0; min-height: 0;
+  display: grid; grid-template-columns: repeat(3, 1fr); grid-template-rows: repeat(2, 1fr);
+  gap: 6px; padding: 8px 8px 5px;
 }
-.stage.tod-dawn  { --tod-wash: linear-gradient(180deg,#ff9a76,#ffd7a1); --tod-op:.28; }
-.stage.tod-day   { --tod-op:0; }
-.stage.tod-dusk  { --tod-wash: linear-gradient(180deg,#ff7a5c,#7a5ea8); --tod-op:.34; }
-.stage.tod-night { --tod-wash: linear-gradient(180deg,#0b1636,#243056); --tod-op:.6; }
+.pg-cell {
+  position: relative; border-radius: 16px; overflow: hidden;
+  display: grid; place-items: center;
+  background: var(--glass); border: 1px solid var(--glass-brd);
+  transition: transform .12s, border-color .16s;
+}
+.pg-cell:active { transform: scale(.96); }
+.pg-cell.empty { background: rgba(0,0,0,.22); border: 1px dashed var(--line); color: var(--ink-mute); }
+.pg-plus { font: 200 36px "Chakra Petch"; opacity: .4; line-height: 1; }
+.pg-cell.empty:active .pg-plus { opacity: .7; color: var(--accent); }
+.pg-cell.filled {
+  background: radial-gradient(120% 95% at 50% 12%, color-mix(in srgb, var(--accent) 13%, var(--bg2)), var(--bg1));
+  box-shadow: inset 0 1px 0 var(--glass-hi);
+}
+.pg-cell.lead { border-color: color-mix(in srgb, var(--accent) 45%, var(--glass-brd));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 30%, transparent), inset 0 1px 0 var(--glass-hi); }
+.pg-lead { position: absolute; top: 5px; left: 8px; z-index: 3; font-size: 12px; color: #ffd45a; filter: drop-shadow(0 1px 2px rgba(0,0,0,.55)); }
+.pg-art { width: 100%; height: 100%; object-fit: contain; padding: 6px 6px 12px;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,.42)); transition: transform .3s; }
+.pg-cell.cry .pg-art { animation: pgCry .5s ease; }
+@keyframes pgCry { 0%,100%{transform:none} 30%{transform:translateY(-6px) scale(1.05)} 60%{transform:translateY(0) scale(.98)} }
+.pg-name { position: absolute; left: 0; right: 0; bottom: 0; z-index: 2; padding: 6px 5px 3px; text-align: center;
+  font: 700 9.5px "Chakra Petch"; letter-spacing: .03em; text-transform: capitalize; color: var(--ink);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  background: linear-gradient(180deg, transparent, rgba(0,0,0,.55)); }
 
-/* sun/moon + drifting clouds for life */
-.stage-orb { position: absolute; z-index: 0; width: 46px; height: 46px; border-radius: 50%;
-  right: 22px; top: 22px; filter: blur(.3px); transition: background 1.2s, box-shadow 1.2s, opacity 1s; }
-.stage.tod-day  .stage-orb, .stage.tod-dawn .stage-orb { background: radial-gradient(circle at 40% 35%, #fff6d0, #ffdf7a); box-shadow: 0 0 30px 8px rgba(255,220,120,.6); }
-.stage.tod-dusk .stage-orb { background: radial-gradient(circle at 40% 35%, #ffd9c0, #ff9a6a); box-shadow: 0 0 26px 6px rgba(255,140,90,.5); }
-.stage.tod-night .stage-orb { background: radial-gradient(circle at 60% 40%, #f2f6ff, #c8d4ee); box-shadow: 0 0 22px 5px rgba(200,215,255,.5); }
-.cloud { position: absolute; z-index: 0; height: 16px; border-radius: 12px; background: rgba(255,255,255,.7);
-  filter: blur(1px); animation: drift linear infinite; }
-.cloud::before, .cloud::after { content:""; position:absolute; background: inherit; border-radius: 50%; }
-.cloud::before { width: 22px; height: 22px; left: 8px; top: -8px; }
-.cloud::after  { width: 16px; height: 16px; right: 10px; top: -6px; }
-.stage.tod-night .cloud { background: rgba(180,195,230,.35); }
-@keyframes drift { from { transform: translateX(-60px); } to { transform: translateX(420px); } }
+/* =============================== BOTTOM: ENDLESS ROUTE ===================== */
+.route-scene { flex: 54 1 0; position: relative; overflow: hidden;
+  border-top: 1px solid var(--line); border-radius: 0 0 22px 22px; isolation: isolate; }
 
-/* --- the party of billboarded sprites --- */
-.stage-scene { position: absolute; inset: 0; z-index: 2; }
-.mon {
-  position: absolute; transform: translate(-50%, -100%);
-  display: flex; flex-direction: column; align-items: center;
-  cursor: pointer; -webkit-tap-highlight-color: transparent;
-}
-.mon-shadow {
-  position: absolute; bottom: -3px; left: 50%; transform: translateX(-50%);
-  width: 62%; height: 12px; border-radius: 50%;
-  background: radial-gradient(closest-side, rgba(0,0,0,.42), transparent);
-  animation: shBob 3.2s ease-in-out infinite;
-}
-.mon-spr {
-  width: 82px; height: 82px; object-fit: contain;
-  image-rendering: pixelated; image-rendering: crisp-edges;
-  filter: drop-shadow(0 3px 4px rgba(0,0,0,.28));
-  animation: monBob 3.2s ease-in-out infinite;
-  transform-origin: bottom center;
-}
-@keyframes monBob { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-6px) } }
-@keyframes shBob  { 0%,100% { transform: translateX(-50%) scale(1) } 50% { transform: translateX(-50%) scale(.86) } }
+/* the tile map — a canvas the JS paints from a deterministic, endless world */
+.rs-map { position: absolute; inset: 0; z-index: 0; image-rendering: pixelated; }
 
-/* lead marker */
-.mon-lead { position: absolute; top: -12px; left: 50%; transform: translateX(-50%);
-  font-size: 13px; color: #ffd45a; filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); }
+/* day/night tint over the field */
+.rs-tint { position: absolute; inset: 0; z-index: 5; pointer-events: none;
+  background: var(--tod-wash, transparent); opacity: var(--tod-op, 0); mix-blend-mode: multiply; transition: opacity 1.4s, background 1.4s; }
+.route-scene.tod-dawn  { --tod-wash: linear-gradient(180deg,#ff9a76,#ffd7a1); --tod-op:.18; }
+.route-scene.tod-day   { --tod-op:0; }
+.route-scene.tod-dusk  { --tod-wash: linear-gradient(180deg,#ff7a5c,#5a4e8a); --tod-op:.28; }
+.route-scene.tod-night { --tod-wash: linear-gradient(160deg,#0b1636,#243056); --tod-op:.5; }
 
-/* hop + cry reaction */
-.mon.hop .mon-spr { animation: monHop .62s cubic-bezier(.3,1.4,.5,1); }
-@keyframes monHop {
-  0% { transform: translateY(0) scaleY(1) scaleX(1); }
-  18% { transform: translateY(2px) scaleY(.82) scaleX(1.14); }
-  46% { transform: translateY(-34px) scaleY(1.14) scaleX(.9); }
-  70% { transform: translateY(0) scaleY(.9) scaleX(1.08); }
-  100% { transform: translateY(0) scaleY(1) scaleX(1); }
-}
-.mon .cry-ring {
-  position: absolute; top: 30%; left: 50%; width: 20px; height: 20px; border-radius: 50%;
-  border: 2px solid var(--accent); transform: translate(-50%,-50%) scale(.4); opacity: 0; pointer-events: none;
-}
-.mon.hop .cry-ring { animation: cryRing .6s ease-out; }
-@keyframes cryRing { 0% { opacity:.9; transform: translate(-50%,-50%) scale(.4) } 100% { opacity:0; transform: translate(-50%,-50%) scale(2.6) } }
+/* the party — a centred cluster of animated Gen-5 sprites */
+.rs-party { position: absolute; inset: 0; z-index: 3; pointer-events: none; }
+.rs-mon { position: absolute; transform: translate(-50%,-100%); display: flex; flex-direction: column; align-items: center; }
+.rs-spr { object-fit: contain; image-rendering: pixelated; image-rendering: crisp-edges;
+  filter: drop-shadow(0 3px 4px rgba(0,0,0,.4)); animation: rsBob 2.6s ease-in-out infinite; transform-origin: bottom center; }
+@keyframes rsBob { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+.rs-party.walking .rs-spr { animation-duration: .5s; }
+.rs-shadow { position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); width: 56%; height: 8px; border-radius: 50%;
+  background: radial-gradient(closest-side, rgba(0,0,0,.42), transparent); animation: rsShad 2.6s ease-in-out infinite; }
+@keyframes rsShad { 0%,100%{transform:translateX(-50%) scale(1)} 50%{transform:translateX(-50%) scale(.86)} }
+.rs-party.walking .rs-shadow { animation-duration: .5s; }
+.rs-lead { position: absolute; top: -11px; left: 50%; transform: translateX(-50%); font-size: 11px; color: #ffd45a;
+  filter: drop-shadow(0 1px 2px rgba(0,0,0,.5)); z-index: 2; }
 
-/* locale tab (bottom-left of stage) */
-.locale-tab {
-  position: absolute; z-index: 5; left: 12px; bottom: 12px;
-  display: inline-flex; align-items: center; gap: 7px; height: 30px; padding: 0 12px 0 10px;
-  border-radius: 15px; background: rgba(10,14,20,.5); backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.18); color: #fff;
-  font: 600 10px "Share Tech Mono"; letter-spacing: .12em;
-  box-shadow: 0 4px 12px rgba(0,0,0,.3);
-}
+/* D-pad — hold a direction to walk the party through the world */
+.rs-dpad { position: absolute; z-index: 7; right: 8px; bottom: 8px;
+  display: grid; grid-template-columns: repeat(3, 28px); grid-template-rows: repeat(3, 28px); gap: 2px;
+  grid-template-areas: ". up ." "left mid right" ". down ."; }
+.dp { display: grid; place-items: center; color: #fff; font-size: 12px; touch-action: none; -webkit-user-select: none; user-select: none;
+  background: linear-gradient(180deg, rgba(30,40,54,.86), rgba(14,20,30,.86)); border: 1px solid rgba(255,255,255,.14);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.18), 0 2px 5px rgba(0,0,0,.4); backdrop-filter: blur(4px); transition: none; }
+.dp-up { grid-area: up; border-radius: 9px 9px 3px 3px; }
+.dp-down { grid-area: down; border-radius: 3px 3px 9px 9px; }
+.dp-left { grid-area: left; border-radius: 9px 3px 3px 9px; }
+.dp-right { grid-area: right; border-radius: 3px 9px 9px 3px; }
+.dp-mid { grid-area: mid; background: rgba(14,20,30,.6); border: 1px solid rgba(255,255,255,.08); box-shadow: inset 0 0 6px rgba(0,0,0,.5); }
+.dp.on { color: var(--accent-ink); background: linear-gradient(180deg, var(--accent-2), var(--accent));
+  box-shadow: 0 0 12px var(--glow), inset 0 1px 0 rgba(255,255,255,.4); border-color: transparent; }
+
+/* HUD chips */
+.locale-tab { position: absolute; z-index: 6; left: 10px; bottom: 10px;
+  display: inline-flex; align-items: center; gap: 7px; height: 28px; padding: 0 11px 0 9px; border-radius: 14px;
+  background: rgba(8,12,18,.5); backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,.18); color: #fff;
+  font: 700 9.5px "Share Tech Mono"; letter-spacing: .1em; box-shadow: 0 4px 12px rgba(0,0,0,.3); }
 .locale-tab:active { transform: scale(.94); }
-.lt-ico { width: 12px; height: 12px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 8px var(--glow); }
+.lt-ico { width: 11px; height: 11px; border-radius: 3px; background: var(--accent); box-shadow: 0 0 8px var(--glow); }
+.rs-dist { position: absolute; z-index: 6; right: 10px; top: 9px;
+  font: 700 15px "Chakra Petch"; color: #fff; letter-spacing: .02em; text-shadow: 0 1px 4px rgba(0,0,0,.6); }
+.rs-dist small { font: 700 8px "Share Tech Mono"; letter-spacing: .1em; opacity: .8; margin-left: 2px; }
+.rs-hint { position: absolute; z-index: 6; left: 50%; bottom: 10px; transform: translateX(-50%);
+  font: 700 8.5px "Share Tech Mono"; letter-spacing: .16em; color: rgba(255,255,255,.8); text-shadow: 0 1px 3px rgba(0,0,0,.6);
+  padding: 4px 10px; border-radius: 10px; background: rgba(8,12,18,.35); animation: rsHintPulse 2.6s ease-in-out infinite; transition: opacity .5s; }
+.rs-hint.gone { opacity: 0; }
+@keyframes rsHintPulse { 0%,100%{opacity:.55} 50%{opacity:.95} }
 
-/* time chip (bottom-right of stage) */
-.time-chip {
-  position: absolute; z-index: 5; right: 12px; bottom: 12px;
-  height: 30px; padding: 0 11px; display: inline-flex; align-items: center; gap: 6px;
-  border-radius: 15px; background: rgba(10,14,20,.42); backdrop-filter: blur(10px);
-  border: 1px solid rgba(255,255,255,.14); color: #fff;
-  font: 600 10px "Share Tech Mono"; letter-spacing: .1em;
-}
-
-/* empty state */
-.stage-empty {
-  position: absolute; inset: 0; z-index: 6; display: flex; flex-direction: column;
-  align-items: center; justify-content: center; gap: 8px; text-align: center;
-  background: rgba(6,10,16,.35); backdrop-filter: blur(2px);
-}
-.stage-empty[hidden] { display: none; }   /* class display would otherwise beat UA [hidden] */
-.stage-empty p { font: 700 16px "Chakra Petch"; letter-spacing: .18em; color: var(--ink); }
-.stage-empty span { font: 600 11px "Share Tech Mono"; color: var(--ink-dim); max-width: 220px; }
+/* =============================== QUICK-ADD OVERLAY ======================== */
+.qa-panel { width: calc(100% - 20px); max-width: 370px; margin-bottom: 14px; padding: 14px;
+  border-radius: 24px; background: var(--glass); border: 1px solid var(--glass-brd);
+  backdrop-filter: blur(16px) saturate(1.3); box-shadow: var(--shadow);
+  display: flex; flex-direction: column; max-height: 74%; }
+.qa-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
+  font: 700 13px "Chakra Petch"; letter-spacing: .1em; color: var(--ink-dim); }
+.qa-title b { color: var(--accent); }
+.qa-close { width: 28px; height: 28px; font-size: 20px; color: var(--ink-mute); }
+.qa-results { margin-top: 10px; overflow-y: auto; display: flex; flex-direction: column; gap: 5px; }
+.qa-row { display: flex; align-items: center; gap: 9px; padding: 6px 9px; border-radius: 11px;
+  background: var(--bg2); border: 1px solid var(--line); text-align: left; transition: transform .1s; }
+.qa-row:active { transform: scale(.98); }
+.qa-row.in { opacity: .5; }
+.qa-row img { width: 36px; height: 36px; object-fit: contain; image-rendering: pixelated; flex: none; }
+.qa-nm { flex: 1; min-width: 0; font: 700 13px "Chakra Petch"; text-transform: capitalize; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qa-add { width: 20px; text-align: center; font: 700 15px "Share Tech Mono"; color: var(--accent); flex: none; }

@@ -84,17 +84,25 @@
       </div>
 
       <div class="screen-body" id="screenBody">
-        <!-- HOME diorama -->
-        <section class="stage view" id="stage" data-view="home" aria-label="Your team, hanging out">
-          <div class="stage-sky" id="stageSky" aria-hidden="true"></div>
-          <div class="stage-scene" id="stageScene"></div>
-          <div class="stage-ground" id="stageGround" aria-hidden="true"></div>
-          <button class="locale-tab" id="localeTab" type="button" aria-label="Change locale">
-            <span class="lt-ico" aria-hidden="true"></span><span class="lt-name" id="localeName">ROUTE</span>
-          </button>
-          <div class="stage-empty" id="stageEmpty" hidden>
-            <p>YOUR&nbsp;SPOT&nbsp;IS&nbsp;EMPTY</p>
-            <span>Forge a team, take the Quiz, or browse the Dex to file your six.</span>
+        <!-- HOME — top: 3x2 portrait grid · bottom: the endless-route pixel scene -->
+        <section class="stage view" id="stage" data-view="home" aria-label="Your team">
+          <div class="party-grid" id="partyGrid" aria-label="Party portraits"></div>
+          <div class="route-scene" id="routeScene" aria-label="Your party exploring the route">
+            <canvas class="rs-map" id="rsMap" aria-hidden="true"></canvas>
+            <div class="rs-tint" id="rsTint" aria-hidden="true"></div>
+            <div class="rs-party" id="rsParty"></div>
+            <button class="locale-tab" id="localeTab" type="button" aria-label="Change environment">
+              <span class="lt-ico" aria-hidden="true"></span><span class="lt-name" id="localeName">ROUTE&nbsp;1</span>
+            </button>
+            <div class="rs-dist" id="rsDist" aria-hidden="true">0.0<small>KM</small></div>
+            <div class="rs-hint" id="rsHint" aria-hidden="true">HOLD ✛ TO WALK</div>
+            <div class="rs-dpad" id="rsDpad" aria-label="Move">
+              <button class="dp dp-up"    data-dir="up"    type="button" aria-label="Walk up">▲</button>
+              <button class="dp dp-left"  data-dir="left"  type="button" aria-label="Walk left">◀</button>
+              <span   class="dp dp-mid" aria-hidden="true"></span>
+              <button class="dp dp-right" data-dir="right" type="button" aria-label="Walk right">▶</button>
+              <button class="dp dp-down"  data-dir="down"  type="button" aria-label="Walk down">▼</button>
+            </div>
           </div>
         </section>
 
@@ -138,6 +146,20 @@
     <!-- ===================================================================
          SHARED OVERLAYS — used across stations + the hangout
          =================================================================== -->
+
+    <!-- quick-add: tap a faint + on the home portrait grid → file a species inline -->
+    <div class="quickadd overlay" id="quickAdd" aria-hidden="true">
+      <div class="qa-panel">
+        <div class="qa-head"><span class="qa-title">ADD TO SLOT <b id="qaSlot">1</b></span>
+          <button class="qa-close" id="qaClose" type="button" aria-label="Close">&times;</button></div>
+        <div class="field">
+          <span class="si-glyph" aria-hidden="true"></span>
+          <input id="qaSearch" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" placeholder="SEARCH ANY POKÉMON — NAME / Nº">
+          <button class="si-clear" id="qaClear" type="button" aria-label="Clear">&times;</button>
+        </div>
+        <div class="qa-results scroll" id="qaResults"></div>
+      </div>
+    </div>
 
     <!-- capsule menu: long-press a teammate anywhere → moves / lead / release -->
     <div class="capmenu overlay" id="capMenu" aria-hidden="true">
