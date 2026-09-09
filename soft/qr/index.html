@@ -1,0 +1,1262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; connect-src 'self' data: blob:; worker-src 'self' blob:; base-uri 'self'; form-action 'none'; object-src 'none';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#003332">
+<meta name="description" content="QR Generator — styled, printable QR codes generated in your browser.">
+
+<title>QR Generator · VmesteSoft</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vmestesoft.css">
+
+<!-- styled QR rendering -->
+<script src="https://cdn.jsdelivr.net/npm/qr-code-styling@1.6.0-rc.1/lib/qr-code-styling.js"></script>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  /* ── LIGHT (default): white / beige / cream, espresso ink, amber accents ── */
+  /* LAYOUT */
+  main {
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 24px;
+  }
+  .workspace {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 380px;
+    gap: 18px;
+    align-items: start;
+  }
+
+  /* LABELS */
+  label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ash);
+  }
+  .label-hint {
+    font-family: 'Barlow', sans-serif;
+    font-size: 12px; font-weight: 400;
+    letter-spacing: 0.2px; text-transform: none;
+    color: var(--ash); opacity: 0.85;
+    margin-left: 4px;
+  }
+
+  .field { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
+
+  /* CONTENT FIELD — panel treatment */
+  .field.content-field {
+    gap: 0;
+    background: var(--tar);
+    border: 1px solid var(--line);
+    margin-bottom: 14px;
+  }
+  .field.content-field:focus-within { border-color: var(--line-hi); }
+  .content-field label {
+    display: block;
+    background: var(--house);
+    padding: 7px 14px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ash);
+  }
+  .content-field .label-hint { color: var(--ash); opacity: 0.75; letter-spacing: 0.5px; margin-left: 8px; }
+  .content-field textarea {
+    display: block; width: 100%;
+    font-family: 'Barlow', sans-serif;
+    font-size: 16px; font-weight: 500;
+    background: var(--tar);
+    color: var(--bone);
+    border: none;
+    padding: 12px 14px;
+    min-height: 72px;
+    resize: vertical;
+    line-height: 1.5;
+  }
+  .content-field textarea::placeholder { color: var(--ash); opacity: 0.7; }
+  .content-field textarea:focus-visible { outline: 2px solid var(--line-hi); outline-offset: -2px; }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  /* MODE TOGGLE */
+  .mode-toggle {
+    display: flex; gap: 3px; padding: 3px;
+    background: var(--tar);
+    border: 1px solid var(--line);
+    margin-bottom: 14px;
+  }
+  .mode-btn {
+    flex: 1;
+    padding: 9px 12px;
+    border: none;
+    border-radius: 0;
+    background: none;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ash);
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+  }
+  .mode-btn:hover { color: var(--bone); background: var(--slab); }
+  .mode-btn[aria-selected="true"] {
+    background: var(--house);
+    color: var(--acid);
+    text-shadow: 1px 1px 0 #000;
+    box-shadow: inset 0 -2px 0 rgba(0,0,0,0.45), inset 0 1px 0 rgba(255,255,255,0.06);
+  }
+  .mode-btn:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
+  /* TAB PANELS */
+  .tab-panel { display: none; }
+  .tab-panel[data-active="true"] { display: block; }
+
+  /* SECTION */
+  .section { margin-bottom: 18px; }
+  .section-label {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ash);
+    margin-bottom: 8px;
+  }
+
+  /* PRESET GRID */
+  .preset-grid {
+    display: grid; grid-template-columns: repeat(2, 1fr);
+    gap: 8px; margin-bottom: 8px;
+  }
+  .preset-item {
+    position: relative;
+    overflow: hidden;
+    isolation: isolate;
+    width: 100%;
+    aspect-ratio: 2.4 / 1;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px 14px; text-align: center;
+    background: var(--tar);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    cursor: pointer;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s, transform 0.08s, color 0.12s;
+  }
+  .preset-item:hover { border-color: var(--line-hi); background: var(--slab); }
+  .preset-item:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+  .preset-item[aria-pressed="true"] {
+    border-color: var(--acid);
+    background: var(--acid-ghost);
+    box-shadow: 3px 3px 0 var(--acid);
+    transform: translate(-1px, -1px);
+  }
+  .preset-item-bg {
+    position: absolute; inset: 0; z-index: 0;
+    background-size: cover; background-position: center; background-repeat: no-repeat;
+    filter: grayscale(1) sepia(0.55) brightness(1.05) contrast(0.92);
+    opacity: 0.16;
+    transition: opacity 0.12s, filter 0.12s;
+    pointer-events: none;
+  }
+
+  .preset-item:hover .preset-item-bg { opacity: 0.24; }
+  .preset-item[aria-pressed="true"] .preset-item-bg { opacity: 0.3; }
+  .preset-item-label {
+    position: relative; z-index: 1;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px; font-weight: 700;
+    letter-spacing: 1px; text-transform: uppercase;
+    color: var(--ash);
+    transition: color 0.12s;
+  }
+  .preset-item:hover .preset-item-label { color: var(--bone); }
+  .preset-item[aria-pressed="true"] .preset-item-label { color: var(--acid-dim); }
+
+  /* FORM ELEMENTS */
+  select,
+  input[type="text"],
+  input[type="url"],
+  input[type="number"] {
+    font-family: 'Barlow', sans-serif;
+    font-size: 14px;
+    background: var(--pit);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    color: var(--bone);
+    padding: 9px 10px; width: 100%;
+    min-height: 40px;
+    transition: border-color 0.12s;
+  }
+  select { cursor: pointer; }
+  select:hover { border-color: var(--line-hi); }
+  select:focus-visible,
+  input:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
+  input[type="range"] { flex: 1; accent-color: var(--line-hi); min-height: 24px; cursor: pointer; padding: 0; border: none; background: none; }
+  input[type="range"]:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 3px; }
+
+  /* COLOR BAR — all three colors on one line: swatch + name, nothing else.
+     The native picker already provides hex entry; the live hex value lives
+     in each swatch's tooltip. The checkerboard chip = transparent bg. */
+  .color-bar { display: flex; align-items: center; flex-wrap: wrap; gap: 10px 26px; min-height: 44px; }
+  .color-cell { display: flex; align-items: center; gap: 9px; }
+  .swatch {
+    position: relative; width: 34px; height: 34px; flex-shrink: 0;
+    border: 1px solid var(--line); border-radius: 0;
+    /* checkerboard base — visible only when the color input above it hides */
+    background: repeating-conic-gradient(var(--line) 0 25%, var(--tar) 0 50%) 0 0 / 12px 12px;
+    transition: border-color 0.12s;
+  }
+  .color-cell:hover .swatch { border-color: var(--line-hi); }
+  .swatch input[type="color"] {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    padding: 0; border: none; border-radius: 0;
+    background: none; cursor: pointer;
+  }
+  input[type="color"]::-webkit-color-swatch-wrapper { padding: 0; }
+  input[type="color"]::-webkit-color-swatch { border: none; border-radius: 0; }
+  input[type="color"]::-moz-color-swatch { border: none; border-radius: 0; }
+  .swatch input[type="color"]:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+  .swatch.is-clear input[type="color"] { opacity: 0; pointer-events: none; }
+  .color-cell .color-name {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 700;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: var(--ash); cursor: pointer;
+    transition: color 0.12s;
+  }
+  .color-cell:hover .color-name { color: var(--bone); }
+  .bg-clear-btn {
+    width: 22px; height: 22px; flex-shrink: 0; margin-left: 3px;
+    border: 1px solid var(--line); border-radius: 0;
+    padding: 0; cursor: pointer; opacity: 0.7;
+    background: repeating-conic-gradient(var(--line) 0 25%, var(--tar) 0 50%) 0 0 / 8px 8px;
+    transition: border-color 0.12s, opacity 0.12s, box-shadow 0.12s;
+  }
+  .bg-clear-btn:hover { opacity: 1; border-color: var(--line-hi); }
+  .bg-clear-btn[aria-pressed="true"] {
+    opacity: 1; border-color: var(--acid-dim);
+    box-shadow: 0 0 0 2px var(--acid) inset;
+  }
+  .bg-clear-btn:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+  /* compact — keep all three colors on one line on phones */
+  @media (max-width: 480px) {
+    .color-bar { gap: 8px 14px; }
+    .color-cell { gap: 6px; }
+    .swatch { width: 28px; height: 28px; }
+    .color-cell .color-name { font-size: 11px; letter-spacing: 1px; }
+    .bg-clear-btn { width: 20px; height: 20px; margin-left: 1px; }
+  }
+
+  .slider-row { display: flex; align-items: center; gap: 10px; }
+  .slider-val {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px; font-weight: 800;
+    color: var(--bone);
+    min-width: 60px; text-align: right; line-height: 1;
+  }
+
+  /* SHAPE CHIPS */
+  .chip-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(84px, 1fr)); gap: 6px; }
+  /* corner frame + corner dot share one row, a hairline between them */
+  .corner-row { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 14px 22px; }
+  .corner-sep { width: 1px; align-self: stretch; background: var(--line); }
+  .chip-grid--fit { display: flex; }
+  .chip-grid--fit .chip { width: 88px; flex-shrink: 0; }
+  /* phones: the two groups stack, so the vertical hairline goes away */
+  @media (max-width: 560px) {
+    .corner-sep { display: none; }
+  }
+  .chip {
+    background: var(--tar);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 9px 6px; cursor: pointer;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 13px; font-weight: 600;
+    letter-spacing: 1px; text-transform: uppercase;
+    color: var(--ash);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px; min-height: 70px;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s, transform 0.08s, color 0.12s;
+  }
+  .chip:hover { border-color: var(--line-hi); background: var(--slab); color: var(--bone); }
+  .chip:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+  .chip[aria-pressed="true"] {
+    border-color: var(--acid);
+    background: var(--acid-ghost);
+    color: var(--acid-dim);
+    box-shadow: 2px 2px 0 var(--acid);
+    transform: translate(-1px, -1px);
+  }
+  .chip-preview {
+    width: 30px; height: 30px;
+    display: flex; align-items: center; justify-content: center;
+    color: var(--line-hi);
+  }
+  .chip[aria-pressed="true"] .chip-preview { color: var(--acid-dim); }
+  .chip-preview svg { width: 100%; height: 100%; }
+
+  /* LOGO PICKER */
+  .logo-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; }
+  .logo-option {
+    background: var(--tar);
+    border: 1px solid var(--line);
+    border-radius: 0;
+    padding: 9px 6px; cursor: pointer;
+    font-family: 'Barlow', sans-serif;
+    color: var(--bone);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 6px; min-height: 84px;
+    transition: border-color 0.12s, background 0.12s, box-shadow 0.12s, transform 0.08s;
+  }
+  .logo-option:hover { border-color: var(--line-hi); background: var(--slab); }
+  .logo-option:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+  .logo-option[aria-pressed="true"] {
+    border-color: var(--acid);
+    background: var(--acid-ghost);
+    box-shadow: 2px 2px 0 var(--acid);
+    transform: translate(-1px, -1px);
+  }
+  .logo-thumb {
+    width: 40px; height: 40px;
+    display: flex; align-items: center; justify-content: center;
+    background: #FFFFFF;
+    border: 1px solid var(--line);
+    border-radius: 0;
+    flex-shrink: 0; overflow: hidden;
+  }
+  .logo-thumb svg { width: 22px; height: 22px; color: var(--line-hi); }
+  .logo-option-name { font-size: 12px; line-height: 1.25; text-align: center; overflow-wrap: anywhere; }
+  .logo-option--upload { border-style: dashed; }
+  .logo-option--upload .logo-thumb { background: var(--tar); }
+
+  /* DIVIDER */
+  hr.divider { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
+
+  /* BUTTONS */
+  .btn {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 16px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    border-radius: 0;
+    padding: 11px 18px; min-height: 46px;
+    cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center; gap: 10px;
+    transition: border-color 0.15s, background 0.15s, box-shadow 0.2s, transform 0.08s;
+  }
+  .btn-block { width: 100%; }
+  .btn-secondary {
+    background: var(--tar);
+    color: var(--bone);
+    border: 1px solid var(--line);
+  }
+  .btn-secondary:hover { border-color: var(--line-hi); background: var(--slab); }
+  .btn-secondary:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
+  /* DOWNLOAD PNG — loot-drop button */
+  .btn-primary {
+    background: linear-gradient(180deg, #3A2A1A 0%, var(--house) 60%, #140D07 100%);
+    color: #FFEFC2;
+    border: 1px solid var(--acid-dim);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.08),
+      inset 0 -1px 0 rgba(0,0,0,0.55),
+      inset 0 0 0 1px rgba(255, 122, 24, 0.18),
+      0 2px 0 #000;
+    text-shadow: 1px 1px 0 #000;
+  }
+  .btn-primary:hover {
+    border-color: var(--acid-dim);
+    box-shadow:
+      inset 0 1px 0 rgba(255,255,255,0.12),
+      inset 0 -1px 0 rgba(0,0,0,0.55),
+      inset 0 0 16px rgba(255, 122, 24, 0.30),
+      0 0 0 1px rgba(255, 168, 64, 0.55),
+      0 0 18px rgba(255, 122, 24, 0.30),
+      0 2px 0 #000;
+    transform: translateY(-1px);
+  }
+  .btn-primary:active {
+    transform: translateY(2px);
+    box-shadow: inset 0 2px 0 rgba(0,0,0,0.5), inset 0 0 0 1px rgba(255, 122, 24, 0.5);
+  }
+  .btn-primary:focus-visible { outline: 2px solid var(--acid); outline-offset: 3px; }
+  .dl-glyph {
+    width: 12px; height: 14px; flex: 0 0 12px;
+    color: var(--acid);
+    shape-rendering: crispEdges;
+    filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.55));
+  }
+  .btn-primary:hover .dl-glyph { animation: glyph-drop 0.7s ease-in-out infinite; }
+  @keyframes glyph-drop {
+    0%, 100% { transform: translateY(0); }
+    35%      { transform: translateY(3px); }
+    70%      { transform: translateY(-1px); }
+  }
+
+  /* PREVIEW PANEL */
+  .preview-panel {
+    position: sticky; top: 14px;
+    background: var(--tar);
+    border: 1px solid var(--line);
+    display: flex; flex-direction: column; align-items: center;
+    gap: 14px;
+    padding-bottom: 14px;
+  }
+  .preview-panel h2 {
+    width: 100%;
+    background: var(--house);
+    padding: 7px 14px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 14px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    color: var(--ash);
+    display: flex; align-items: center; gap: 8px;
+  }
+  .blink-dot {
+    width: 8px; height: 8px; flex-shrink: 0;
+    background: var(--acid-dim);
+    box-shadow: 0 0 6px rgba(255,122,24,0.8);
+    animation: blink 1.2s steps(2, start) infinite;
+  }
+  @keyframes blink { 50% { opacity: 0.15; } }
+
+  .qr-display {
+    background: #FFFFFF;
+    border: 1px solid var(--line);
+    width: calc(100% - 28px);
+    padding: 14px; min-height: 260px;
+    display: flex; align-items: center; justify-content: center;
+  }
+  #qr-canvas { display: flex; align-items: center; justify-content: center; }
+  #qr-canvas canvas, #qr-canvas svg { display: block; max-width: 100%; height: auto; }
+  #qr-canvas.transparent-preview {
+    background-image:
+      linear-gradient(45deg, #ccc 25%, transparent 25%), linear-gradient(-45deg, #ccc 25%, transparent 25%),
+      linear-gradient(45deg, transparent 75%, #ccc 75%), linear-gradient(-45deg, transparent 75%, #ccc 75%);
+    background-size: 16px 16px;
+    background-position: 0 0, 0 8px, 8px -8px, -8px 0px;
+  }
+
+  .empty-preview { text-align: center; color: var(--ash); padding: 2rem 1rem; }
+  .empty-preview-icon { width: 48px; height: 48px; margin: 0 auto 14px; opacity: 0.35; display: block; }
+  .ep-line {
+    font-family: var(--mono);
+    font-size: 10px; letter-spacing: 1px;
+    color: var(--ash);
+    margin-bottom: 8px;
+  }
+  .ep-cursor { animation: blink 1s steps(2, start) infinite; }
+  .ep-sub { font-size: 13px; line-height: 1.5; }
+
+  .preview-actions { display: flex; flex-direction: column; gap: 8px; width: calc(100% - 28px); }
+
+  /* TOAST */
+  .toast {
+    position: fixed; bottom: 20px; left: 50%;
+    transform: translateX(-50%) translateY(100px);
+    background: var(--house); color: #FFEFC2;
+    border: 2px solid var(--acid);
+    box-shadow: 3px 3px 0 var(--acid-dim);
+    padding: 10px 18px;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 15px; font-weight: 700;
+    letter-spacing: 2px; text-transform: uppercase;
+    opacity: 0; transition: transform 0.25s, opacity 0.25s;
+    z-index: 1000; pointer-events: none;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* MOBILE */
+  @media (max-width: 960px) {
+    .workspace { grid-template-columns: 1fr; gap: 14px; }
+    .preview-panel { position: static; order: -1; }
+    main { padding: 16px 14px 32px; }
+  }
+  @media (max-width: 560px) {
+
+
+
+
+    .chip-grid { grid-template-columns: repeat(3, 1fr); }
+  }
+
+/* ════════════════════════════════════════════════════════════════
+   VMESTESOFT SKIN — see soft/DESIGN_SPEC.md
+   ════════════════════════════════════════════════════════════════ */
+
+#main-content, .workspace { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 80px; }
+
+.label-hint, .section-label .label-hint {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ghost); opacity: 1;
+}
+.section-label {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+}
+
+/* ── content field ── */
+.field.content-field {
+  background: var(--tar); border: 1px solid var(--line); border-radius: 0;
+}
+.field.content-field:focus-within { border-color: var(--acid); }
+.content-field label {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+}
+.content-field textarea {
+  background: var(--pit); color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0;
+  font-family: var(--mono); font-size: var(--t-data);
+}
+.content-field textarea::placeholder { color: var(--ghost); opacity: 1; }
+
+/* ── mode tabs ── */
+.mode-toggle { background: transparent; border: 1px solid var(--line); border-radius: 0; gap: 0; }
+.mode-btn {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  background: transparent; color: var(--ash);
+  border: 0; border-radius: 0; min-height: 42px;
+}
+.mode-btn:hover { color: var(--bone); background: var(--slab); }
+.mode-btn[aria-selected="true"] {
+  color: var(--acid); background: var(--acid-ghost);
+  box-shadow: inset 0 -2px 0 var(--acid);
+}
+
+/* ── presets + chips ── */
+.preset-item, .chip {
+  background: var(--pit); border: 1px solid var(--line); border-radius: 0;
+}
+.preset-item:hover, .chip:hover { border-color: var(--line-hi); background: var(--slab); }
+.preset-item[aria-pressed="true"], .chip[aria-pressed="true"] {
+  border-color: var(--acid); background: var(--acid-ghost); box-shadow: none;
+}
+.preset-item-label, .chip {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ash);
+}
+.preset-item[aria-pressed="true"] .preset-item-label,
+.chip[aria-pressed="true"] { color: var(--acid); }
+
+/* ── colors ── */
+.swatch { border: 1px solid var(--line); border-radius: 0; }
+.color-cell:hover .swatch { border-color: var(--line-hi); }
+.color-cell .color-name {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ash);
+}
+.bg-clear-btn { border: 1px solid var(--line); border-radius: 0; opacity: 1; color: var(--ash); }
+.bg-clear-btn[aria-pressed="true"] { border-color: var(--acid); color: var(--acid); background: var(--acid-ghost); }
+
+/* ── slider ── */
+.slider-val { font-family: var(--mono); color: var(--acid); font-variant-numeric: tabular-nums; }
+input[type=range] { -webkit-appearance: none; appearance: none; height: 14px; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--line); }
+input[type=range]::-moz-range-track { height: 2px; background: var(--line); }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none; width: 14px; height: 14px; margin-top: -6px;
+  background: var(--acid); border: 0; border-radius: 0; cursor: pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px; background: var(--acid); border: 0; border-radius: 0;
+}
+
+/* ── preview well ──
+   The QR itself carries its own background from the chosen preset, so the
+   well behind it stays dark rather than framing every code in white. */
+.qr-display {
+  background: var(--pit); border: 1px solid var(--line); border-radius: 0;
+  padding: 20px;
+}
+.qr-display svg, .qr-display canvas { display: block; }
+.empty-preview, #empty-preview {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ghost);
+}
+.logo-thumb { background: var(--pit); border: 1px solid var(--line); border-radius: 0; }
+.logo-option { background: var(--pit); border: 1px solid var(--line); border-radius: 0; }
+.logo-option[aria-pressed="true"] { border-color: var(--acid); background: var(--acid-ghost); }
+.logo-option-name {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.10em; color: var(--ash);
+}
+
+/* ── preview + buttons ── */
+.preview-panel, .preview-card, .qr-stage {
+  background: var(--tar); border: 1px solid var(--line); border-radius: 0; box-shadow: none;
+}
+.btn {
+  font-family: var(--shout); font-weight: 800; font-size: 15px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  background: transparent; color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0; box-shadow: none;
+  padding: 10px 20px; min-height: 40px;
+  transition: transform 100ms linear, box-shadow 100ms linear, border-color 100ms linear;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--line-hi); transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--line-hi);
+}
+.btn-primary, #dl-png {
+  background: var(--acid); color: var(--void); border-color: var(--acid);
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px,
+                     100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.btn-primary:hover:not(:disabled), #dl-png:hover:not(:disabled) {
+  background: var(--acid); color: var(--void);
+  box-shadow: 2px 2px 0 var(--acid-dim), 0 0 12px rgba(0, 255, 156, 0.25);
+}
+.btn:disabled { color: var(--ghost); border-color: var(--line); opacity: 1; }
+
+.toast {
+  background: var(--pit); color: var(--bone);
+  border: 1px solid var(--acid); border-radius: 0; box-shadow: none;
+  font-family: var(--mono); font-size: var(--t-data);
+}
+</style>
+</head>
+<body class="has-orb">
+<a class="skip-link" href="#main-content">Skip to content</a>
+
+<!-- the way back to the index -->
+<a class="orb-home" href="../index.html" data-hue="#00E5FF"
+   style="--hue:#00E5FF" aria-label="VmesteSoft — all tools">
+  <canvas aria-hidden="true"></canvas>
+</a>
+
+
+
+
+<h1 class="sr-only">QR Generator</h1>
+
+<main id="main-content">
+
+  <div class="workspace">
+
+    <div class="controls-area">
+
+      <div class="field content-field">
+        <label for="content-input">Content <span class="label-hint">url, text, phone…</span></label>
+        <textarea id="content-input" placeholder="https://vmestetogether.com/..." rows="2"></textarea>
+      </div>
+
+
+      <div class="mode-toggle" role="tablist" aria-label="Style mode">
+        <button class="mode-btn" role="tab" id="tab-presets" aria-selected="true" aria-controls="panel-presets" tabindex="0">Presets</button>
+        <button class="mode-btn" role="tab" id="tab-custom" aria-selected="false" aria-controls="panel-custom" tabindex="-1">Custom</button>
+      </div>
+
+      <section class="tab-panel" role="tabpanel" aria-labelledby="tab-presets" id="panel-presets" data-active="true">
+        <div class="preset-grid" role="group" aria-label="Preset templates">
+          <!-- injected by JS -->
+        </div>
+      </section>
+
+      <section class="tab-panel" role="tabpanel" aria-labelledby="tab-custom" id="panel-custom" data-active="false" hidden>
+
+        <div class="section">
+          <div class="section-label">Module shape <span class="label-hint">small dots</span></div>
+          <div class="chip-grid" role="group" aria-label="Module shape" id="module-shapes"></div>
+        </div>
+
+        <div class="section corner-row">
+          <div class="corner-group">
+            <div class="section-label">Corner frame <span class="label-hint">three large squares</span></div>
+            <div class="chip-grid chip-grid--fit" role="group" aria-label="Corner frame shape" id="corner-shapes"></div>
+          </div>
+          <div class="corner-sep" aria-hidden="true"></div>
+          <div class="corner-group">
+            <div class="section-label">Corner dot <span class="label-hint">inside frames</span></div>
+            <div class="chip-grid chip-grid--fit" role="group" aria-label="Corner dot shape" id="cornerdot-shapes"></div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section">
+          <div class="section-label">Colors</div>
+          <div class="color-bar" role="group" aria-label="Colors">
+            <div class="color-cell">
+              <span class="swatch"><input type="color" id="color-fg" value="#1a3a5c" aria-labelledby="label-fg"></span>
+              <label class="color-name" id="label-fg" for="color-fg">Modules</label>
+            </div>
+            <div class="color-cell">
+              <span class="swatch"><input type="color" id="color-corner" value="#1a3a5c" aria-labelledby="label-corner"></span>
+              <label class="color-name" id="label-corner" for="color-corner">Corners</label>
+            </div>
+            <div class="color-cell">
+              <span class="swatch" id="swatch-bg"><input type="color" id="color-bg" value="#ffffff" aria-labelledby="label-bg"></span>
+              <label class="color-name" id="label-bg" for="color-bg">Background</label>
+              <button type="button" class="bg-clear-btn" id="bg-transparent" aria-pressed="false"
+                aria-label="Transparent background"
+                title="Transparent background — no fill, for overlaying on other designs"></button>
+            </div>
+          </div>
+        </div>
+
+        <hr class="divider">
+
+        <div class="section">
+          <div class="section-label">Logo</div>
+          <div class="logo-grid" role="radiogroup" aria-label="Center logo" id="logo-options"></div>
+          <input type="file" id="logo-upload-input" accept="image/*" hidden>
+        </div>
+
+      </section>
+
+      <div id="generate-status" class="sr-only" aria-live="polite"></div>
+
+    </div>
+
+    <aside class="preview-panel" aria-label="QR code preview">
+      <h2><span class="blink-dot" aria-hidden="true"></span> Live Preview</h2>
+      <div class="qr-display" id="qr-display">
+        <div id="qr-canvas"></div>
+        <div class="empty-preview" id="empty-preview">
+          <svg class="empty-preview-icon" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <rect x="3" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1" stroke="currentColor" stroke-width="1.5"/>
+            <path d="M14 14h3M20 14v3M14 17v4M17 17h3M20 20v1" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
+          </svg>
+          <p class="ep-line">AWAITING INPUT<span class="ep-cursor">_</span></p>
+          <p class="ep-sub"></p>
+        </div>
+      </div>
+      <div class="preview-actions" id="preview-actions" style="display:none;">
+        <button class="btn btn-primary btn-block" id="dl-png" type="button">
+          <svg class="dl-glyph" viewBox="0 0 12 14" aria-hidden="true">
+            <rect x="5" y="0" width="2" height="8" fill="currentColor"/>
+            <rect x="3" y="6" width="2" height="2" fill="currentColor"/>
+            <rect x="7" y="6" width="2" height="2" fill="currentColor"/>
+            <rect x="1" y="4" width="2" height="2" fill="currentColor"/>
+            <rect x="9" y="4" width="2" height="2" fill="currentColor"/>
+            <rect x="0" y="11" width="12" height="2" fill="currentColor"/>
+          </svg>
+          Download PNG
+        </button>
+        <button class="btn btn-secondary btn-block" id="dl-svg" type="button">Download SVG</button>
+      </div>
+    </aside>
+
+  </div>
+</main>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+
+<script>
+/*
+ * LOGOS — real artwork only, baked in from assets/logos/ as base64 by
+ * `embed-logos.mjs` (the actual files are dropped into LOGO_PNGS below).
+ * The first four drive their own branded presets; the rest are custom-logo
+ * -picker only (no preset). Templates without supplied artwork use no
+ * center logo until artwork is provided — nothing is drawn by hand.
+ */
+const LOGOS = {
+  'none': { name: 'No logo' }
+};
+
+/* LOGO-PNGS:START — baked by embed-logos.mjs; do not edit by hand */
+const LOGO_PNGS = {
+};
+/* LOGO-PNGS:END */
+
+function logoToDataURI(key) {
+  if (LOGO_PNGS[key]) return LOGO_PNGS[key];
+  const logo = LOGOS[key];
+  if (!logo || !logo.svg) return null;
+  return 'data:image/svg+xml;base64,' + btoa(unescape(encodeURIComponent(logo.svg)));
+}
+
+/*
+ * PRESETS — one template per branded city logo, styled per the city's
+ * "Various QR Codes" design sheet (square finder eyes for formal/print,
+ * round "dot" eyes for media). Modules stay square for scan reliability.
+ * Other logos are available in the Custom tab's logo picker, not here.
+ * imageSize is optional (defaults to 0.28).
+ */
+const PRESETS = {
+  'acid': {
+    name: 'Acid',
+    desc: 'Accent green on black. The house style.',
+    dotsType: 'square', cornersSquareType: 'square', cornersDotType: 'square',
+    color: '#00FF9C', bgColor: '#050D0B', logo: 'none', ec: 'H', size: 480
+  },
+  'invert': {
+    name: 'Invert',
+    desc: 'Black on white. Prints on anything, scans off anything.',
+    dotsType: 'square', cornersSquareType: 'square', cornersDotType: 'square',
+    color: '#050D0B', bgColor: '#FFFFFF', logo: 'none', ec: 'H', size: 480
+  },
+  'dots': {
+    name: 'Dots',
+    desc: 'Round modules, round eyes. Softer, still reliable.',
+    dotsType: 'dots', cornersSquareType: 'dot', cornersDotType: 'dot',
+    color: '#00FF9C', bgColor: '#050D0B', logo: 'none', ec: 'H', size: 480
+  },
+  'toxic': {
+    name: 'Toxic',
+    desc: 'Highlighter green, rounded. For stickers.',
+    dotsType: 'extra-rounded', cornersSquareType: 'extra-rounded', cornersDotType: 'dot',
+    color: '#C6FF3D', bgColor: '#050D0B', logo: 'none', ec: 'H', size: 480
+  }
+};
+
+
+const state = {
+  mode: 'presets',
+  preset: 'acid',
+  custom: {
+    dotsType: 'square', cornersSquareType: 'square', cornersDotType: 'square',
+    fg: '#00ff9c', cornerColor: '#00ff9c', bg: '#050d0b', transparentBg: false,
+    logo: 'none',
+    uploadedLogo: null, uploadedLogoName: ''
+  },
+  qrCode: null
+};
+
+/* RENDER: PRESET LIST */
+function renderPresetItems() {
+  const list = document.querySelector('.preset-grid');
+  list.innerHTML = '';
+  Object.entries(PRESETS).forEach(([key, p]) => {
+    const item = document.createElement('button');
+    item.type = 'button';
+    item.className = 'preset-item';
+    item.setAttribute('aria-pressed', key === state.preset ? 'true' : 'false');
+    item.setAttribute('title', p.desc);
+    item.dataset.key = key;
+    const logoSrc = logoToDataURI(p.logo);
+    item.innerHTML = `
+      ${logoSrc ? `<div class="preset-item-bg" style="background-image:url('${logoSrc}');"></div>` : ''}
+      <span class="preset-item-label">${p.name}</span>
+    `;
+    item.addEventListener('click', () => {
+      state.preset = key;
+      document.querySelectorAll('.preset-item').forEach(c => {
+        c.setAttribute('aria-pressed', c.dataset.key === key ? 'true' : 'false');
+      });
+      generate();
+    });
+    list.appendChild(item);
+  });
+}
+
+/* RENDER: SHAPE CHIPS */
+const MODULE_SHAPES = [
+  { key: 'square',        label: 'Square',    preview: dotPreview('square') },
+  { key: 'rounded',       label: 'Rounded',   preview: dotPreview('rounded') },
+  { key: 'dots',          label: 'Dots',      preview: dotPreview('dots') },
+  { key: 'classy',        label: 'Classy',    preview: dotPreview('classy') },
+  { key: 'classy-rounded',label: 'Classy R.', preview: dotPreview('classy-rounded') },
+  { key: 'extra-rounded', label: 'Extra R.',  preview: dotPreview('extra-rounded') }
+];
+
+const CORNER_SHAPES = [
+  { key: 'square',        label: 'Square' },
+  { key: 'extra-rounded', label: 'Rounded' },
+  { key: 'dot',           label: 'Dot' }
+];
+
+const CORNERDOT_SHAPES = [
+  { key: 'square', label: 'Square' },
+  { key: 'dot',    label: 'Dot' }
+];
+
+function dotPreview(type) {
+  const c = 'currentColor';
+  switch (type) {
+    case 'square':        return `<svg viewBox="0 0 32 32"><rect x="4" y="4" width="10" height="10" fill="${c}"/><rect x="18" y="4" width="10" height="10" fill="${c}"/><rect x="4" y="18" width="10" height="10" fill="${c}"/><rect x="18" y="18" width="10" height="10" fill="${c}"/></svg>`;
+    case 'rounded':       return `<svg viewBox="0 0 32 32"><rect x="4" y="4" width="10" height="10" rx="3" fill="${c}"/><rect x="18" y="4" width="10" height="10" rx="3" fill="${c}"/><rect x="4" y="18" width="10" height="10" rx="3" fill="${c}"/><rect x="18" y="18" width="10" height="10" rx="3" fill="${c}"/></svg>`;
+    case 'dots':          return `<svg viewBox="0 0 32 32"><circle cx="9" cy="9" r="5" fill="${c}"/><circle cx="23" cy="9" r="5" fill="${c}"/><circle cx="9" cy="23" r="5" fill="${c}"/><circle cx="23" cy="23" r="5" fill="${c}"/></svg>`;
+    case 'classy':        return `<svg viewBox="0 0 32 32"><path d="M4 4h10v10H8a4 4 0 0 1-4-4z" fill="${c}"/><path d="M18 4h10v6a4 4 0 0 1-4 4h-6z" fill="${c}"/><path d="M4 18h6a4 4 0 0 1 4 4v6H4z" fill="${c}"/><path d="M18 18h10v10h-6a4 4 0 0 1-4-4z" fill="${c}"/></svg>`;
+    case 'classy-rounded':return `<svg viewBox="0 0 32 32"><path d="M4 8a4 4 0 0 1 4-4h6v10H8a4 4 0 0 1-4-4z" fill="${c}"/><path d="M18 4h6a4 4 0 0 1 4 4v6H18z" fill="${c}"/><path d="M4 18h10v10H8a4 4 0 0 1-4-4z" fill="${c}"/><path d="M18 18h10v6a4 4 0 0 1-4 4h-6z" fill="${c}"/></svg>`;
+    case 'extra-rounded': return `<svg viewBox="0 0 32 32"><rect x="4" y="4" width="10" height="10" rx="5" fill="${c}"/><rect x="18" y="4" width="10" height="10" rx="5" fill="${c}"/><rect x="4" y="18" width="10" height="10" rx="5" fill="${c}"/><rect x="18" y="18" width="10" height="10" rx="5" fill="${c}"/></svg>`;
+    default: return '';
+  }
+}
+
+function cornerPreview(type) {
+  const c = 'currentColor';
+  switch (type) {
+    case 'square':        return `<svg viewBox="0 0 32 32"><rect x="4" y="4" width="24" height="24" fill="none" stroke="${c}" stroke-width="4"/></svg>`;
+    case 'extra-rounded': return `<svg viewBox="0 0 32 32"><rect x="4" y="4" width="24" height="24" rx="8" fill="none" stroke="${c}" stroke-width="4"/></svg>`;
+    case 'dot':           return `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="12" fill="none" stroke="${c}" stroke-width="4"/></svg>`;
+    default: return '';
+  }
+}
+
+function cornerDotPreview(type) {
+  const c = 'currentColor';
+  switch (type) {
+    case 'square': return `<svg viewBox="0 0 32 32"><rect x="8" y="8" width="16" height="16" fill="${c}"/></svg>`;
+    case 'dot':    return `<svg viewBox="0 0 32 32"><circle cx="16" cy="16" r="8" fill="${c}"/></svg>`;
+    default: return '';
+  }
+}
+
+function renderChips(containerId, options, stateKey, previewFn) {
+  const container = document.getElementById(containerId);
+  container.innerHTML = '';
+  options.forEach(opt => {
+    const chip = document.createElement('button');
+    chip.type = 'button';
+    chip.className = 'chip';
+    chip.setAttribute('aria-pressed', state.custom[stateKey] === opt.key ? 'true' : 'false');
+    chip.innerHTML = `
+      <div class="chip-preview">${opt.preview || previewFn(opt.key)}</div>
+      <span>${opt.label}</span>
+    `;
+    chip.addEventListener('click', () => {
+      state.custom[stateKey] = opt.key;
+      container.querySelectorAll('.chip').forEach((c, i) => {
+        c.setAttribute('aria-pressed', options[i].key === opt.key ? 'true' : 'false');
+      });
+      generate();
+    });
+    container.appendChild(chip);
+  });
+}
+
+/* RENDER: LOGO OPTIONS */
+const UPLOAD_ICON = `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 16V4M12 4l-4 4M12 4l4 4M5 16v2a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const MAX_UPLOAD_BYTES = 5 * 1024 * 1024;
+
+function selectLogo(key) {
+  state.custom.logo = key;
+  document.getElementById('logo-options').querySelectorAll('.logo-option').forEach(o => {
+    const pressed = o.dataset.key === key;
+    o.setAttribute('aria-pressed', pressed ? 'true' : 'false');
+    o.setAttribute('aria-checked', pressed ? 'true' : 'false');
+  });
+  generate();
+}
+
+function renderLogoOptions() {
+  const container = document.getElementById('logo-options');
+  container.innerHTML = '';
+  Object.entries(LOGOS).forEach(([key, logo]) => {
+    const opt = document.createElement('button');
+    opt.type = 'button';
+    opt.className = 'logo-option';
+    opt.dataset.key = key;
+    opt.setAttribute('role', 'radio');
+    opt.setAttribute('aria-pressed', state.custom.logo === key ? 'true' : 'false');
+    opt.setAttribute('aria-checked', state.custom.logo === key ? 'true' : 'false');
+    const uri = logoToDataURI(key);
+    const thumb = uri
+      ? `<img src="${uri}" alt="" style="width:100%;height:100%;object-fit:contain;" />`
+      : `<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>`;
+    opt.innerHTML = `
+      <div class="logo-thumb">${thumb}</div>
+      <span class="logo-option-name">${logo.name}</span>
+    `;
+    opt.addEventListener('click', () => selectLogo(key));
+    container.appendChild(opt);
+  });
+
+  const uploadOpt = document.createElement('button');
+  uploadOpt.type = 'button';
+  uploadOpt.className = 'logo-option logo-option--upload';
+  uploadOpt.dataset.key = 'upload';
+  uploadOpt.setAttribute('role', 'radio');
+  uploadOpt.setAttribute('aria-pressed', state.custom.logo === 'upload' ? 'true' : 'false');
+  uploadOpt.setAttribute('aria-checked', state.custom.logo === 'upload' ? 'true' : 'false');
+  const uploadThumb = state.custom.uploadedLogo
+    ? `<img src="${state.custom.uploadedLogo}" alt="" style="width:100%;height:100%;object-fit:contain;" />`
+    : UPLOAD_ICON;
+  uploadOpt.innerHTML = `
+    <div class="logo-thumb">${uploadThumb}</div>
+    <span class="logo-option-name">${state.custom.uploadedLogoName || 'Upload logo'}</span>
+  `;
+  uploadOpt.addEventListener('click', () => document.getElementById('logo-upload-input').click());
+  container.appendChild(uploadOpt);
+}
+
+document.getElementById('logo-upload-input').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  e.target.value = '';
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showToast('Please choose an image file.');
+    return;
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    showToast('Image is too large — please use a file under 5MB.');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = () => {
+    state.custom.uploadedLogo = reader.result;
+    state.custom.uploadedLogoName = file.name;
+    renderLogoOptions();
+    selectLogo('upload');
+  };
+  reader.readAsDataURL(file);
+});
+
+/* MODE SWITCHING */
+const tabs = document.querySelectorAll('[role="tab"]');
+const panels = {
+  'tab-presets': document.getElementById('panel-presets'),
+  'tab-custom':  document.getElementById('panel-custom')
+};
+
+function switchTab(targetTab) {
+  tabs.forEach(t => {
+    const active = t === targetTab;
+    t.setAttribute('aria-selected', active ? 'true' : 'false');
+    t.setAttribute('tabindex', active ? '0' : '-1');
+  });
+  Object.values(panels).forEach(p => { p.setAttribute('data-active', 'false'); p.hidden = true; });
+  const panel = panels[targetTab.id];
+  panel.setAttribute('data-active', 'true');
+  panel.hidden = false;
+  state.mode = targetTab.id === 'tab-presets' ? 'presets' : 'custom';
+  generate();
+}
+
+tabs.forEach((tab, idx) => {
+  tab.addEventListener('click', () => switchTab(tab));
+  tab.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowLeft') {
+      e.preventDefault();
+      const next = tabs[(idx + (e.key === 'ArrowRight' ? 1 : -1) + tabs.length) % tabs.length];
+      switchTab(next); next.focus();
+    } else if (e.key === 'Home') { e.preventDefault(); switchTab(tabs[0]); tabs[0].focus(); }
+      else if (e.key === 'End')  { e.preventDefault(); switchTab(tabs[tabs.length - 1]); tabs[tabs.length - 1].focus(); }
+  });
+});
+
+/* COLOR INPUTS — the swatch tooltip carries the live hex value */
+function bindColor(inputId, stateKey, name) {
+  const input = document.getElementById(inputId);
+  const setTitle = () => { input.title = name + ' — ' + input.value; };
+  input.addEventListener('input', () => {
+    state.custom[stateKey] = input.value;
+    setTitle();
+    generate();
+  });
+  setTitle();
+}
+bindColor('color-fg',     'fg',          'Modules');
+bindColor('color-corner', 'cornerColor', 'Corners');
+bindColor('color-bg',     'bg',          'Background');
+
+const bgClearBtn = document.getElementById('bg-transparent');
+bgClearBtn.addEventListener('click', () => {
+  const on = bgClearBtn.getAttribute('aria-pressed') !== 'true';
+  bgClearBtn.setAttribute('aria-pressed', on ? 'true' : 'false');
+  state.custom.transparentBg = on;
+  document.getElementById('color-bg').disabled = on;
+  document.getElementById('swatch-bg').classList.toggle('is-clear', on);
+  generate();
+});
+
+/* GENERATE */
+function debounce(fn, ms) {
+  let timer;
+  return (...args) => { clearTimeout(timer); timer = setTimeout(() => fn(...args), ms); };
+}
+
+/* Output size isn't user-configurable: the on-screen preview stays a fixed,
+   sensible size, and PNG downloads render at a higher fixed resolution for
+   crisp printing (SVG is vector, so its size doesn't affect quality). */
+const PREVIEW_SIZE = 480;
+const PNG_EXPORT_SIZE = 1000;
+
+function getQROptions() {
+  const content = document.getElementById('content-input').value.trim();
+  if (state.mode === 'presets') {
+    const p = PRESETS[state.preset];
+    return {
+      content, data: content, type: 'canvas',
+      width: p.size, height: p.size,
+      dotsOptions:          { color: p.color,   type: p.dotsType },
+      backgroundOptions:    { color: p.bgColor },
+      cornersSquareOptions: { color: p.color,   type: p.cornersSquareType },
+      cornersDotOptions:    { color: p.color,   type: p.cornersDotType },
+      image: logoToDataURI(p.logo),
+      imageOptions: { crossOrigin: 'anonymous', margin: 6, imageSize: p.imageSize || 0.28, hideBackgroundDots: true },
+      qrOptions: { errorCorrectionLevel: p.ec }
+    };
+  } else {
+    const c = state.custom;
+    return {
+      content, data: content, type: 'canvas',
+      width: PREVIEW_SIZE, height: PREVIEW_SIZE,
+      dotsOptions:          { color: c.fg,          type: c.dotsType },
+      backgroundOptions:    { color: c.transparentBg ? 'rgba(0,0,0,0)' : c.bg },
+      cornersSquareOptions: { color: c.cornerColor, type: c.cornersSquareType },
+      cornersDotOptions:    { color: c.cornerColor, type: c.cornersDotType },
+      image: c.logo === 'upload' ? c.uploadedLogo : logoToDataURI(c.logo),
+      imageOptions: { crossOrigin: 'anonymous', margin: 6, imageSize: 0.32, hideBackgroundDots: true },
+      qrOptions: {},
+      autoEC: true
+    };
+  }
+}
+
+/* Error correction is picked automatically, not exposed to the user: try the
+   highest (most damage-resistant) level first and only step down if the
+   content is too long to fit a scannable code at that level. */
+const EC_LEVELS_HIGH_TO_LOW = ['H', 'Q', 'M', 'L'];
+
+function buildAutoQRCode(opts) {
+  for (const level of EC_LEVELS_HIGH_TO_LOW) {
+    try {
+      const qrCode = new QRCodeStyling({ ...opts, qrOptions: { ...opts.qrOptions, errorCorrectionLevel: level } });
+      return { qrCode, ec: level };
+    } catch (e) { /* content doesn't fit at this level — try the next */ }
+  }
+  return null;
+}
+
+function generate() {
+  const opts = getQROptions();
+
+  if (!opts.content) {
+    document.getElementById('empty-preview').style.display = '';
+    document.getElementById('qr-canvas').innerHTML = '';
+    document.getElementById('qr-canvas').classList.remove('transparent-preview');
+    document.getElementById('preview-actions').style.display = 'none';
+    state.qrCode = null;
+    return;
+  }
+
+  let ec, qrCode;
+  if (opts.autoEC) {
+    const picked = buildAutoQRCode(opts);
+    if (!picked) {
+      showToast('This content is too long to fit in a scannable QR code.');
+      document.getElementById('qr-canvas').innerHTML = '';
+      document.getElementById('qr-canvas').classList.remove('transparent-preview');
+      document.getElementById('preview-actions').style.display = 'none';
+      state.qrCode = null;
+      return;
+    }
+    ec = picked.ec;
+    qrCode = picked.qrCode;
+  } else {
+    ec = opts.qrOptions.errorCorrectionLevel;
+    qrCode = new QRCodeStyling(opts);
+  }
+
+  document.getElementById('empty-preview').style.display = 'none';
+  const host = document.getElementById('qr-canvas');
+  host.innerHTML = '';
+  host.classList.toggle('transparent-preview', state.mode === 'custom' && state.custom.transparentBg);
+
+  state.qrCode = qrCode;
+  state.qrCode.append(host);
+  state.resolvedOptions = { ...opts, qrOptions: { errorCorrectionLevel: ec } };
+
+  document.getElementById('preview-actions').style.display = 'flex';
+  document.getElementById('generate-status').textContent = 'QR code preview updated.';
+}
+
+
+const debouncedGenerate = debounce(generate, 420);
+document.getElementById('content-input').addEventListener('input', debouncedGenerate);
+
+/* DOWNLOADS */
+document.getElementById('dl-png').addEventListener('click', () => {
+  if (!state.qrCode || !state.resolvedOptions) return;
+  const exportQrCode = new QRCodeStyling({ ...state.resolvedOptions, width: PNG_EXPORT_SIZE, height: PNG_EXPORT_SIZE });
+  exportQrCode.download({ name: `qr-${Date.now()}`, extension: 'png' });
+  showToast('PNG downloaded');
+});
+
+document.getElementById('dl-svg').addEventListener('click', () => {
+  if (!state.qrCode) return;
+  state.qrCode.download({ name: `qr-${Date.now()}`, extension: 'svg' });
+  showToast('SVG downloaded');
+});
+
+/* Capture the currently-rendered designed QR (logo, colours, dot styles) as
+   PNG + SVG data URLs, so a tracked code's stats page can show the real code
+   instead of a plain generated one. */
+function blobToDataURL(blob) {
+  return new Promise((resolve, reject) => {
+    const fr = new FileReader();
+    fr.onload = () => resolve(fr.result);
+    fr.onerror = reject;
+    fr.readAsDataURL(blob);
+  });
+}
+async function captureDesign() {
+  if (!state.resolvedOptions) return null;
+  const pngInst = new QRCodeStyling({ ...state.resolvedOptions, width: PNG_EXPORT_SIZE, height: PNG_EXPORT_SIZE });
+  const svgInst = new QRCodeStyling({ ...state.resolvedOptions });
+  const [pngBlob, svgBlob] = await Promise.all([pngInst.getRawData('png'), svgInst.getRawData('svg')]);
+  const [png, svg] = await Promise.all([blobToDataURL(pngBlob), blobToDataURL(svgBlob)]);
+  return { png, svg };
+}
+
+/* HELPERS */
+let toastTimer;
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => t.classList.remove('show'), 2400);
+}
+
+
+/* ── HERO TITLE — "QR GENERATOR" spelled in small 3D tetris blocks ───────────
+   Same beveled amber blocks as the background, on a 5×7 pixel font. Blocks
+   cascade into place once on load; a theme toggle just recolours the same art.
+   Scales to fit any width and honours prefers-reduced-motion.                   */
+
+
+/* ── TETRIS BACKGROUND ──────────────────────────────────────────────────────
+   Two self-playing Tetris wells, one per side gutter. A small heuristic "player"
+   picks the smart placement, then flips and nudges each piece at random moments
+   the whole way down (like a human on the descent) before it settles — so the
+   boards genuinely stack and clear lines, building patterns as you work.
+   Connected amber 3D blocks, low opacity, calm speeds, gutters only: playful
+   ambient motion, never over the workspace. Disabled on narrow screens (no
+   gutter room) and under prefers-reduced-motion.                                */
+
+
+/* INIT */
+renderPresetItems();
+renderChips('module-shapes',    MODULE_SHAPES,    'dotsType');
+renderChips('corner-shapes',    CORNER_SHAPES.map(s => ({ ...s, preview: cornerPreview(s.key) })),    'cornersSquareType');
+renderChips('cornerdot-shapes', CORNERDOT_SHAPES.map(s => ({ ...s, preview: cornerDotPreview(s.key) })), 'cornersDotType');
+renderLogoOptions();
+</script>
+
+
+
+
+
+<script src="../orbhome.js"></script>
+</body>
+</html>

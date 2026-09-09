@@ -1,0 +1,1700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<!-- 'unsafe-eval' is here only for libheif's emscripten glue, which decodes
+     HEIC/HEIF (iPhone photos). Without it this tool cannot open the format
+     most people actually need it for. Nothing on this page talks to a server. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; connect-src 'self' data: blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; worker-src 'self' blob:; base-uri 'self'; form-action 'none'; object-src 'none';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#003332">
+<meta name="description" content="Image Compressor — shrink JPG, PNG, WEBP and HEIC images in your browser.">
+
+<title>Image Compressor · VmesteSoft</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vmestesoft.css">
+
+<!-- zip output for batches -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG"
+        crossorigin="anonymous"></script>
+<!-- HEIC/HEIF decoding (iPhone photos) -->
+<script src="https://cdn.jsdelivr.net/npm/libheif-js@1.18.2/libheif-wasm/libheif-bundle.js"
+        integrity="sha384-tLy8T9fQEbFqGjC3ZYyRb5S+qhtywfU6rsjUf3nN1g4q2cvTmV43XN0xdtDYp1tx"
+        crossorigin="anonymous"></script>
+
+<style>
+/* LAYOUT */
+.container {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 0 24px;
+  position: relative;
+  z-index: 1;
+}
+
+/* BANNERS */
+.banner {
+  font-size: 14px; font-weight: 500;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  border-left: 3px solid;
+  display: flex; align-items: flex-start; gap: 8px;
+  line-height: 1.5;
+}
+.banner.info    { background: var(--pit);    border-color: var(--line-hi); color: var(--acid); }
+.banner.error   { background: var(--slab); border-color: var(--amber);  color: var(--amber); }
+.banner.warning { background: var(--acid-ghost);       border-color: var(--acid);  color: var(--acid-dim); }
+.hidden { display: none !important; }
+
+/* DROP ZONE */
+.drop-zone {
+  background: var(--tar);
+  border: 2px dashed var(--line);
+  padding: 40px 24px;
+  text-align: center;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  margin-bottom: 14px;
+  position: relative;
+}
+.drop-zone:hover        { border-color: var(--line-hi);    background: var(--pit); }
+.drop-zone:focus-within { border-color: var(--line-hi); outline: 2px solid var(--line-hi); outline-offset: 2px; }
+.drop-zone.dragover     { border-color: var(--line-hi); background: var(--pit); }
+.drop-zone input[type="file"] {
+  position: absolute; inset: 0; opacity: 0;
+  cursor: pointer; width: 100%; height: 100%;
+}
+.drop-upload-icon {
+  width: 48px; height: 48px;
+  background: var(--slab);
+  border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  margin: 0 auto 14px;
+  color: var(--line-hi);
+  pointer-events: none;
+}
+.drop-headline {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 28px; font-weight: 700;
+  color: var(--bone); letter-spacing: 0.5px;
+  display: block; pointer-events: none;
+  text-transform: uppercase;
+}
+.drop-formats {
+  font-size: 13px; color: var(--ash);
+  margin-top: 5px; pointer-events: none;
+}
+.drop-limits {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--ash);
+  margin-top: 10px; pointer-events: none;
+  display: block;
+}
+
+/* PNG notice */
+.png-notice {
+  font-size: 13px; font-weight: 500;
+  padding: 9px 13px;
+  background: var(--acid-ghost);
+  border-left: 3px solid var(--acid);
+  color: var(--acid-dim);
+  margin-bottom: 14px;
+}
+
+/* SETTINGS PANEL */
+.panel {
+  background: var(--tar);
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.panel-header {
+  background: var(--house);
+  padding: 7px 14px;
+  display: flex; align-items: center;
+}
+.panel-title {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ash);
+}
+.settings-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+}
+.setting-cell {
+  padding: 14px 16px;
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column; gap: 8px;
+}
+.setting-cell:last-child { border-right: none; }
+.setting-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ash);
+}
+.quality-row { display: flex; align-items: center; gap: 10px; }
+input[type=range] {
+  flex: 1; accent-color: var(--line-hi);
+  cursor: pointer; height: 4px;
+}
+input[type=range]:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 3px; }
+input[type=range]:disabled { opacity: 0.3; cursor: not-allowed; }
+.quality-display {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 32px; font-weight: 800;
+  color: var(--bone); min-width: 64px; line-height: 1;
+}
+select {
+  font-family: 'Barlow', sans-serif;
+  font-size: 14px;
+  background: var(--pit);
+  border: 1px solid var(--line);
+  color: var(--bone);
+  padding: 7px 8px; width: 100%;
+  cursor: pointer; outline: none;
+  border-radius: 0;
+}
+select:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+select:hover { border-color: var(--line-hi); }
+
+/* COMPRESS BUTTON */
+.btn-compress {
+  position: relative;
+  overflow: visible;
+  width: 100%;
+  font-family: var(--shout);
+  font-size: 36px; font-weight: 400;
+  letter-spacing: 10px; text-transform: uppercase;
+  background:
+    linear-gradient(180deg, #11244F 0%, var(--house) 60%, #06122E 100%);
+  color: #FFEFC2;
+  border: 1px solid var(--acid-dim);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -2px 0 rgba(0,0,0,0.5),
+    inset 0 0 0 1px rgba(255, 122, 24, 0.25),
+    0 0 0 1px rgba(255, 122, 24, 0.18),
+    0 2px 0 #000;
+  padding: 18px 28px;
+  cursor: pointer;
+  transition: transform 0.04s linear, box-shadow 220ms ease, border-color 220ms ease;
+  margin-bottom: 14px;
+  display: flex; align-items: center; justify-content: center; gap: 14px;
+  text-shadow: 1px 1px 0 #000, 0 0 6px rgba(0,0,0,0.6);
+}
+.btn-compress:hover:not(:disabled) {
+  transform: translateY(1px);
+  border-color: var(--acid-dim);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.10),
+    inset 0 -2px 0 rgba(0,0,0,0.5),
+    inset 0 0 12px rgba(255, 122, 24, 0.35),
+    0 0 0 1px rgba(255, 168, 64, 0.55),
+    0 0 16px rgba(255, 122, 24, 0.35),
+    0 2px 0 #000;
+}
+.btn-compress:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow:
+    inset 0 2px 0 rgba(0,0,0,0.5),
+    inset 0 0 0 1px rgba(255, 122, 24, 0.5),
+    0 0 0 #000;
+}
+.btn-compress[data-stale="1"] { opacity: 0.55; cursor: default; }
+.btn-compress:focus-visible         { outline: 2px solid var(--acid); outline-offset: 3px; }
+.btn-compress:disabled              { opacity: 0.45; cursor: not-allowed; }
+.btn-file-count {
+  font-family: var(--mono);
+  font-weight: 400; opacity: 0.9;
+  font-size: 12px;
+  color: var(--acid-dim);
+  letter-spacing: 1px;
+  text-shadow: 1px 1px 0 #000;
+  position: relative;
+  z-index: 2;
+}
+
+/* PIXELATED FIRE WAVE on the compress button (ambient + mouse follow) */
+.btn-fire {
+  clip-path: inset(0);          /* clip to button without overflow:hidden on parent */
+  position: absolute;
+  inset: 0;                     /* fill the entire button, clipped by overflow:hidden */
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  mix-blend-mode: screen;
+  z-index: 1;
+  opacity: 0;
+  transition: opacity 1s ease-out;       /* slow fade-OUT when unhovered */
+}
+.btn-compress:hover:not(:disabled) .btn-fire,
+.btn-compress:focus-visible:not(:disabled) .btn-fire {
+  opacity: var(--fire-opacity, 0.75);
+  transition: opacity 0.06s ease-out;    /* fast fade-IN on hover */
+}
+
+.btn-label {
+  position: relative;
+  display: inline-block;
+  z-index: 2;
+}
+.btn-label-base {
+  display: inline-block;
+  line-height: 1;
+}
+
+/* PROGRESS */
+.progress-wrap {
+  display: none;
+  background: var(--tar);
+  border: 1px solid var(--line);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+.progress-top {
+  display: flex; justify-content: space-between; align-items: center;
+  margin-bottom: 8px;
+}
+.progress-heading {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 11px; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ash);
+}
+.progress-fraction {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px; font-weight: 600;
+  color: var(--bone);
+}
+.progress-track {
+  height: 6px; background: var(--slab);
+  border-radius: 0; overflow: hidden;
+}
+.progress-fill {
+  height: 100%; width: 0%;
+  background: var(--line-hi);
+  transition: width 0.15s;
+}
+.progress-filename {
+  font-size: 12px; color: var(--ash);
+  margin-top: 6px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* STATS BAR */
+.stats-bar {
+  display: grid;
+  grid-template-columns: 1.25fr 1fr;
+  background: var(--line);
+  border: 1px solid var(--line);
+  gap: 1px;
+  margin-bottom: 14px;
+}
+.stat-cell { background: var(--tar); padding: 14px 18px; }
+.stat-prepost {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 32px; font-weight: 800;
+  line-height: 1; letter-spacing: -0.5px;
+  color: var(--bone);
+  white-space: nowrap;
+  flex-wrap: wrap;
+}
+.stat-prepost .pre { color: var(--ash); font-weight: 700; }
+.stat-prepost .post { color: var(--bone); }
+.stat-prepost .arrow {
+  display: inline-flex; align-items: center;
+  color: var(--acid-dim);
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.25);
+  filter: drop-shadow(0 0 4px rgba(255,122,24,0.4));
+}
+.stat-prepost .arrow svg {
+  width: 32px; height: 16px;
+  image-rendering: pixelated; shape-rendering: crispEdges;
+}
+.stat-key {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ash); display: block; margin-bottom: 6px;
+}
+.stat-val {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 32px; font-weight: 800;
+  color: var(--bone); display: block; line-height: 1;
+  letter-spacing: -0.5px;
+}
+.stat-cell.gold-cell {
+  background:
+    linear-gradient(180deg, #1A1408 0%, #0F0B04 100%);
+  position: relative;
+  box-shadow:
+    inset 0 0 0 1px var(--acid-dim),
+    inset 0 -3px 0 var(--acid-dim);
+}
+.stat-cell.gold-cell .stat-key {
+  color: var(--acid-dim);
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 700;
+  letter-spacing: 3px;
+}
+.stat-cell.gold-cell .stat-val {
+  color: var(--acid);
+  text-shadow:
+    0 2px 12px rgba(255, 180, 30, 0.45),
+    0 0 40px rgba(255, 120, 0, 0.25);
+  font-size: 56px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-weight: 900;
+  letter-spacing: -2px;
+  line-height: 0.9;
+  font-style: italic;
+}
+
+/* FILE LIST */
+.file-panel {
+  background: var(--tar);
+  border: 1px solid var(--line);
+  margin-bottom: 14px;
+}
+.file-panel-header {
+  background: var(--house);
+  display: grid;
+  grid-template-columns: 44px 1fr 150px 68px 60px;
+  gap: 10px; align-items: center;
+  padding: 7px 14px;
+}
+.col-lbl {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px; font-weight: 600;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  color: var(--ash);
+}
+.col-lbl.r { text-align: right; }
+ul.file-list {
+  list-style: none;
+  max-height: 420px; overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--line) var(--tar);
+  display: flex; flex-direction: column;
+  gap: 1px; background: var(--line);
+}
+.file-row {
+  display: grid;
+  grid-template-columns: 44px 1fr 150px 68px 60px;
+  align-items: center; gap: 10px;
+  background: var(--tar);
+  padding: 8px 14px;
+  transition: background 0.1s;
+}
+.file-row:hover { background: var(--slab); }
+.file-thumb {
+  width: 40px; height: 40px;
+  object-fit: cover; display: block;
+  border: 1px solid var(--line);
+}
+.file-thumb-ph {
+  width: 40px; height: 40px;
+  background: var(--slab);
+  border: 1px solid var(--line);
+  display: flex; align-items: center; justify-content: center;
+  color: var(--ash); font-size: 14px;
+}
+.file-name-col { min-width: 0; }
+.file-name-text {
+  font-size: 14px; font-weight: 500;
+  color: var(--bone);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: block;
+}
+.gif-tag {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 10px; font-weight: 600; letter-spacing: 1px;
+  text-transform: uppercase;
+  background: var(--acid-ghost); color: var(--acid-dim);
+  border: 1px solid var(--acid);
+  padding: 1px 5px; margin-left: 5px; vertical-align: middle;
+}
+.file-sizes-col {
+  text-align: right; font-size: 13px;
+  color: var(--ash); white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 6px;
+  justify-content: flex-end;
+}
+.file-sizes-col .comp { color: var(--line-hi); font-weight: 600; }
+.file-sizes-col .arrow {
+  display: inline-flex;
+  align-items: center;
+  color: var(--acid-dim);
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: -1px;
+  text-shadow: 1px 1px 0 rgba(0,0,0,0.25);
+  filter: drop-shadow(0 0 4px rgba(255, 122, 24, 0.35));
+}
+.file-sizes-col .arrow svg {
+  width: 22px; height: 12px;
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+}
+.file-pct-col {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 22px; font-weight: 800;
+  text-align: right; white-space: nowrap;
+}
+.file-pct-col.good { color: var(--acid); }
+.file-pct-col.ok   { color: var(--acid-dim); }
+.file-pct-col.meh  { color: var(--amber); }
+.btn-save-single {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px; font-weight: 700; letter-spacing: 1px;
+  text-transform: uppercase;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--line-hi);
+  cursor: pointer; padding: 5px 10px;
+  transition: color 0.1s, border-color 0.1s, background 0.1s;
+  border-radius: 0;
+  width: 100%;
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+}
+.btn-save-single .save-glyph {
+  width: 10px; height: 12px;
+  image-rendering: pixelated; shape-rendering: crispEdges;
+  flex: 0 0 auto;
+  color: currentColor;
+  transition: transform 0.12s;
+}
+.btn-save-single:hover .save-glyph { transform: translateY(1px); }
+.btn-save-single:hover { color: var(--bone); border-color: var(--line-hi); background: var(--slab); }
+.btn-save-single:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
+.file-row.failed { background: var(--slab); }
+.file-row.failed:hover { background: var(--slab); }
+.fail-name { font-size: 14px; font-weight: 500; color: var(--amber); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fail-msg  { font-size: 12px; color: var(--amber); opacity: 0.7; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* BOTTOM ACTIONS */
+.bottom-actions { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+.btn-action {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px; font-weight: 700;
+  letter-spacing: 1.5px; text-transform: uppercase;
+  background: var(--tar); color: var(--bone);
+  border: 1px solid var(--line);
+  padding: 10px 20px; cursor: pointer;
+  transition: border-color 0.15s, background 0.15s;
+  border-radius: 0;
+}
+.btn-action:hover:not(:disabled) { border-color: var(--line-hi); background: var(--slab); }
+.btn-action:focus-visible         { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+.btn-action:disabled              { opacity: 0.35; cursor: not-allowed; }
+/* DOWNLOAD ZIP — gamified loot-drop button */
+.btn-action.primary {
+  position: relative;
+  overflow: hidden;
+  background:
+    linear-gradient(180deg, #11244F 0%, var(--house) 60%, #06122E 100%);
+  color: #FFEFC2;
+  border: 1px solid var(--acid-dim);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -1px 0 rgba(0,0,0,0.55),
+    inset 0 0 0 1px rgba(255, 122, 24, 0.18),
+    0 2px 0 #000;
+  padding: 10px 22px;
+  letter-spacing: 1.5px;
+  display: inline-flex; align-items: center; gap: 10px;
+  transition: transform 0.08s linear, box-shadow 220ms ease, border-color 220ms ease;
+}
+.btn-action.primary > * { position: relative; z-index: 2; }
+.btn-action.primary:hover:not(:disabled) {
+  background:
+    linear-gradient(180deg, #143063 0%, #0D2F6E 60%, #08183A 100%);
+  border-color: var(--acid-dim);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.12),
+    inset 0 -1px 0 rgba(0,0,0,0.55),
+    inset 0 0 16px rgba(255, 122, 24, 0.30),
+    0 0 0 1px rgba(255, 168, 64, 0.55),
+    0 0 18px rgba(255, 122, 24, 0.30),
+    0 2px 0 #000;
+  transform: translateY(-1px);
+}
+.btn-action.primary:active:not(:disabled) {
+  transform: translateY(2px);
+}
+.btn-action.primary .zip-glyph {
+  width: 14px; height: 16px;
+  flex: 0 0 14px;
+  image-rendering: pixelated;
+  shape-rendering: crispEdges;
+  color: var(--acid);
+  filter: drop-shadow(1px 1px 0 rgba(0,0,0,0.55));
+  transition: transform 0.18s cubic-bezier(.4,1.8,.5,1);
+}
+.btn-action.primary:hover:not(:disabled) .zip-glyph {
+  animation: zipDrop 0.7s ease-in-out infinite;
+}
+@keyframes zipDrop {
+  0%, 100% { transform: translateY(0); }
+  35%      { transform: translateY(3px); }
+  70%      { transform: translateY(-1px); }
+}
+/* Top-edge sweep ignites on hover */
+.btn-action.primary::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    100deg,
+    transparent 0%,
+    transparent 40%,
+    rgba(255, 200, 80, 0.0) 48%,
+    rgba(255, 220, 120, 0.45) 50%,
+    rgba(255, 200, 80, 0.0) 52%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  background-position: 100% 0;
+  z-index: 3;
+  opacity: 0;
+  transition: opacity 0.2s ease;
+}
+.btn-action.primary:hover:not(:disabled)::before {
+  opacity: 1;
+  animation: zipSweep 1.6s ease-in-out infinite;
+}
+@keyframes zipSweep {
+  0%   { background-position: 130% 0; }
+  100% { background-position: -30% 0; }
+}
+
+/* ZIP FIRE — subtle ember on download button */
+.btn-action.primary .zip-fire {
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  width: 100%; height: 8px;
+  pointer-events: none;
+  image-rendering: pixelated;
+  image-rendering: -moz-crisp-edges;
+  mix-blend-mode: screen;
+  opacity: 0.42;
+  filter: hue-rotate(-18deg) saturate(0.7) brightness(0.7);
+  z-index: 1;
+  transition: opacity 0.25s ease, height 0.25s ease;
+}
+.btn-action.primary:hover:not(:disabled) .zip-fire {
+  opacity: 0.85;
+  height: 14px;
+  filter: hue-rotate(-12deg) saturate(1) brightness(1);
+}
+
+/* CLEAR ALL — red-tinted danger styling */
+.btn-action.danger {
+  background: var(--tar);
+  color: var(--amber);
+  border-color: var(--amber);
+}
+.btn-action.danger:hover:not(:disabled) {
+  background: var(--slab);
+  border-color: var(--amber);
+  color: var(--amber);
+}
+.btn-action.danger:focus-visible {
+  outline: 2px solid var(--amber);
+  outline-offset: 2px;
+}
+
+.confirm-strip {
+  background: var(--slab);
+  border: 1px solid var(--amber);
+  border-left: 3px solid var(--amber);
+  padding: 10px 14px;
+  margin-top: 10px;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+}
+.confirm-msg { font-size: 14px; font-weight: 500; color: var(--amber); flex: 1; }
+.btn-confirm-y {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  background: var(--amber); color: #fff;
+  border: none; padding: 7px 16px; cursor: pointer;
+  border-radius: 0; transition: background 0.1s;
+}
+.btn-confirm-y:hover { background: #8A2C10; }
+.btn-confirm-y:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.btn-confirm-n {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13px; font-weight: 700; letter-spacing: 1px; text-transform: uppercase;
+  background: var(--tar); color: var(--ash);
+  border: 1px solid var(--line); padding: 7px 16px; cursor: pointer;
+  border-radius: 0; transition: border-color 0.1s;
+}
+.btn-confirm-n:hover { border-color: var(--line-hi); }
+.btn-confirm-n:focus-visible { outline: 2px solid var(--line-hi); outline-offset: 2px; }
+
+#liveRegion { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+
+@media (max-width: 560px) {
+
+
+
+
+  .container { padding: 0 16px; }
+  .drop-headline { font-size: 22px; }
+  .btn-compress { font-size: 17px; letter-spacing: 2px; padding: 14px 18px; }
+  .settings-grid { grid-template-columns: 1fr 1fr; }
+  .setting-cell:last-child { grid-column: span 2; border-right: none; border-top: 1px solid var(--line); }
+  .stats-bar { grid-template-columns: 1fr; }
+  .stats-bar .stat-cell { border-bottom: 1px solid var(--line); }
+  .stats-bar .stat-cell.gold-cell { border-bottom: none; }
+  .stat-val { font-size: 26px; }
+  .stat-prepost { font-size: 24px; gap: 8px; }
+  .stat-prepost .arrow svg { width: 26px; height: 14px; }
+  .stat-cell.gold-cell .stat-val { font-size: 32px; }
+  .file-panel-header { grid-template-columns: 40px 1fr 58px 52px; }
+  .file-panel-header .hide-mobile { display: none; }
+  .file-row { grid-template-columns: 40px 1fr 58px 52px; }
+  .file-row .hide-mobile { display: none; }
+
+}
+
+/* ════════════════════════════════════════════════════════════════
+   VMESTESOFT SKIN — re-expresses this tool's components in the
+   language of DESIGN_SPEC.md. Loaded after the tool's own rules so
+   it wins on geometry, type and accent.
+   ════════════════════════════════════════════════════════════════ */
+
+.container { max-width: var(--maxw); padding: 0 var(--gutter) 80px; margin: 0 auto; }
+
+/* ── panels ── */
+.panel {
+  background: var(--tar); border: 1px solid var(--line);
+  box-shadow: none; margin-bottom: var(--gutter);
+}
+.panel-header {
+  background: transparent; border-bottom: 1px solid var(--line);
+  padding: 12px var(--gutter); box-shadow: none;
+}
+.panel-title {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+  text-shadow: none;
+}
+
+/* ── settings grid ── */
+.setting-cell { border-right: 1px solid var(--line); padding: 18px var(--gutter); }
+.setting-label {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+}
+.quality-display {
+  font-family: var(--mono); font-weight: 700; font-size: 20px;
+  color: var(--acid); text-shadow: none; font-variant-numeric: tabular-nums;
+}
+
+select {
+  width: 100%; padding: 10px 12px;
+  background: var(--pit); color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0;
+  font-family: var(--mono); font-size: var(--t-data);
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ash) 50%),
+                    linear-gradient(135deg, var(--ash) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  padding-right: 32px;
+}
+select:focus { border-color: var(--acid); outline: 1px solid var(--acid); outline-offset: 1px; }
+
+input[type=range] { -webkit-appearance: none; appearance: none; height: 14px; background: transparent; }
+input[type=range]::-webkit-slider-runnable-track { height: 2px; background: var(--line); }
+input[type=range]::-moz-range-track { height: 2px; background: var(--line); }
+input[type=range]::-moz-range-progress { height: 2px; background: var(--acid-dim); }
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -6px;
+  background: var(--acid); border: 0; border-radius: 0; cursor: pointer;
+}
+input[type=range]::-moz-range-thumb {
+  width: 14px; height: 14px; background: var(--acid); border: 0; border-radius: 0;
+}
+
+/* ── drop zone ── */
+.drop-zone {
+  background: var(--pit); border: 1px dashed var(--line); border-radius: 0;
+  box-shadow: none; padding: 40px var(--gutter); min-height: 200px;
+}
+.drop-zone:hover, .drop-zone:focus-within { border-color: var(--line-hi); background: var(--pit); }
+.drop-zone.dragover {
+  border-style: solid; border-color: var(--acid); background: var(--pit);
+  background-image: repeating-linear-gradient(45deg,
+    rgba(0,184,113,0.10) 0 4px, transparent 4px 8px);
+  background-size: 11.32px 11.32px;
+  animation: hazard-crawl 800ms linear infinite;
+}
+.drop-zone.dragover .drop-headline { color: var(--acid); }
+.drop-upload-icon {
+  border: 1px solid var(--line); background: transparent;
+  color: var(--ash); box-shadow: none; border-radius: 0;
+}
+.drop-headline {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+  text-shadow: none;
+}
+.drop-formats, .drop-limits {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; color: var(--ghost); text-shadow: none;
+}
+
+/* ── the one primary action ── */
+.btn-compress {
+  font-family: var(--shout); font-size: 20px; font-weight: 800;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  background: var(--acid); color: var(--void);
+  border: 1px solid var(--acid); border-radius: 0;
+  box-shadow: none; text-shadow: none;
+  padding: 16px 28px;
+  clip-path: polygon(0 0, calc(100% - 10px) 0, 100% 10px,
+                     100% 100%, 10px 100%, 0 calc(100% - 10px));
+  transition: box-shadow 100ms linear, transform 100ms linear;
+}
+.btn-compress:hover:not(:disabled) {
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--acid-dim), 0 0 12px rgba(0, 255, 156, 0.25);
+  border-color: var(--acid);
+}
+.btn-compress:active:not(:disabled) { transform: translate(0, 0); box-shadow: 1px 1px 0 var(--acid-dim); }
+.btn-compress:disabled { background: var(--slab); color: var(--ghost); border-color: var(--line); }
+.btn-file-count {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; color: rgba(5, 13, 11, 0.62); text-shadow: none;
+}
+.btn-fire { display: none; }   /* the flame wash was GG-era; the notch does the work now */
+
+/* ── progress ── */
+.progress-heading, .progress-fraction, .progress-filename {
+  font-family: var(--mono); letter-spacing: 0.14em; text-transform: uppercase;
+  font-size: var(--t-micro); color: var(--ash);
+}
+.progress-track { background: var(--line); border-radius: 0; height: 2px; }
+.progress-fill { background: var(--acid); border-radius: 0; }
+
+/* ── stats + file rows ── */
+.stats-bar { border: 1px solid var(--line); background: var(--line); gap: 1px; }
+.stat-cell { background: var(--tar); }
+.stat-key {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ghost);
+}
+.stat-val, .stat-prepost {
+  font-family: var(--mono); font-variant-numeric: tabular-nums; color: var(--bone);
+}
+.stat-cell.gold-cell { background: var(--tar); border: 0; box-shadow: inset 0 0 0 1px var(--acid); }
+.stat-cell.gold-cell .stat-key { color: var(--acid-dim); }
+.stat-cell.gold-cell .stat-val {
+  color: var(--acid); text-shadow: none;
+  font-family: var(--shout); font-style: normal; font-weight: 800;
+  letter-spacing: 0.02em;
+}
+.btn-compress:disabled { color: var(--ash); }
+
+.file-panel-header { background: transparent; border-bottom: 1px solid var(--line); }
+.col-lbl {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ghost);
+}
+.file-row { border-bottom: 1px solid var(--line); font-family: var(--mono); }
+.file-row:hover { background: var(--slab); }
+.file-name-text { font-family: var(--mono); font-size: var(--t-data); color: var(--bone); }
+.file-sizes-col, .file-pct-col { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+.file-thumb, .file-thumb-ph { border-radius: 0; border: 1px solid var(--line); }
+.gif-tag {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.14em;
+  color: var(--toxic); border: 1px solid var(--toxic); background: transparent; border-radius: 0;
+}
+
+/* ── secondary buttons ── */
+.btn-action, .btn-save-single {
+  font-family: var(--shout); font-weight: 800; font-size: 15px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  background: transparent; color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0; box-shadow: none;
+  padding: 10px 20px; min-height: 40px;
+}
+.btn-action:hover:not(:disabled), .btn-save-single:hover {
+  border-color: var(--line-hi); color: var(--bone);
+  transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--line-hi);
+}
+.btn-action.primary { background: transparent; color: var(--acid); border-color: var(--acid); }
+.btn-action.primary:hover:not(:disabled) { box-shadow: 2px 2px 0 var(--acid-dim); }
+
+/* ── banners ── */
+.banner {
+  background: var(--slab); border: 1px solid var(--line); border-left-width: 3px;
+  border-radius: 0; font-family: var(--mono); font-size: var(--t-data); color: var(--ash);
+}
+.banner.info    { background: var(--slab); border-left-color: var(--acid);  color: var(--ash); }
+.banner.warning { background: var(--slab); border-color: var(--line); border-left-color: var(--amber); color: var(--ash); }
+.banner.error   { background: var(--slab); border-left-color: var(--rust);  color: var(--bone); }
+.png-notice {
+  font-family: var(--mono); font-size: var(--t-micro); color: var(--ghost);
+  background: transparent; border: 0; border-left: 1px solid var(--line);
+  border-radius: 0; padding-left: 12px;
+}
+</style>
+</head>
+<body class="has-orb">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- the way back to the index -->
+<a class="orb-home" href="../index.html" data-hue="#00FF9C"
+   style="--hue:#00FF9C" aria-label="VmesteSoft — all tools">
+  <canvas aria-hidden="true"></canvas>
+</a>
+
+
+<div id="liveRegion" aria-live="polite" aria-atomic="true"></div>
+
+<h1 class="sr-only">Image Compressor</h1>
+
+<main class="container" role="main">
+
+  <div id="liveRegion2" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+
+  <div id="heicBanner" class="banner info hidden" role="status">
+    <span id="heicBannerText">Loading HEIC decoder...</span>
+  </div>
+
+  <div
+    class="drop-zone"
+    id="dropZone"
+    aria-label="Image upload area. Click to browse, or drag and drop images here."
+  >
+    <input
+      type="file"
+      id="fileInput"
+      multiple
+      accept="image/*,.heic,.heif"
+      aria-label="Select images to compress. Accepted formats: JPEG, PNG, WebP, GIF, HEIC. Maximum 50 files, 30 MB each."
+    >
+    <div class="drop-upload-icon" aria-hidden="true">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+        <polyline points="17 8 12 3 7 8"/>
+        <line x1="12" y1="3" x2="12" y2="15"/>
+      </svg>
+    </div>
+    <span class="drop-headline" id="dropLabel" aria-hidden="true">Drop images or click to browse</span>
+    <span class="drop-formats" aria-hidden="true">JPEG &middot; PNG &middot; WebP &middot; GIF &middot; HEIC</span>
+    <span class="drop-limits" aria-hidden="true">Max 50 files &nbsp;&bull;&nbsp; 30 MB per file</span>
+  </div>
+
+  <div id="pngNotice" class="png-notice hidden" role="note">
+    PNG is lossless — the quality slider has no effect on PNG output. File size reduction comes from max-width resizing only.
+  </div>
+
+  <div class="panel" role="group" aria-label="Compression settings">
+    <div class="panel-header">
+      <span class="panel-title">Compression Settings</span>
+    </div>
+    <div class="settings-grid">
+      <div class="setting-cell">
+        <label class="setting-label" for="quality">Quality</label>
+        <div class="quality-row">
+          <input type="range" id="quality" min="10" max="100" value="80" step="1" aria-valuetext="80 percent">
+          <span class="quality-display" id="qualityVal" aria-hidden="true">80%</span>
+        </div>
+      </div>
+      <div class="setting-cell">
+        <label class="setting-label" for="format">Output Format</label>
+        <select id="format">
+          <option value="image/jpeg">JPEG</option>
+          <option value="image/webp" selected>WebP</option>
+          <option value="image/png">PNG</option>
+        </select>
+      </div>
+      <div class="setting-cell">
+        <label class="setting-label" for="maxWidth">Max Width</label>
+        <select id="maxWidth">
+          <option value="0">Original size</option>
+          <option value="3840">3840 px</option>
+          <option value="1920" selected>1920 px</option>
+          <option value="1280">1280 px</option>
+          <option value="800">800 px</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <button class="btn-compress" id="compressBtn" disabled aria-disabled="true">
+    <canvas class="btn-fire" id="btnFire" width="240" height="48" aria-hidden="true"></canvas>
+    <span class="btn-label">
+      <span class="btn-label-base">Compress Images</span>
+    </span>
+    <span class="btn-file-count" id="btnCount" aria-hidden="true"></span>
+  </button>
+
+  <div class="progress-wrap" id="progressWrap" role="status" aria-live="polite">
+    <div class="progress-top">
+      <span class="progress-heading">Processing</span>
+      <span class="progress-fraction" id="progressFraction">0 / 0</span>
+    </div>
+    <div class="progress-track"
+         role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"
+         id="progressTrack">
+      <div class="progress-fill" id="progressFill"></div>
+    </div>
+    <div class="progress-filename" id="progressFilename"></div>
+  </div>
+
+  <div class="stats-bar hidden" id="statsBar" aria-label="Compression summary">
+    <div class="stat-cell">
+      <span class="stat-key">Before / After</span>
+      <span class="stat-prepost">
+        <span class="pre" id="statOrig">—</span>
+        <span class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 22 10" shape-rendering="crispEdges">
+            <rect x="0"  y="4" width="14" height="2" fill="currentColor"/>
+            <rect x="14" y="3" width="2"  height="4" fill="currentColor"/>
+            <rect x="16" y="2" width="2"  height="6" fill="currentColor"/>
+            <rect x="18" y="3" width="2"  height="4" fill="currentColor"/>
+            <rect x="20" y="4" width="2"  height="2" fill="currentColor"/>
+          </svg>
+        </span>
+        <span class="post" id="statComp">—</span>
+      </span>
+    </div>
+    <div class="stat-cell gold-cell">
+      <span class="stat-key">Space Saved</span>
+      <span class="stat-val" id="statSaved">—</span>
+    </div>
+  </div>
+
+  <div class="file-panel hidden" id="filePanel">
+    <div class="file-panel-header" aria-hidden="true">
+      <span class="col-lbl"></span>
+      <span class="col-lbl">File</span>
+      <span class="col-lbl r hide-mobile">Before / After</span>
+      <span class="col-lbl r">Saved</span>
+      <span class="col-lbl"></span>
+    </div>
+    <ul class="file-list" id="fileList" aria-label="Processed files"></ul>
+  </div>
+
+  <div class="bottom-actions" id="bottomActions">
+    <button class="btn-action primary hidden" id="downloadBtn">
+      <canvas class="zip-fire" id="zipFire" width="120" height="32" aria-hidden="true"></canvas>
+      <svg class="zip-glyph" viewBox="0 0 14 16" aria-hidden="true">
+        <rect x="5" y="0"  width="4" height="7" fill="currentColor"/>
+        <rect x="3" y="5"  width="2" height="2" fill="currentColor"/>
+        <rect x="9" y="5"  width="2" height="2" fill="currentColor"/>
+        <rect x="4" y="6"  width="6" height="2" fill="currentColor"/>
+        <rect x="5" y="7"  width="4" height="2" fill="currentColor"/>
+        <rect x="0" y="12" width="3" height="4" fill="currentColor"/>
+        <rect x="11" y="12" width="3" height="4" fill="currentColor"/>
+        <rect x="0" y="14" width="14" height="2" fill="currentColor"/>
+      </svg>
+      <span class="btn-dl-text">Download ZIP</span>
+    </button>
+    <button class="btn-action danger hidden" id="resetBtn">Clear All</button>
+  </div>
+
+  <div class="confirm-strip hidden" id="confirmStrip" role="alertdialog" aria-label="Confirm clear all">
+    <span class="confirm-msg">Clear all files and results? This cannot be undone.</span>
+    <button class="btn-confirm-y" id="confirmYes">Yes, Clear</button>
+    <button class="btn-confirm-n" id="confirmNo">Cancel</button>
+  </div>
+
+</main>
+
+<script>
+window.__themeIsDark = () => true;   // the suite is dark-only
+
+const $ = id => document.getElementById(id);
+const announce = msg => {
+  const r = $('liveRegion');
+  r.textContent = '';
+  setTimeout(() => r.textContent = msg, 50);
+};
+const fmt = b =>
+  b < 1024 ? b + ' B' :
+  b < 1048576 ? (b / 1024).toFixed(1) + ' KB' :
+  (b / 1048576).toFixed(2) + ' MB';
+const esc = s => s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+
+const CONCURRENCY = 4;
+const MAX_FILES   = 50;
+const MAX_BYTES   = 30 * 1024 * 1024;
+
+let files = [], blobs = [], urls = [];
+let busy = false, heifLib = null, heifReady = false;
+let stale = false;   // true after a successful compress run; relock until settings/files change
+
+(function loadPrefs() {
+  try {
+    const q = localStorage.getItem('ggit_q');
+    const f = localStorage.getItem('ggit_f');
+    const w = localStorage.getItem('ggit_w');
+    if (q) {
+      $('quality').value = q;
+      $('qualityVal').textContent = q + '%';
+      $('quality').setAttribute('aria-valuetext', q + ' percent');
+    }
+    if (f) $('format').value = f;
+    if (w) $('maxWidth').value = w;
+    syncPngNotice();
+  } catch(_) {}
+})();
+
+function savePrefs() {
+  try {
+    localStorage.setItem('ggit_q', $('quality').value);
+    localStorage.setItem('ggit_f', $('format').value);
+    localStorage.setItem('ggit_w', $('maxWidth').value);
+  } catch(_) {}
+}
+
+function unstale() {
+  if (!stale) return;
+  stale = false;
+  // Re-enable the compress button if we still have files to work on
+  if (files.length && !busy) {
+    $('compressBtn').disabled = false;
+    $('compressBtn').removeAttribute('aria-disabled');
+    $('compressBtn').removeAttribute('data-stale');
+  }
+}
+
+(async () => {
+  const b = $('heicBanner');
+  b.classList.remove('hidden');
+  try {
+    if (typeof libheif === 'undefined') throw new Error('Script failed to load');
+    heifLib = await libheif();
+    heifReady = true;
+    b.classList.add('hidden');
+  } catch(err) {
+    b.className = 'banner error';
+    $('heicBannerText').textContent = 'HEIC decoder failed: ' + err.message + '. HEIC/HEIF files will not be supported.';
+    announce('HEIC decoder unavailable. HEIC and HEIF files will not be supported.');
+  }
+})();
+
+$('quality').addEventListener('input', () => {
+  const v = $('quality').value;
+  $('qualityVal').textContent = v + '%';
+  $('quality').setAttribute('aria-valuetext', v + ' percent');
+  savePrefs();
+  unstale();
+});
+
+function syncPngNotice() {
+  const png = $('format').value === 'image/png';
+  $('pngNotice').classList.toggle('hidden', !png);
+  $('quality').disabled = png;
+  $('quality').setAttribute('aria-disabled', png ? 'true' : 'false');
+  $('qualityVal').style.opacity = png ? '0.3' : '1';
+}
+$('format').addEventListener('change', () => { syncPngNotice(); savePrefs(); unstale(); });
+$('maxWidth').addEventListener('change', () => { savePrefs(); unstale(); });
+
+const dz = $('dropZone');
+dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('dragover'); });
+dz.addEventListener('dragleave', e => { if (!dz.contains(e.relatedTarget)) dz.classList.remove('dragover'); });
+dz.addEventListener('drop', e => {
+  e.preventDefault();
+  dz.classList.remove('dragover');
+  ingestFiles([...e.dataTransfer.files].filter(f => f.type.startsWith('image/') || isHeic(f)));
+});
+$('fileInput').addEventListener('change', () => {
+  ingestFiles([...($('fileInput').files)].filter(f => f.type.startsWith('image/') || isHeic(f)));
+  $('fileInput').value = '';
+});
+
+function isHeic(f) {
+  return ['image/heic','image/heif'].includes(f.type) ||
+    /\.(heic|heif)$/i.test(f.name);
+}
+function isGif(f) {
+  return f.type === 'image/gif' || /\.gif$/i.test(f.name);
+}
+
+function ingestFiles(sel) {
+  if (!sel.length) return;
+  let msgs = [];
+
+  // Validate size limits on incoming selection
+  const big = sel.filter(f => f.size > MAX_BYTES);
+  if (big.length) {
+    msgs.push('Skipped ' + big.length + ' file(s) over 30 MB: ' + big.map(f => f.name).join(', '));
+    sel = sel.filter(f => f.size <= MAX_BYTES);
+  }
+  if (!sel.length) { if (msgs.length) showBanner(msgs.join(' '), 'warning'); return; }
+
+  // APPEND MODE: if we already have files queued (and haven't started a fresh run),
+  // merge new files in — deduplicate by name+size so double-drops don't add dupes.
+  const isAppend = files.length > 0;
+  if (isAppend) {
+    const existing = new Set(files.map(f => f.name + '|' + f.size));
+    const novel = sel.filter(f => !existing.has(f.name + '|' + f.size));
+    if (!novel.length) {
+      showBanner('All selected files are already in the queue.', 'info');
+      return;
+    }
+    sel = novel;
+    files = files.concat(sel);
+    msgs.push('Added ' + sel.length + ' file' + (sel.length !== 1 ? 's' : '') + '.');
+  } else {
+    files = sel;
+  }
+
+  // Cap total after merge
+  if (files.length > MAX_FILES) {
+    msgs.push('Queue capped at ' + MAX_FILES + ' files.');
+    files = files.slice(0, MAX_FILES);
+  }
+
+  if (msgs.length) showBanner(msgs.join(' '), isAppend ? 'info' : 'warning');
+
+  // Reset run state (but keep previous results visible if appending)
+  stale = false;
+  $('compressBtn').removeAttribute('data-stale');
+  if (!isAppend) {
+    blobs = [];
+    freeUrls();
+    $('downloadBtn').classList.add('hidden');
+    $('resetBtn').classList.add('hidden');
+    $('confirmStrip').classList.add('hidden');
+    $('statsBar').classList.add('hidden');
+    $('filePanel').classList.add('hidden');
+    $('fileList').innerHTML = '';
+  }
+  $('compressBtn').disabled = false;
+  $('compressBtn').removeAttribute('aria-disabled');
+  $('resetBtn').classList.remove('hidden');
+
+  const label = files.length + ' file' + (files.length !== 1 ? 's' : '') + ' selected';
+  $('dropLabel').textContent = isAppend
+    ? files.length + ' files in queue (+' + sel.length + ' added)'
+    : label;
+  $('btnCount').textContent = '(' + files.length + ')';
+  document.querySelector('.btn-label-base').textContent =
+    files.length === 1 ? 'Compress Image' : 'Compress Images';
+  announce(isAppend
+    ? sel.length + ' file' + (sel.length !== 1 ? 's' : '') + ' added. ' + files.length + ' total in queue.'
+    : label + '. Ready to compress.');
+}
+
+function showBanner(msg, type) {
+  const b = $('heicBanner');
+  b.className = 'banner ' + (type || 'info');
+  $('heicBannerText').textContent = msg;
+  b.classList.remove('hidden');
+  announce(msg);
+}
+
+async function decodeHeic(file) {
+  if (!heifReady) throw new Error('HEIC decoder not ready');
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const dec = new heifLib.HeifDecoder();
+  const data = dec.decode(bytes);
+  if (!data?.length) throw new Error('No images in HEIC file');
+  const img = data[0];
+  const w = img.get_width(), h = img.get_height();
+  return new Promise((res, rej) => {
+    const buf = new Uint8ClampedArray(w * h * 4);
+    img.display({ data: buf, width: w, height: h }, result => {
+      if (!result) return rej(new Error('Decode failed'));
+      try {
+        const c = document.createElement('canvas');
+        c.width = w; c.height = h;
+        c.getContext('2d').putImageData(new ImageData(result.data, w, h), 0, 0);
+        c.toBlob(b => b ? res(b) : rej(new Error('toBlob failed')), 'image/jpeg', 1);
+      } catch(e) { rej(e); }
+    });
+  });
+}
+
+async function compress(file, quality, format, maxW) {
+  const src = isHeic(file) ? await decodeHeic(file) : file;
+  const gif = isGif(file);
+  return new Promise((res, rej) => {
+    const img = new Image();
+    const u = URL.createObjectURL(src);
+    img.onload = () => {
+      URL.revokeObjectURL(u);
+      let w = img.width, h = img.height;
+      if (maxW && w > maxW) { h = Math.round(h * maxW / w); w = maxW; }
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').drawImage(img, 0, 0, w, h);
+      const q = format === 'image/png' ? undefined : quality;
+      c.toBlob(b => b ? res({ blob: b, gif }) : rej(new Error('toBlob failed')), format, q);
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error('Image load failed')); };
+    img.src = u;
+  });
+}
+
+async function pool(tasks, n) {
+  const out = new Array(tasks.length);
+  let idx = 0;
+  const worker = async () => {
+    while (idx < tasks.length) { const i = idx++; out[i] = await tasks[i](); }
+  };
+  await Promise.all(Array.from({ length: Math.min(n, tasks.length) }, worker));
+  return out;
+}
+
+$('compressBtn').addEventListener('click', async () => {
+  if (busy) return;
+  busy = true;
+
+  const quality = Number($('quality').value) / 100;
+  const format  = $('format').value;
+  const maxW    = parseInt($('maxWidth').value, 10);
+  const ext     = format === 'image/jpeg' ? '.jpg' : format === 'image/webp' ? '.webp' : '.png';
+
+  blobs = []; freeUrls();
+  $('fileList').innerHTML = '';
+  $('filePanel').classList.remove('hidden');
+  $('progressWrap').style.display = 'block';
+  $('compressBtn').disabled = true;
+  $('compressBtn').setAttribute('aria-disabled', 'true');
+  $('downloadBtn').classList.add('hidden');
+  $('statsBar').classList.add('hidden');
+  $('confirmStrip').classList.add('hidden');
+  $('heicBanner').classList.add('hidden');
+
+  let done = 0;
+  const total = files.length;
+
+  function tick(name) {
+    const pct = Math.round(done / total * 100);
+    $('progressFill').style.width = pct + '%';
+    $('progressTrack').setAttribute('aria-valuenow', pct);
+    $('progressFraction').textContent = done + ' / ' + total;
+    $('progressFilename').textContent = name ? 'Processing: ' + name : '';
+  }
+  tick('');
+  announce('Compressing ' + total + ' file' + (total !== 1 ? 's' : '') + '...');
+
+  const rows = files.map(() => {
+    const li = document.createElement('li');
+    li.className = 'file-row';
+    li.setAttribute('aria-label', 'Queued');
+    li.innerHTML =
+      '<div class="file-thumb-ph" aria-hidden="true">…</div>' +
+      '<div class="file-name-col"><span class="file-name-text" style="color:var(--ash)">Queued…</span></div>' +
+      '<div class="hide-mobile"></div><div></div><div></div>';
+    $('fileList').appendChild(li);
+    return li;
+  });
+
+  const tasks = files.map((file, i) => async () => {
+    tick(file.name);
+    try {
+      const { blob, gif } = await compress(file, quality, format, maxW);
+      done++; tick(file.name);
+      return { i, file, blob, gif };
+    } catch(err) {
+      done++; tick(file.name);
+      return { i, file, err: err.message };
+    }
+  });
+
+  const results = await pool(tasks, CONCURRENCY);
+
+  let totOrig = 0, totComp = 0;
+  for (const r of results) {
+    if (r.err) {
+      renderFail(rows[r.i], r.file, r.err);
+    } else {
+      const name = r.file.name.replace(/\.[^.]+$/, ext);
+      blobs.push({ name, blob: r.blob });
+      totOrig += r.file.size;
+      totComp += r.blob.size;
+      renderRow(rows[r.i], r.file, r.blob, name, r.gif);
+    }
+  }
+
+  $('progressFill').style.width = '100%';
+  $('progressTrack').setAttribute('aria-valuenow', 100);
+  $('progressFraction').textContent = total + ' / ' + total;
+  $('progressFilename').textContent = 'Complete';
+
+  $('statOrig').textContent  = fmt(totOrig);
+  $('statComp').textContent  = fmt(totComp);
+  const pct = totOrig ? Math.round((1 - totComp / totOrig) * 100) : 0;
+  $('statSaved').textContent = pct + '%';
+  $('statsBar').classList.remove('hidden');
+
+  if (blobs.length) {
+    $('downloadBtn').classList.remove('hidden');
+    announce('Done. ' + blobs.length + ' files compressed. ' + pct + '% space saved.');
+  } else {
+    announce('Compression complete. No files were successfully compressed.');
+  }
+  $('resetBtn').classList.remove('hidden');
+  $('compressBtn').disabled = false;
+  $('compressBtn').removeAttribute('aria-disabled');
+  setTimeout(() => { $('progressWrap').style.display = 'none'; }, 1500);
+  busy = false;
+
+  // Lock the button: same settings + same files would re-make the same output.
+  if (blobs.length) {
+    stale = true;
+    $('compressBtn').disabled = true;
+    $('compressBtn').setAttribute('aria-disabled', 'true');
+    $('compressBtn').setAttribute('data-stale', '1');
+  }
+});
+
+function renderRow(li, orig, blob, newName, gifWarn) {
+  const pct = Math.round((1 - blob.size / orig.size) * 100);
+  const cls = pct >= 50 ? 'good' : pct >= 20 ? 'ok' : 'meh';
+  const pctTxt = (pct >= 0 ? '-' : '+') + Math.abs(pct) + '%';
+
+  const thumbUrl = URL.createObjectURL(blob);
+  urls.push(thumbUrl);
+
+  const img = document.createElement('img');
+  img.className = 'file-thumb';
+  img.src = thumbUrl;
+  img.alt = '';
+
+  li.className = 'file-row';
+  li.setAttribute('aria-label',
+    orig.name + ': ' + fmt(orig.size) + ' to ' + fmt(blob.size) + ', ' + pctTxt +
+    (gifWarn ? ', GIF first frame only' : ''));
+
+  li.innerHTML = '';
+  li.appendChild(img);
+
+  const nc = document.createElement('div');
+  nc.className = 'file-name-col';
+  nc.innerHTML = '<span class="file-name-text">' + esc(orig.name) +
+    (gifWarn ? '<span class="gif-tag" title="Only the first frame was retained. GIF animation is not preserved.">GIF 1st frame</span>' : '') +
+    '</span>';
+  li.appendChild(nc);
+
+  const sc = document.createElement('div');
+  sc.className = 'file-sizes-col hide-mobile';
+  sc.innerHTML =
+    '<span class="orig">' + fmt(orig.size) + '</span>' +
+    '<span class="arrow" aria-hidden="true">' +
+      '<svg viewBox="0 0 22 10" shape-rendering="crispEdges">' +
+        '<rect x="0"  y="4" width="14" height="2" fill="currentColor"/>' +
+        '<rect x="14" y="3" width="2"  height="4" fill="currentColor"/>' +
+        '<rect x="16" y="2" width="2"  height="6" fill="currentColor"/>' +
+        '<rect x="18" y="3" width="2"  height="4" fill="currentColor"/>' +
+        '<rect x="20" y="4" width="2"  height="2" fill="currentColor"/>' +
+      '</svg>' +
+    '</span>' +
+    '<span class="comp">' + fmt(blob.size) + '</span>';
+  li.appendChild(sc);
+
+  const pc = document.createElement('div');
+  pc.className = 'file-pct-col ' + cls;
+  pc.setAttribute('aria-hidden', 'true');
+  pc.textContent = pctTxt;
+  li.appendChild(pc);
+
+  const btn = document.createElement('button');
+  btn.className = 'btn-save-single';
+  btn.innerHTML =
+    '<svg class="save-glyph" viewBox="0 0 10 12" aria-hidden="true">' +
+      '<rect x="4" y="0" width="2" height="6" fill="currentColor"/>' +
+      '<rect x="2" y="4" width="2" height="2" fill="currentColor"/>' +
+      '<rect x="6" y="4" width="2" height="2" fill="currentColor"/>' +
+      '<rect x="3" y="5" width="4" height="2" fill="currentColor"/>' +
+      '<rect x="0" y="9" width="10" height="2" fill="currentColor"/>' +
+    '</svg>' +
+    '<span>Save</span>';
+  btn.setAttribute('aria-label', 'Download ' + newName);
+  btn.addEventListener('click', () => {
+    const u = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = u; a.download = newName; a.click();
+    setTimeout(() => URL.revokeObjectURL(u), 10000);
+  });
+  li.appendChild(btn);
+}
+
+function renderFail(li, file, msg) {
+  li.className = 'file-row failed';
+  li.setAttribute('aria-label', file.name + ' failed: ' + msg);
+  li.innerHTML =
+    '<div class="file-thumb-ph" aria-hidden="true" style="color:var(--amber)">!</div>' +
+    '<div class="file-name-col" style="grid-column:span 3">' +
+      '<div class="fail-name">' + esc(file.name) + '</div>' +
+      '<div class="fail-msg">' + esc(msg) + '</div>' +
+    '</div><div></div>';
+}
+
+function freeUrls() {
+  urls.forEach(u => { try { URL.revokeObjectURL(u); } catch(_){} });
+  urls = [];
+}
+
+$('downloadBtn').addEventListener('click', async () => {
+  if (!blobs.length) return;
+  $('downloadBtn').disabled = true;
+  $('downloadBtn').querySelector('.btn-dl-text').textContent = 'Building ZIP...';
+  announce('Building ZIP archive...');
+  const zip = new JSZip();
+  blobs.forEach(({ name, blob }) => zip.file(name, blob));
+  const content = await zip.generateAsync({ type: 'blob' });
+  const u = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  const ts = new Date().toISOString().replace(/[T:]/g, '-').replace(/\..+/, '').replace(/-/g, (m, i) => i === 13 || i === 16 ? ':' : m).replace(/:/g, '').slice(0, 15);
+  a.href = u; a.download = 'compressed_' + ts + '.zip'; a.click();
+  setTimeout(() => URL.revokeObjectURL(u), 10000);
+  $('downloadBtn').disabled = false;
+  $('downloadBtn').querySelector('.btn-dl-text').textContent = 'Download ZIP';
+  announce('ZIP download started.');
+});
+
+$('resetBtn').addEventListener('click', () => {
+  doReset();
+  announce('All files cleared.');
+});
+
+function doReset() {
+  files = []; blobs = [];
+  stale = false;
+  freeUrls();
+  $('compressBtn').removeAttribute('data-stale');
+  $('fileList').innerHTML = '';
+  $('filePanel').classList.add('hidden');
+  $('statsBar').classList.add('hidden');
+  $('downloadBtn').classList.add('hidden');
+  $('resetBtn').classList.add('hidden');
+  $('confirmStrip').classList.add('hidden');
+  $('compressBtn').disabled = true;
+  $('compressBtn').setAttribute('aria-disabled', 'true');
+  $('btnCount').textContent = '';
+  document.querySelector('.btn-label-base').textContent = 'Compress Images';
+  $('dropLabel').textContent = 'Drop images or click to browse';
+  $('progressWrap').style.display = 'none';
+  $('heicBanner').classList.add('hidden');
+}
+
+/* ─── MUSIC NOTE BUTTON ────────────────────────────────────────────────────── */
+
+
+/* ─── DOOM-STYLE FIRE ENGINE ──────────────────────────────────────────────── */
+function createFire(canvas, W, H) {
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const palette = [
+    [  0,  0,  0,   0], [  7,  7,  7,  40], [ 31,  7,  7,  90], [ 47, 15,  7, 130],
+    [ 71, 15,  7, 170], [ 87, 23,  7, 200], [103, 31,  7, 220], [119, 31,  7, 235],
+    [143, 39,  7, 245], [159, 47,  7, 250], [175, 63,  7, 255], [191, 71,  7, 255],
+    [199, 71,  7, 255], [223, 79,  7, 255], [223, 87,  7, 255], [223, 87,  7, 255],
+    [215, 95,  7, 255], [215, 95,  7, 255], [215,103, 15, 255], [207,111, 15, 255],
+    [207,119, 15, 255], [207,127, 15, 255], [207,135, 23, 255], [199,135, 23, 255],
+    [199,143, 23, 255], [199,151, 31, 255], [191,159, 31, 255], [191,159, 31, 255],
+    [191,167, 39, 255], [191,167, 39, 255], [191,175, 47, 255], [183,175, 47, 255],
+    [183,183, 47, 255], [183,183, 55, 255], [207,207,111, 255], [223,223,159, 255],
+    [239,239,199, 255], [255,255,255, 255]
+  ];
+  const MAX = palette.length - 1;
+  const buf = new Uint8Array(W * H);
+  const img = ctx.createImageData(W, H);
+
+  function step() {
+    for (let x = 0; x < W; x++) {
+      for (let y = 0; y < H - 1; y++) {
+        const srcIdx = (y + 1) * W + x;
+        const rand   = (Math.random() * 3) | 0;
+        const cool   = rand & 1;
+        const shift  = rand - 1;
+        const dstX   = x + shift;
+        if (dstX < 0 || dstX >= W) continue;
+        const dstIdx = y * W + dstX;
+        const v = buf[srcIdx] - cool;
+        buf[dstIdx] = v < 0 ? 0 : v;
+      }
+    }
+  }
+
+  function setFuel(heatFn) {
+    const base = (H - 1) * W;
+    for (let x = 0; x < W; x++) {
+      const h = heatFn(x);
+      buf[base + x] = h <= 0 ? 0 : h >= 1 ? MAX : (h * MAX) | 0;
+    }
+  }
+
+  function render() {
+    const data = img.data;
+    for (let i = 0; i < buf.length; i++) {
+      const c = palette[buf[i]];
+      const p = i * 4;
+      data[p]   = c[0];
+      data[p+1] = c[1];
+      data[p+2] = c[2];
+      data[p+3] = c[3];
+    }
+    ctx.putImageData(img, 0, 0);
+  }
+
+  return { step, setFuel, render, buf, W, H, MAX };
+}
+
+/* ─── BUTTON FIRE (ambient base + mouse-follow highlight) ─────────────────── */
+(function buttonFire() {
+  const btn = document.getElementById('compressBtn');
+  const c   = document.getElementById('btnFire');
+  if (!btn || !c) return;
+
+  // Baked TWEAKS values: fireBase:0.34, fireBump:0.9, fireSpeed:1.05,
+  //                      firePixelSize:100, fireOpacity:1
+  const FIRE_BASE      = 0.34;
+  const FIRE_BUMP      = 0.90;
+  const FIRE_SPEED     = 1.05;
+  const FIRE_PIXEL_W   = 100;
+  const FIRE_OPACITY   = 1;
+
+  const H = 16;
+  const fire = createFire(c, FIRE_PIXEL_W, H);
+
+  let hot = 0, targetHot = 0;
+  let mouseU = 0.5, targetU = 0.5;
+  let active = false;
+  let t0 = performance.now();
+  let stepAccumulator = 0;
+  let running = false;
+
+  function activate()   { active = true;  targetHot = 1; kick(); }
+  function deactivate() { active = false; targetHot = 0; kick(); }
+  btn.addEventListener('mouseenter', activate);
+  btn.addEventListener('mouseleave', deactivate);
+  btn.addEventListener('mousemove', (e) => {
+    const r = btn.getBoundingClientRect();
+    targetU = Math.max(0, Math.min(1, (e.clientX - r.left) / r.width));
+  });
+  btn.addEventListener('focus', activate);
+  btn.addEventListener('blur', () => { if (!btn.matches(':hover')) deactivate(); });
+
+  function frame(now) {
+    hot    += (targetHot - hot)    * (targetHot ? 0.10 : 0.025);
+    mouseU += (targetU   - mouseU) * 0.10;
+
+    const W     = fire.W;
+    const t     = (now - t0) * 0.001;
+    const focal  = mouseU * W;
+    const FALLOFF = W * 0.18;
+
+    fire.setFuel((x) => {
+      if (hot < 0.005) return 0;
+      const u = x / W;
+      const ambientWave =
+        FIRE_BASE
+        + (FIRE_BASE * 0.33) * Math.sin(u * Math.PI * 3.0 - t * 0.5)
+        + (FIRE_BASE * 0.17) * Math.sin(u * Math.PI * 7.0 + t * 0.3);
+      const ambient = Math.max(0, ambientWave) * 0.55;
+      const dx = (x - focal) / FALLOFF;
+      const bump = Math.max(0, 1 - dx * dx) * FIRE_BUMP;
+      return Math.min(1, hot * (ambient + bump));
+    });
+
+    stepAccumulator += FIRE_SPEED;
+    while (stepAccumulator >= 1) { fire.step(); stepAccumulator -= 1; }
+    fire.render();
+    c.style.setProperty('--fire-opacity', FIRE_OPACITY);
+
+    let alive = active || hot > 0.005;
+    if (!alive) {
+      for (let i = 0; i < fire.buf.length; i++) {
+        if (fire.buf[i] > 0) { alive = true; break; }
+      }
+    }
+    if (alive) { requestAnimationFrame(frame); }
+    else        { running = false; }
+  }
+
+  function kick() { if (!running) { running = true; requestAnimationFrame(frame); } }
+})();
+
+/* ─── DOWNLOAD ZIP FIRE — lazy start, only runs when button is visible ─────── */
+(function zipFire() {
+  const c   = document.getElementById('zipFire');
+  const btn = document.getElementById('downloadBtn');
+  if (!c || !btn) return;
+  const W = 80, H = 14;
+  const fire = createFire(c, W, H);
+  let t0 = performance.now();
+  let counter = 0;
+  let running = false;
+
+  function frame(now) {
+    if (document.hidden) { running = false; return; }
+    const t = (now - t0) * 0.001;
+    fire.setFuel((x) => {
+      const u = x / W;
+      const wave =
+        0.30
+        + 0.10 * Math.sin(u * Math.PI * 2.6 - t * 0.45)
+        + 0.06 * Math.sin(u * Math.PI * 6.0 + t * 0.30);
+      const edgeFade = Math.min(1, Math.min(u, 1 - u) * 4);
+      return Math.max(0, wave) * edgeFade * 0.7;
+    });
+    if ((counter++ % 2) === 0) fire.step();
+    fire.render();
+    requestAnimationFrame(frame);
+  }
+
+  function start() {
+    if (!running) { running = true; t0 = performance.now(); requestAnimationFrame(frame); }
+  }
+
+  // Start fire when button transitions from hidden to visible
+  new MutationObserver(() => {
+    if (!btn.classList.contains('hidden')) start();
+  }).observe(btn, { attributes: true, attributeFilter: ['class'] });
+
+  // Also resume after tab becomes visible (if button already showing)
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden && !btn.classList.contains('hidden')) start();
+  });
+})();
+
+
+
+
+
+/* TITLE 3D — Three.js glossy extrude with mouse tilt */
+// Safety fallback: reveal body after 3s in case Three.js is slow/blocked
+</script>
+
+
+
+
+
+
+
+<script src="../orbhome.js"></script>
+</body>
+</html>

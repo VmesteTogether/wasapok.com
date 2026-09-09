@@ -1,0 +1,1232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: blob:; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; connect-src 'self' data: blob: https://cdnjs.cloudflare.com; worker-src 'self' blob:; base-uri 'self'; form-action 'none'; object-src 'none';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#003332">
+<meta name="description" content="Image Formatter — resize, crop, convert and bulk-rename images in your browser.">
+
+<title>Image Formatter · VmesteSoft</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vmestesoft.css">
+
+<!-- zip output for batches -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"
+        integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG"
+        crossorigin="anonymous"></script>
+
+<style>
+/* ────────────────────────────────────────────────────────────────
+   IMAGE FORMATTER · the tailor's atelier
+   Images come in as bolts of cloth, get measured with a yellow
+   tape, pinned, chalked, and cut to one pattern on the mat.
+   Restyled for VmesteSoft; see soft/DESIGN_SPEC.md.
+   ──────────────────────────────────────────────────────────────── */
+
+/* ── DAYLIGHT ATELIER: linen, muslin, walnut, brass, thread ── */
+/* ── LAYOUT ── */
+main {
+  max-width: 1080px;
+  margin: 22px auto 0;
+  padding: 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.card {
+  position: relative;
+  background: var(--tar);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+/* views */
+body[data-view="upload"] .editor-only { display: none !important; }
+body[data-view="editor"] .upload-only { display: none !important; }
+
+/* ── DROPZONE — the cutting table, cut along the dotted line ── */
+.drop-card { max-width: 560px; width: 100%; margin: 26px auto 0; }
+#dz {
+  border: 2.5px dashed var(--rust);
+  border-radius: 0;
+  padding: 40px 22px 34px;
+  text-align: center;
+  cursor: pointer;
+  background: var(--pit);
+  transition: border-color 0.15s, background-color 0.15s;
+}
+#dz:hover, #dz:focus-visible, #dz.drag-over {
+  border-color: var(--acid);
+  outline: none;
+}
+#dz .dz-icon { display: block; margin: 0 auto 12px; overflow: visible; }
+/* both halves hinge on the pivot screw at (62,34) — right on the cut line */
+.sc-half {
+  transform-box: view-box;
+  transform-origin: 62px 34px;
+}
+.sc-h1 { transform: rotate(-8deg); }
+.sc-h2 { transform: rotate(8deg); }
+#dz:hover .dz-scissors, #dz.drag-over .dz-scissors { animation: shear-slide 2.4s linear infinite; }
+#dz:hover .sc-h1, #dz.drag-over .sc-h1 { animation: snip-h1 0.4s ease-in-out infinite; }
+#dz:hover .sc-h2, #dz.drag-over .sc-h2 { animation: snip-h2 0.4s ease-in-out infinite; }
+/* glide down the cut line, snipping as they go */
+@keyframes shear-slide {
+  0%   { transform: translateX(-40px); opacity: 0; }
+  6%   { opacity: 1; }
+  94%  { opacity: 1; }
+  100% { transform: translateX(48px); opacity: 0; }
+}
+@keyframes snip-h1 { 0%, 100% { transform: rotate(-13deg); } 55% { transform: rotate(-1deg); } }
+@keyframes snip-h2 { 0%, 100% { transform: rotate(13deg); }  55% { transform: rotate(1deg); } }
+#dz .dz-big {
+  display: block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 21px; font-weight: 700;
+  letter-spacing: 3px; text-transform: uppercase;
+  color: var(--bone);
+}
+#dz .dz-small {
+  display: block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 14px; font-weight: 600;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ash);
+  margin-top: 6px;
+  animation: dz-breathe 2.4s ease-in-out infinite;
+}
+#dz .dz-formats {
+  display: block;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12.5px; font-weight: 600;
+  letter-spacing: 2px;
+  color: var(--ash);
+  margin-top: 14px;
+}
+@keyframes dz-breathe { 50% { opacity: 0.5; } }
+#fileInput { display: none; }
+
+/* ── TOOLBAR ── */
+.toolbar {
+  display: flex;
+  align-items: flex-end;
+  flex-wrap: wrap;
+  gap: 14px 22px;
+  padding: 14px 16px;
+}
+.field { display: flex; flex-direction: column; gap: 4px; }
+.field-label {
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 12px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  color: var(--ash);
+}
+select, input[type="number"] {
+  font-family: 'Barlow', sans-serif;
+  font-size: 14px; font-weight: 500;
+  background: var(--pit);
+  color: var(--bone);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  padding: 6px 8px;
+  outline: none;
+  transition: border-color 0.12s, box-shadow 0.12s;
+}
+select:hover, input[type="number"]:hover { border-color: var(--line-hi); }
+select:focus-visible, input[type="number"]:focus-visible {
+  border-color: var(--acid);
+  box-shadow: 2px 2px 0 var(--acid);
+}
+input[type="number"] { width: 74px; }
+.dims-row { display: flex; align-items: center; gap: 6px; }
+.dims-row .x { color: var(--ash); font-size: 13px; }
+#customDims[hidden] { display: none; }
+
+.toolbar-spacer { flex: 1; }
+
+/* ── WORKSPACE — swatch rail + cutting mat ── */
+.workspace {
+  display: flex;
+  overflow: hidden;
+  height: min(60vh, 540px);
+}
+#rail {
+  width: 158px;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 12px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  border-right: 1px dashed var(--line);
+  scrollbar-width: thin;
+}
+/* fabric swatches */
+.th {
+  position: relative;
+  border: 1px solid var(--line);
+  border-radius: 0;
+  background: var(--tar);
+  padding: 4px;
+  cursor: pointer;
+  flex-shrink: 0;
+  box-shadow: 2px 2px 0 rgba(0,0,0,0.12);
+  transition: border-color 0.12s;
+}
+.th img {
+  width: 100%; aspect-ratio: 4/3; object-fit: cover;
+  display: block; opacity: 0.62; transition: opacity 0.12s;
+}
+.th:hover img { opacity: 0.9; }
+.th:focus-visible { outline: 2px solid var(--acid-dim); outline-offset: 2px; }
+.th.active { border-color: var(--rust); }
+.th.active img { opacity: 1; }
+/* reviewed — a stitched green patch with a check */
+.th .ck {
+  position: absolute; top: 7px; right: 7px;
+  width: 17px; height: 17px;
+  display: none; place-items: center;
+  background: var(--acid); color: #fff;
+  font-size: 10px; line-height: 1;
+  outline: 1px dashed rgba(255,255,255,0.75);
+  outline-offset: -3px;
+}
+.th.done .ck { display: grid; }
+.th .nm {
+  display: block;
+  font-size: 10.5px; color: var(--ash);
+  padding: 4px 2px 1px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  text-align: center;
+}
+
+/* the cutting mat */
+.stage-wrap {
+  flex: 1;
+  position: relative;
+  background:
+    repeating-linear-gradient(0deg,  var(--line) 0 1px, transparent 1px 30px),
+    repeating-linear-gradient(90deg, var(--line) 0 1px, transparent 1px 30px),
+    var(--pit);
+  box-shadow: inset 0 0 0 2px rgba(255,255,255,0.06), inset 0 0 42px rgba(0,0,0,0.35);
+  min-width: 0;
+}
+#stage { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; }
+/* the measurement label */
+#cropInfo {
+  position: absolute;
+  bottom: 10px; left: 50%;
+  transform: translateX(-50%);
+  background: var(--void);
+  border: 1px dashed rgba(255,210,63,0.55);
+  color: #F0E6CC;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 13.5px; font-weight: 600;
+  letter-spacing: 1.5px;
+  padding: 6px 13px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+#cropInfo .k { color: rgba(240,230,204,0.5); }
+#cropInfo .v { color: var(--acid); }
+/* masking-tape name tag */
+#curName {
+  position: absolute;
+  top: 10px; left: 12px;
+  max-width: 60%;
+  background: rgba(250,245,233,0.88);
+  color: #56432C;
+  font-size: 12px; font-weight: 500;
+  padding: 4px 12px;
+  transform: rotate(-1deg);
+  box-shadow: 1px 2px 3px rgba(0,0,0,0.3);
+  pointer-events: none;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+/* ── BUTTONS ── */
+.btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Barlow Condensed', sans-serif;
+  font-size: 15px; font-weight: 700;
+  letter-spacing: 2px; text-transform: uppercase;
+  padding: 8px 14px;
+  background: var(--tar);
+  color: var(--bone);
+  border: 1px solid var(--line);
+  border-radius: 0;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s, transform 0.08s, box-shadow 0.08s;
+}
+.btn:hover:not(:disabled), .btn:focus-visible {
+  border-color: var(--acid);
+  background: var(--slab);
+}
+.btn:focus-visible { outline: 2px solid var(--acid); outline-offset: 2px; }
+.btn:disabled { opacity: 0.35; cursor: not-allowed; }
+
+.btn-primary {
+  background: var(--acid);
+  color: var(--void);
+  border: 2px solid var(--void);
+  box-shadow: 3px 3px 0 var(--acid-dim);
+  padding: 8px 18px;
+}
+/* running-stitch edging — only the primary patch buttons earn it */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border: 1px dashed currentColor;
+  opacity: 0.45;
+  pointer-events: none;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #FFDD66;
+  border-color: var(--void);
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--acid-dim);
+}
+.btn-primary:active:not(:disabled) { transform: translate(2px, 2px); box-shadow: 1px 1px 0 var(--acid-dim); }
+.btn-primary:focus-visible { outline: 2px solid var(--acid-dim); outline-offset: 3px; }
+
+.btn-quiet {
+  background: none;
+  color: var(--ash);
+  border-color: transparent;
+}
+.btn-quiet:hover, .btn-quiet:focus-visible { color: var(--rust); border-color: var(--rust); background: none; }
+
+/* status — a woven selvage label */
+#status {
+  font-size: 13px; font-weight: 500;
+  padding: 10px 12px;
+  border-radius: 0;
+  display: none;
+  line-height: 1.45;
+}
+#status.info    { display: block; background: rgba(138,115,80,0.12);  border: 1px dashed var(--line-hi);   color: var(--bone); }
+#status.success { display: block; background: rgba(58,110,58,0.10);   border: 1px dashed var(--acid); color: var(--acid); }
+#status.error   { display: block; background: rgba(160,58,46,0.09);   border: 1px dashed var(--rust);   color: var(--rust); }
+
+
+
+@media (max-width: 720px) {
+
+
+
+  main { padding: 0 12px; }
+  /* finger-sized controls */
+  select, input[type="number"] { padding: 10px 10px; font-size: 15px; }
+  .btn { padding: 11px 16px; }
+  .btn-primary { padding: 11px 20px; }
+  .toolbar { gap: 12px 16px; }
+  .workspace { flex-direction: column; height: auto; }
+  .stage-wrap { flex: none; height: 52vh; }
+  #rail {
+    width: auto; height: 104px;
+    flex-direction: row;
+    overflow-x: auto; overflow-y: hidden;
+    border-right: none; border-top: 1px dashed var(--line);
+    order: 2;
+    padding: 10px;
+  }
+  .th { width: 106px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+
+  #dz .dz-small { animation: none; }
+  #dz .dz-scissors, #dz .sc-half { animation: none !important; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   VMESTESOFT SKIN — see soft/DESIGN_SPEC.md
+   ════════════════════════════════════════════════════════════════ */
+
+main { max-width: var(--maxw); margin: 0 auto; padding: 0 var(--gutter) 80px; }
+
+.card {
+  background: var(--tar); border: 1px solid var(--line);
+  border-radius: 0; box-shadow: none;
+}
+
+/* ── drop zone ── */
+.drop-card { max-width: 640px; margin: var(--gutter) auto 0; }
+#dz {
+  background: var(--pit); border: 1px dashed var(--line); border-radius: 0;
+  min-height: 200px; padding: 40px var(--gutter);
+}
+#dz:hover, #dz:focus-visible { border-color: var(--line-hi); background: var(--pit); }
+#dz.drag-over {
+  border-style: solid; border-color: var(--acid); background: var(--pit);
+  background-image: repeating-linear-gradient(45deg,
+    rgba(0,184,113,0.10) 0 4px, transparent 4px 8px);
+  background-size: 11.32px 11.32px;
+  animation: hazard-crawl 800ms linear infinite;
+}
+#dz.drag-over .dz-big { color: var(--acid); }
+#dz .dz-icon { color: var(--ash); }
+#dz .dz-icon [stroke], #dz .dz-icon [fill]:not([fill="none"]) { stroke: currentColor; }
+#dz .dz-big {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+  text-shadow: none;
+}
+#dz .dz-small, #dz .dz-formats {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase; color: var(--ghost);
+  text-shadow: none;
+}
+
+/* ── toolbar ── */
+.toolbar { gap: var(--gutter); padding: 16px var(--gutter); }
+.field-label {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+}
+select, input[type="number"] {
+  padding: 10px 12px;
+  background: var(--pit); color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0;
+  font-family: var(--mono); font-size: var(--t-data);
+}
+select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ash) 50%),
+                    linear-gradient(135deg, var(--ash) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+  padding-right: 32px;
+}
+select:focus, input[type="number"]:focus {
+  border-color: var(--acid); outline: 1px solid var(--acid); outline-offset: 1px;
+}
+.dims-row .x { font-family: var(--mono); color: var(--ghost); }
+
+/* ── buttons ── */
+.btn {
+  font-family: var(--shout); font-weight: 800; font-size: 15px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  background: transparent; color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0; box-shadow: none;
+  padding: 10px 20px; min-height: 40px;
+  transition: transform 100ms linear, box-shadow 100ms linear, border-color 100ms linear;
+}
+.btn:hover:not(:disabled) {
+  border-color: var(--line-hi); color: var(--bone);
+  transform: translate(-1px, -1px); box-shadow: 2px 2px 0 var(--line-hi);
+}
+.btn:disabled { color: var(--ghost); border-color: var(--line); opacity: 1; }
+
+.btn-primary {
+  background: var(--acid); color: var(--void); border-color: var(--acid);
+  box-shadow: none;
+  clip-path: polygon(0 0, calc(100% - 8px) 0, 100% 8px,
+                     100% 100%, 8px 100%, 0 calc(100% - 8px));
+}
+.btn-primary::after { display: none; }
+.btn-primary:hover:not(:disabled) {
+  background: var(--acid); color: var(--void); border-color: var(--acid);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--acid-dim), 0 0 12px rgba(0, 255, 156, 0.25);
+}
+.btn-primary:active:not(:disabled) { transform: translate(0, 0); box-shadow: 1px 1px 0 var(--acid-dim); }
+.btn-primary:disabled { background: var(--slab); color: var(--ghost); border-color: var(--line); }
+
+.btn-quiet { color: var(--ash); border-color: transparent; }
+.btn-quiet:hover, .btn-quiet:focus-visible {
+  color: var(--rust); border-color: var(--rust); box-shadow: none; transform: none;
+}
+
+/* ── workspace ── */
+.workspace { border: 1px solid var(--line); background: var(--tar); }
+#rail { background: var(--pit); border-right: 1px solid var(--line); }
+.th { border: 1px solid var(--line); border-radius: 0; background: var(--pit); }
+.th:hover { border-color: var(--line-hi); }
+.th.active { border-color: var(--acid); box-shadow: inset 0 0 0 1px var(--acid); }
+.th .ck { background: var(--acid); color: var(--void); border-radius: 0; }
+.th .nm {
+  font-family: var(--mono); font-size: 10px; letter-spacing: 0.06em;
+  color: var(--ash); background: var(--pit);
+}
+
+.stage-wrap { background: var(--pit); border-radius: 0; }
+.stage-wrap::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(to bottom,
+    rgba(0,255,156,0.045) 0 1px, transparent 1px 3px);
+}
+#cropInfo, #curName {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  background: var(--pit); border: 1px solid var(--line); border-radius: 0;
+  color: var(--ash);
+}
+#cropInfo .k { color: var(--ghost); }
+#cropInfo .v { color: var(--acid); font-variant-numeric: tabular-nums; }
+
+/* ── status line ── */
+#status {
+  font-family: var(--mono); font-size: var(--t-data);
+  border: 1px solid var(--line); border-left-width: 3px; border-radius: 0;
+  background: var(--slab); color: var(--ash);
+}
+#status.info    { background: var(--slab); border-color: var(--line); border-left-color: var(--acid);  color: var(--ash); }
+#status.success { background: var(--slab); border-color: var(--line); border-left-color: var(--acid);  color: var(--bone); }
+#status.error   { background: var(--slab); border-color: var(--line); border-left-color: var(--rust);  color: var(--bone); }
+</style>
+</head>
+<body class="has-orb" data-view="upload">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- the way back to the index -->
+<a class="orb-home" href="../index.html" data-hue="#4DB8FF"
+   style="--hue:#4DB8FF" aria-label="VmesteSoft — all tools">
+  <canvas aria-hidden="true"></canvas>
+</a>
+
+
+<div id="liveRegion" aria-live="polite" aria-atomic="true" class="sr-only"></div>
+
+<!-- shared defs: the fuzzy chenille edge for the patch letters -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <filter id="pl-fuzz" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="0.7"/>
+    </filter>
+  </defs>
+</svg>
+
+<!-- HEADER — family bar -->
+<h1 class="sr-only">Image Formatter</h1>
+
+<main id="main" role="main">
+
+
+  <!-- UPLOAD VIEW -->
+  <section class="drop-card card upload-only" aria-label="Add images">
+    <div id="dz" role="button" tabindex="0" aria-label="Drop images here or press Enter to browse">
+      <svg class="dz-icon" width="150" height="52" viewBox="0 0 150 52" fill="none" aria-hidden="true">
+        <!-- the cut line -->
+        <line x1="4" y1="34" x2="146" y2="34" stroke="var(--rust)" stroke-width="2" stroke-dasharray="7 6"/>
+        <!-- shears riding the line: two halves hinged at the pivot screw,
+             each half = blade forward + the opposite handle behind -->
+        <g class="dz-scissors">
+          <g class="sc-half sc-h1">
+            <path d="M62 34 L94 33" stroke="var(--bone)" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M62 34 L50 39" stroke="var(--bone)" stroke-width="2.4" stroke-linecap="round"/>
+            <circle cx="45.5" cy="41" r="4.6" stroke="var(--bone)" stroke-width="2.6"/>
+          </g>
+          <g class="sc-half sc-h2">
+            <path d="M62 34 L94 35" stroke="var(--bone)" stroke-width="2.8" stroke-linecap="round"/>
+            <path d="M62 34 L50 29" stroke="var(--bone)" stroke-width="2.4" stroke-linecap="round"/>
+            <circle cx="45.5" cy="27" r="4.6" stroke="var(--bone)" stroke-width="2.6"/>
+          </g>
+          <circle cx="62" cy="34" r="2" fill="var(--acid)"/>
+        </g>
+      </svg>
+      <span class="dz-big">Drop images here</span>
+      <span class="dz-small">or click to browse — drop as many as you like</span>
+      <span class="dz-formats">JPEG &middot; PNG &middot; WebP &middot; GIF &middot; HEIC</span>
+    </div>
+    <input type="file" id="fileInput" accept="image/*,.heic,.heif" multiple>
+  </section>
+
+  <!-- EDITOR VIEW -->
+  <section class="card toolbar editor-only" aria-label="Frame and export settings">
+    <div class="field">
+      <label class="field-label" for="frameSel">Frame</label>
+      <select id="frameSel"></select>
+    </div>
+    <div class="field" id="customDims" hidden>
+      <span class="field-label" id="customDimsLabel">Size&nbsp;(px)</span>
+      <div class="dims-row" role="group" aria-labelledby="customDimsLabel">
+        <input type="number" id="customW" min="16" max="20000" value="1080" aria-label="Output width in pixels">
+        <span class="x" aria-hidden="true">&times;</span>
+        <input type="number" id="customH" min="16" max="20000" value="1080" aria-label="Output height in pixels">
+      </div>
+    </div>
+    <div class="field">
+      <label class="field-label" for="fmtSel">Format</label>
+      <select id="fmtSel">
+        <option value="auto">Keep original</option>
+        <option value="image/jpeg">JPEG</option>
+        <option value="image/png">PNG</option>
+        <option value="image/webp">WebP</option>
+      </select>
+    </div>
+    <div class="toolbar-spacer"></div>
+    <button class="btn btn-primary" id="dlBtn" type="button">Download all</button>
+    <button class="btn btn-quiet" id="clearBtn" type="button">Clear all</button>
+  </section>
+
+  <section class="card workspace editor-only" aria-label="Crop workspace">
+    <div id="rail" role="listbox" aria-label="Loaded images"></div>
+    <div class="stage-wrap">
+      <canvas id="stage"></canvas>
+      <div id="curName" aria-hidden="true"></div>
+      <div id="cropInfo" aria-hidden="true"></div>
+    </div>
+  </section>
+
+  <div id="status" role="status"></div>
+
+</main>
+
+<script>
+'use strict';
+
+/* ═══════════════════════════════════════════════════════════════
+   THEME (shared family behavior)
+   ═══════════════════════════════════════════════════════════════ */
+
+
+/* ═══════════════════════════════════════════════════════════════
+   TITLE — rebuild each letter as a chenille patch: felt base,
+   plush fill, running-stitch outline tracing the glyph.
+   Falls back to plain text if anything goes sideways.
+   ═══════════════════════════════════════════════════════════════ */
+document.fonts.ready.then(() => {
+  const NS = 'http://www.w3.org/2000/svg';
+  const PAD = 9, TOP = -82, VH = 92;   // shared vertical range so every letter scales alike
+  document.querySelectorAll('.hero-label > span:not(.sp)').forEach(sp => {
+    const ch = sp.textContent;
+    try {
+      const svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('class', 'pl-svg');
+      svg.setAttribute('aria-hidden', 'true');
+      for (const cls of ['pl-base', 'pl-fill', 'pl-stitch']) {
+        const t = document.createElementNS(NS, 'text');
+        t.setAttribute('class', cls);
+        t.setAttribute('x', '0'); t.setAttribute('y', '0');
+        t.textContent = ch;
+        svg.appendChild(t);
+      }
+      sp.appendChild(svg);
+      const bb = svg.querySelector('.pl-fill').getBBox();
+      svg.setAttribute('viewBox', `${bb.x - PAD} ${TOP} ${bb.width + PAD * 2} ${VH}`);
+      sp.removeChild(sp.firstChild);   // drop the plain-text glyph
+    } catch (e) {
+      sp.querySelector('svg')?.remove();   // keep the plain letter
+    }
+  });
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   FRAME PRESETS — add your own here.
+   `w`/`h` = exact output pixels; `r` = ratio only (exports at the
+   crop's native resolution, no rescale).
+   ═══════════════════════════════════════════════════════════════ */
+const PRESETS = [
+  { id: 'og',        group: 'Exact sizes',     label: 'Open Graph card — 1200 × 630', w: 1200, h: 630 },
+  { id: 'hero',      group: 'Exact sizes',     label: 'Site hero — 1920 × 800',       w: 1920, h: 800 },
+  { id: 'avatar',    group: 'Exact sizes',     label: 'Avatar — 512 × 512',           w: 512,  h: 512 },
+  { id: 'favicon',   group: 'Exact sizes',     label: 'Favicon source — 512 × 512',   w: 512,  h: 512 },
+
+  { id: 'sq',        group: 'Standard ratios', label: '1:1 — square',              r: 1 },
+  { id: '4x3',       group: 'Standard ratios', label: '4:3 — standard',            r: 4 / 3 },
+  { id: '3x2',       group: 'Standard ratios', label: '3:2 — photo',               r: 3 / 2 },
+  { id: '16x9',      group: 'Standard ratios', label: '16:9 — widescreen',         r: 16 / 9 },
+  { id: '2x1',       group: 'Standard ratios', label: '2:1 — banner',              r: 2 },
+  { id: '9x16',      group: 'Standard ratios', label: '9:16 — portrait',           r: 9 / 16 },
+
+  { id: 'custom',    group: 'Custom',          label: 'Custom size (px)…' },
+];
+const DEFAULT_PRESET = 'og';
+const MIN_CROP = 16; // px, in image space
+
+/* ═══════════════════════════════════════════════════════════════
+   STATE
+   ═══════════════════════════════════════════════════════════════ */
+const $ = id => document.getElementById(id);
+const els = {
+  dz: $('dz'), fileInput: $('fileInput'),
+  frameSel: $('frameSel'), customDims: $('customDims'), customW: $('customW'), customH: $('customH'),
+  fmtSel: $('fmtSel'), rail: $('rail'), stage: $('stage'),
+  curName: $('curName'), cropInfo: $('cropInfo'), status: $('status'),
+  dlBtn: $('dlBtn'), clearBtn: $('clearBtn'),
+  live: $('liveRegion'),
+};
+const QUALITY = 0.92;   // lossy encode quality — fixed, one less dial
+const ctx = els.stage.getContext('2d');
+
+let imgs = [];        // { file, name, img, url, w, h, crop:{x,y,w,h}, done }
+let cur = 0;
+let preset = PRESETS.find(p => p.id === DEFAULT_PRESET);
+let custom = { w: 1080, h: 1080 };
+let view = 'upload';
+// stage layout for the current image (CSS px)
+let stW = 0, stH = 0, scale = 1, offX = 0, offY = 0;
+let drag = null;
+let busy = false;
+
+const isFree = () => preset.id === 'custom';   // custom = freeform crop, no ratio lock
+const ratio = () => isFree() ? custom.w / custom.h
+             : preset.w ? preset.w / preset.h : preset.r;
+const fixedOut = () => preset.w ? { w: preset.w, h: preset.h } : null;
+const outDims = im => fixedOut() || { w: Math.round(im.crop.w), h: Math.round(im.crop.h) };
+
+function setStatus(msg, kind) {
+  els.status.textContent = msg || '';
+  els.status.className = msg ? kind : '';
+  if (msg) els.live.textContent = msg;
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   LOADING — any format the browser can decode, plus HEIC via a
+   lazily loaded libheif (only fetched when a HEIC file shows up).
+   ═══════════════════════════════════════════════════════════════ */
+const isHeic = f => ['image/heic', 'image/heif'].includes(f.type) || /\.(heic|heif)$/i.test(f.name);
+
+let heifPromise = null;
+function loadHeif() {
+  heifPromise ??= new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/libheif-js@1.18.2/libheif-wasm/libheif-bundle.js';
+    s.integrity = 'sha384-tLy8T9fQEbFqGjC3ZYyRb5S+qhtywfU6rsjUf3nN1g4q2cvTmV43XN0xdtDYp1tx';
+    s.crossOrigin = 'anonymous';
+    s.onload = () => {
+      if (typeof libheif === 'undefined') return rej(new Error('HEIC decoder failed to load'));
+      libheif().then(res, rej);
+    };
+    s.onerror = () => rej(new Error('HEIC decoder failed to load'));
+    document.head.appendChild(s);
+  });
+  return heifPromise;
+}
+
+async function decodeHeic(file) {
+  const lib = await loadHeif();
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  const data = new lib.HeifDecoder().decode(bytes);
+  if (!data?.length) throw new Error('No image in HEIC file');
+  const hi = data[0];
+  const w = hi.get_width(), h = hi.get_height();
+  return new Promise((res, rej) => {
+    const buf = new Uint8ClampedArray(w * h * 4);
+    hi.display({ data: buf, width: w, height: h }, result => {
+      if (!result) return rej(new Error('HEIC decode failed'));
+      const c = document.createElement('canvas');
+      c.width = w; c.height = h;
+      c.getContext('2d').putImageData(new ImageData(result.data, w, h), 0, 0);
+      c.toBlob(b => b ? res(b) : rej(new Error('HEIC convert failed')), 'image/jpeg', 0.98);
+    });
+  });
+}
+
+function loadOne(file) {
+  return (isHeic(file) ? decodeHeic(file) : Promise.resolve(file)).then(src => new Promise((res, rej) => {
+    const url = URL.createObjectURL(src);
+    const img = new Image();
+    img.onload = () => res({ file, name: file.name, img, url, w: img.naturalWidth, h: img.naturalHeight, crop: null });
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('undecodable')); };
+    img.src = url;
+  }));
+}
+
+async function loadFiles(fileList) {
+  const files = [...fileList].filter(f => f.type.startsWith('image/') || isHeic(f));
+  if (!files.length) { setStatus('No supported image files found in that drop.', 'error'); return; }
+
+  els.dz.querySelector('.dz-big').textContent = `Laying out ${files.length} image${files.length > 1 ? 's' : ''}…`;
+  const results = await Promise.allSettled(files.map(loadOne));
+  els.dz.querySelector('.dz-big').textContent = 'Drop images here';
+  els.fileInput.value = '';
+
+  imgs = results.filter(r => r.status === 'fulfilled').map(r => r.value);
+  const failed = results.length - imgs.length;
+  if (!imgs.length) { setStatus('None of those files could be read as images.', 'error'); return; }
+
+  imgs.sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+  imgs.forEach(initCrop);
+  cur = 0;
+  view = 'editor';
+  document.body.dataset.view = 'editor';
+  buildRail();
+  setStatus(failed ? `${failed} file${failed > 1 ? 's' : ''} skipped (couldn't be decoded).` : '', failed ? 'error' : '');
+  goTo(0);
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   CROP MODEL — one ratio-locked rect per image, always valid.
+   ═══════════════════════════════════════════════════════════════ */
+function initCrop(im) {
+  const r = ratio();
+  let w, h;
+  if (im.w / im.h > r) { h = im.h; w = h * r; }
+  else                 { w = im.w; h = w / r; }
+  im.crop = { x: (im.w - w) / 2, y: (im.h - h) / 2, w, h };
+}
+
+function applyFrameChange() {
+  imgs.forEach(initCrop);
+  draw();
+}
+
+/* ═══════════════════════════════════════════════════════════════
+   STAGE — layout, drawing, pointer interaction
+   ═══════════════════════════════════════════════════════════════ */
+function layout() {
+  const wrap = els.stage.parentElement;
+  stW = wrap.clientWidth; stH = wrap.clientHeight;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  els.stage.width = Math.round(stW * dpr);
+  els.stage.height = Math.round(stH * dpr);
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const im = imgs[cur];
+  if (!im) return;
+  scale = Math.min(stW * 0.9 / im.w, stH * 0.86 / im.h);
+  offX = (stW - im.w * scale) / 2;
+  offY = (stH - im.h * scale) / 2;
+}
+
+function corners(rx, ry, rw, rh) {
+  return [
+    { id: 'nw', x: rx,      y: ry },
+    { id: 'ne', x: rx + rw, y: ry },
+    { id: 'sw', x: rx,      y: ry + rh },
+    { id: 'se', x: rx + rw, y: ry + rh },
+  ];
+}
+
+/* pick a tape tick step (image px) that reads well at this zoom */
+function tickStep() {
+  for (const s of [10, 20, 25, 50, 100, 200, 250, 500, 1000, 2000])
+    if (s * scale >= 9) return s;
+  return 5000;
+}
+
+const PIN_COLORS = { nw: '#00FF9C', ne: '#00FF9C', sw: '#00FF9C', se: '#00FF9C' };
+
+function drawPin(x, y, dirX, dirY, color) {
+  // needle stem pointing out of the fabric, glass head at the end
+  const ex = x + dirX * 13, ey = y + dirY * 13;
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
+  ctx.lineWidth = 3.5;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.strokeStyle = '#00B871';
+  ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(ex, ey); ctx.stroke();
+  ctx.beginPath(); ctx.arc(ex, ey, 5.5, 0, 7);
+  ctx.fillStyle = color; ctx.fill();
+  ctx.strokeStyle = 'rgba(0,0,0,0.45)'; ctx.lineWidth = 1.4; ctx.stroke();
+  ctx.beginPath(); ctx.arc(ex - 1.8, ey - 1.8, 1.6, 0, 7);
+  ctx.fillStyle = 'rgba(5,13,11,0.55)'; ctx.fill();
+}
+
+function draw() {
+  const im = imgs[cur];
+  if (!im || view !== 'editor') return;
+  const c = im.crop;
+  ctx.clearRect(0, 0, stW, stH);
+
+  // the bolt of cloth, laid flat and dimmed outside the pattern
+  ctx.globalAlpha = 0.28;
+  ctx.drawImage(im.img, offX, offY, im.w * scale, im.h * scale);
+  ctx.globalAlpha = 1;
+
+  const rx = offX + c.x * scale, ry = offY + c.y * scale;
+  const rw = c.w * scale, rh = c.h * scale;
+
+  // the piece being cut, full brightness
+  ctx.save();
+  ctx.beginPath(); ctx.rect(rx, ry, rw, rh); ctx.clip();
+  ctx.drawImage(im.img, offX, offY, im.w * scale, im.h * scale);
+  ctx.restore();
+
+  // seam lines (rule of thirds, chalked)
+  ctx.strokeStyle = 'rgba(0,255,156,0.22)';
+  ctx.lineWidth = 1;
+  ctx.setLineDash([4, 6]);
+  ctx.beginPath();
+  for (let i = 1; i < 3; i++) {
+    ctx.moveTo(rx + rw * i / 3, ry); ctx.lineTo(rx + rw * i / 3, ry + rh);
+    ctx.moveTo(rx, ry + rh * i / 3); ctx.lineTo(rx + rw, ry + rh * i / 3);
+  }
+  ctx.stroke();
+
+  // measuring tapes laid OUTSIDE the cut, along its top and left edges
+  const TAPE = 15;
+  if (rw > 120 && rh > 90 && ry - TAPE >= 0 && rx - TAPE >= 0) {
+    const step = tickStep();
+
+    // horizontal tape above the cut (extended left to join the vertical one)
+    ctx.fillStyle = 'rgba(0,255,156,0.80)';
+    ctx.fillRect(rx - TAPE, ry - TAPE, rw + TAPE, TAPE);
+    ctx.fillStyle = '#050D0B';
+    ctx.strokeStyle = '#050D0B';
+    ctx.lineWidth = 1;
+    ctx.font = '600 9px Barlow, sans-serif';
+    ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+    for (let v = 0; v <= c.w; v += step) {
+      const tx = Math.round(rx + v * scale) + 0.5;
+      const major = (v / step) % 5 === 0;
+      ctx.beginPath(); ctx.moveTo(tx, ry); ctx.lineTo(tx, ry - (major ? 10 : 5.5)); ctx.stroke();
+      if (major && v > 0 && (v + step * 2) * scale < c.w * scale) ctx.fillText(String(v), tx + 2.5, ry - TAPE + 1);
+    }
+    ctx.fillRect(rx - TAPE, ry - TAPE, rw + TAPE, 1);
+
+    // vertical tape left of the cut — ticks only; the horizontal tape carries the numbers
+    ctx.fillStyle = 'rgba(0,255,156,0.80)';
+    ctx.fillRect(rx - TAPE, ry, TAPE, rh);
+    ctx.fillStyle = '#050D0B';
+    for (let v = 0; v <= c.h; v += step) {
+      const ty = Math.round(ry + v * scale) + 0.5;
+      const major = (v / step) % 5 === 0;
+      ctx.beginPath(); ctx.moveTo(rx, ty); ctx.lineTo(rx - (major ? 10 : 5.5), ty); ctx.stroke();
+    }
+    ctx.fillRect(rx - TAPE, ry, 1, rh);
+  }
+
+  // the cut line — tailor's chalk, dashed
+  ctx.strokeStyle = 'rgba(0,255,156,0.90)';
+  ctx.lineWidth = 1.8;
+  ctx.setLineDash([8, 6]);
+  ctx.strokeRect(rx, ry, rw, rh);
+  ctx.setLineDash([]);
+
+  // pins in the four corners
+  for (const h of corners(rx, ry, rw, rh)) {
+    drawPin(h.x, h.y, h.id.includes('e') ? 1 : -1, h.id.includes('s') ? 1 : -1, PIN_COLORS[h.id]);
+  }
+
+  const out = outDims(im);
+  els.cropInfo.innerHTML =
+    '<span class="k">CUT</span> <span class="v">' + Math.round(c.w) + 'x' + Math.round(c.h) + '</span>' +
+    ' <span class="k">&gt; OUT</span> <span class="v">' + out.w + 'x' + out.h + '</span>' +
+    (fixedOut() ? '' : ' <span class="k">(native)</span>');
+  syncCustomInputs();
+}
+
+/* freeform mode: the pixel inputs mirror the crop as it's dragged */
+function syncCustomInputs() {
+  if (!isFree() || !imgs.length) return;
+  const c = imgs[cur].crop;
+  custom.w = Math.round(c.w);
+  custom.h = Math.round(c.h);
+  if (document.activeElement !== els.customW) els.customW.value = custom.w;
+  if (document.activeElement !== els.customH) els.customH.value = custom.h;
+}
+
+const toImg = e => {
+  const r = els.stage.getBoundingClientRect();
+  const im = imgs[cur];
+  return {
+    x: Math.max(0, Math.min(im.w, (e.clientX - r.left - offX) / scale)),
+    y: Math.max(0, Math.min(im.h, (e.clientY - r.top - offY) / scale)),
+  };
+};
+
+function hitCorner(e) {
+  const r = els.stage.getBoundingClientRect();
+  const px = e.clientX - r.left, py = e.clientY - r.top;
+  const c = imgs[cur].crop;
+  const rx = offX + c.x * scale, ry = offY + c.y * scale;
+  for (const h of corners(rx, ry, c.w * scale, c.h * scale)) {
+    if (Math.abs(px - h.x) < 16 && Math.abs(py - h.y) < 16) return h.id;
+  }
+  return null;
+}
+function insideCrop(e) {
+  const p = toImg(e), c = imgs[cur].crop;
+  return p.x >= c.x && p.x <= c.x + c.w && p.y >= c.y && p.y <= c.y + c.h;
+}
+
+els.stage.addEventListener('pointerdown', e => {
+  if (!imgs.length) return;
+  const c = imgs[cur].crop;
+  const corner = hitCorner(e);
+  if (corner) {
+    // anchor = the opposite corner; it stays put while we resize
+    drag = {
+      mode: 'resize',
+      sx: corner.includes('e') ? 1 : -1,
+      sy: corner.includes('s') ? 1 : -1,
+      ax: corner.includes('e') ? c.x : c.x + c.w,
+      ay: corner.includes('s') ? c.y : c.y + c.h,
+    };
+  } else if (insideCrop(e)) {
+    const p = toImg(e);
+    drag = { mode: 'move', dx: p.x - c.x, dy: p.y - c.y };
+  } else return;
+  els.stage.setPointerCapture(e.pointerId);
+  e.preventDefault();
+});
+
+els.stage.addEventListener('pointermove', e => {
+  if (!imgs.length || view !== 'editor') return;
+  const im = imgs[cur], c = im.crop, r = ratio();
+  if (!drag) {
+    const corner = hitCorner(e);
+    els.stage.style.cursor = corner ? corner + '-resize' : insideCrop(e) ? 'move' : 'default';
+    return;
+  }
+  const p = toImg(e);
+  if (drag.mode === 'move') {
+    c.x = Math.max(0, Math.min(im.w - c.w, p.x - drag.dx));
+    c.y = Math.max(0, Math.min(im.h - c.h, p.y - drag.dy));
+  } else if (isFree()) {
+    // freeform: width and height follow the pointer independently
+    const maxW = drag.sx > 0 ? im.w - drag.ax : drag.ax;
+    const maxH = drag.sy > 0 ? im.h - drag.ay : drag.ay;
+    const w = Math.max(Math.min(MIN_CROP, maxW), Math.min(Math.abs(p.x - drag.ax), maxW));
+    const h = Math.max(Math.min(MIN_CROP, maxH), Math.min(Math.abs(p.y - drag.ay), maxH));
+    c.w = w; c.h = h;
+    c.x = drag.sx > 0 ? drag.ax : drag.ax - w;
+    c.y = drag.sy > 0 ? drag.ay : drag.ay - h;
+  } else {
+    // pointer-driven size, ratio-locked, clamped to the image
+    const maxW = Math.min(
+      drag.sx > 0 ? im.w - drag.ax : drag.ax,
+      (drag.sy > 0 ? im.h - drag.ay : drag.ay) * r
+    );
+    const minW = Math.min(Math.max(MIN_CROP, MIN_CROP * r), maxW);
+    let w = Math.max(Math.abs(p.x - drag.ax), Math.abs(p.y - drag.ay) * r);
+    w = Math.max(minW, Math.min(w, maxW));
+    const h = w / r;
+    c.w = w; c.h = h;
+    c.x = drag.sx > 0 ? drag.ax : drag.ax - w;
+    c.y = drag.sy > 0 ? drag.ay : drag.ay - h;
+  }
+  draw();
+});
+
+const endDrag = () => { drag = null; };
+els.stage.addEventListener('pointerup', endDrag);
+els.stage.addEventListener('pointercancel', endDrag);
+
+window.addEventListener('resize', () => {
+  if (view !== 'editor' || !imgs.length) return;
+  layout(); draw();
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   NAVIGATION + SWATCH RAIL
+   ═══════════════════════════════════════════════════════════════ */
+const railEl = i => els.rail.children[i];
+
+function buildRail() {
+  els.rail.innerHTML = '';
+  imgs.forEach((im, i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'th';
+    b.setAttribute('role', 'option');
+    b.setAttribute('aria-label', im.name);
+    const thumb = document.createElement('img');
+    thumb.src = im.url; thumb.alt = ''; thumb.draggable = false;
+    const ck = document.createElement('span');
+    ck.className = 'ck'; ck.textContent = '✓'; ck.setAttribute('aria-hidden', 'true');
+    const nm = document.createElement('span');
+    nm.className = 'nm'; nm.textContent = im.name;
+    b.append(thumb, ck, nm);
+    b.addEventListener('click', () => goTo(i));
+    els.rail.append(b);
+  });
+}
+
+function goTo(i) {
+  if (i < 0 || i >= imgs.length) return;
+  if (i !== cur && imgs[cur]) {
+    // moving on — the image we just left is done
+    railEl(cur)?.classList.add('done');
+  }
+  cur = i;
+  layout();
+  els.curName.textContent = `${i + 1}/${imgs.length} — ${imgs[i].name}`;
+  imgs.forEach((_, j) => {
+    const el = railEl(j);
+    el.classList.toggle('active', j === i);
+    el.setAttribute('aria-selected', String(j === i));
+  });
+  railEl(i)?.scrollIntoView({ block: 'nearest', inline: 'nearest' });
+  draw();
+}
+
+/* arrow keys still flip between images — no UI needed */
+window.addEventListener('keydown', e => {
+  if (view !== 'editor') return;
+  if (/^(INPUT|SELECT|TEXTAREA)$/.test(e.target.tagName)) return;
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') { e.preventDefault(); goTo(cur + 1); }
+  else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') { e.preventDefault(); goTo(cur - 1); }
+});
+
+/* ═══════════════════════════════════════════════════════════════
+   TOOLBAR
+   ═══════════════════════════════════════════════════════════════ */
+(function buildFrameSelect() {
+  let group = null, og = null;
+  for (const p of PRESETS) {
+    if (p.group !== group) {
+      group = p.group;
+      og = document.createElement('optgroup');
+      og.label = group;
+      els.frameSel.append(og);
+    }
+    const o = document.createElement('option');
+    o.value = p.id; o.textContent = p.label;
+    og.append(o);
+  }
+  els.frameSel.value = DEFAULT_PRESET;
+})();
+
+els.frameSel.addEventListener('change', () => {
+  preset = PRESETS.find(p => p.id === els.frameSel.value);
+  els.customDims.hidden = !isFree();
+  if (isFree()) draw();       // keep the crops as they are — just unlock them
+  else applyFrameChange();    // presets re-pin every crop to the new shape
+});
+
+/* typing exact numbers resizes the current image's crop to match */
+function readCustom() {
+  if (!imgs.length) return;
+  const im = imgs[cur], c = im.crop;
+  const w = Math.max(MIN_CROP, parseInt(els.customW.value, 10) || Math.round(c.w));
+  const h = Math.max(MIN_CROP, parseInt(els.customH.value, 10) || Math.round(c.h));
+  c.w = Math.min(w, im.w);
+  c.h = Math.min(h, im.h);
+  c.x = Math.min(c.x, im.w - c.w);
+  c.y = Math.min(c.y, im.h - c.h);
+  draw();
+}
+els.customW.addEventListener('change', readCustom);
+els.customH.addEventListener('change', readCustom);
+
+/* ═══════════════════════════════════════════════════════════════
+   EXPORT — every image is exported with its current crop
+   (unvisited images keep the centered default).
+   ═══════════════════════════════════════════════════════════════ */
+const EXT = { 'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp' };
+
+function autoMime(name) {
+  const ext = (name.split('.').pop() || '').toLowerCase();
+  if (ext === 'png' || ext === 'gif') return 'image/png';   // keep transparency
+  if (ext === 'webp') return 'image/webp';
+  return 'image/jpeg';
+}
+
+function renderCrop(im, outW, outH) {
+  const { x, y, w, h } = im.crop;
+  let src = im.img, sx = x, sy = y, sw = w, sh = h;
+  // step-down for big downscales: sharper than a single drawImage
+  if (w > outW * 2) {
+    let c = document.createElement('canvas');
+    c.width = Math.round(w); c.height = Math.round(h);
+    c.getContext('2d').drawImage(im.img, x, y, w, h, 0, 0, c.width, c.height);
+    while (c.width > outW * 2) {
+      const half = document.createElement('canvas');
+      half.width = Math.max(outW, Math.floor(c.width / 2));
+      half.height = Math.max(outH, Math.floor(c.height / 2));
+      const hx = half.getContext('2d');
+      hx.imageSmoothingQuality = 'high';
+      hx.drawImage(c, 0, 0, half.width, half.height);
+      c = half;
+    }
+    src = c; sx = 0; sy = 0; sw = c.width; sh = c.height;
+  }
+  const out = document.createElement('canvas');
+  out.width = outW; out.height = outH;
+  const ox = out.getContext('2d');
+  ox.imageSmoothingQuality = 'high';
+  ox.drawImage(src, sx, sy, sw, sh, 0, 0, outW, outH);
+  return out;
+}
+
+const toBlob = (canvas, mime, q) => new Promise((res, rej) =>
+  canvas.toBlob(b => b ? res(b) : rej(new Error('Encoding failed')), mime, q));
+
+async function download() {
+  if (busy || !imgs.length) return;
+  busy = true;
+  els.dlBtn.disabled = true;
+  setStatus(`Cutting ${imgs.length} image${imgs.length > 1 ? 's' : ''} to size…`, 'info');
+  try {
+    const usedNames = new Set();
+    const files = [];
+
+    for (const im of imgs) {
+      const { w: outW, h: outH } = outDims(im);
+      const mime = els.fmtSel.value === 'auto' ? autoMime(im.name) : els.fmtSel.value;
+      const blob = await toBlob(renderCrop(im, outW, outH), mime, mime === 'image/png' ? undefined : QUALITY);
+      const ext = EXT[blob.type] || 'jpg';   // browser may substitute a type it can encode
+      const base = im.name.replace(/\.[^.]+$/, '');
+      let name = `${base}.${ext}`;
+      for (let n = 2; usedNames.has(name); n++) name = `${base}-${n}.${ext}`;
+      usedNames.add(name);
+      files.push({ name, blob });
+    }
+
+    let href, dlName;
+    if (files.length === 1) {
+      href = URL.createObjectURL(files[0].blob);
+      dlName = files[0].name;
+    } else {
+      if (typeof JSZip === 'undefined') throw new Error('ZIP library failed to load — check your connection and reload.');
+      const zip = new JSZip();
+      for (const f of files) zip.file(f.name, f.blob);
+      const zb = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      href = URL.createObjectURL(zb);
+      dlName = 'formatted-images.zip';
+    }
+    const a = document.createElement('a');
+    a.href = href; a.download = dlName;
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(href), 30000);
+    setStatus(files.length === 1 ? 'Downloaded 1 image.' : `Downloaded ${files.length} images as ZIP.`, 'success');
+  } catch (err) {
+    setStatus('Export failed: ' + err.message, 'error');
+  } finally {
+    busy = false;
+    els.dlBtn.disabled = false;
+  }
+}
+els.dlBtn.addEventListener('click', download);
+
+/* ═══════════════════════════════════════════════════════════════
+   UPLOAD VIEW + RESET
+   ═══════════════════════════════════════════════════════════════ */
+els.dz.addEventListener('click', () => els.fileInput.click());
+els.dz.addEventListener('keydown', e => {
+  if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); els.fileInput.click(); }
+});
+els.dz.addEventListener('dragover', e => { e.preventDefault(); els.dz.classList.add('drag-over'); });
+els.dz.addEventListener('dragleave', () => els.dz.classList.remove('drag-over'));
+els.dz.addEventListener('drop', e => {
+  e.preventDefault();
+  els.dz.classList.remove('drag-over');
+  loadFiles(e.dataTransfer.files);
+});
+els.fileInput.addEventListener('change', () => loadFiles(els.fileInput.files));
+
+/* clear the table — back to the upload screen */
+els.clearBtn.addEventListener('click', () => {
+  if (!confirm('Clear all images and start over?')) return;
+  imgs.forEach(im => URL.revokeObjectURL(im.url));
+  imgs = []; cur = 0; drag = null;
+  view = 'upload';
+  document.body.dataset.view = 'upload';
+  els.rail.innerHTML = '';
+  setStatus('', '');
+  els.live.textContent = 'Cleared. Back to upload.';
+});
+</script>
+
+
+
+
+<script src="../orbhome.js"></script>
+</body>
+</html>

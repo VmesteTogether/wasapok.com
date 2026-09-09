@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:; script-src 'self' 'unsafe-inline'; connect-src 'none'; base-uri 'self'; form-action 'none'; object-src 'none';">
+<meta name="referrer" content="strict-origin-when-cross-origin">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#003332">
+<meta name="description" content="Vmestenizer — puts vm in front of every word.">
+
+<title>Vmestenizer · VmesteSoft</title>
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&family=Barlow:wght@400;500;600&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="../vmestesoft.css">
+
+<style>
+/* ── the living backdrop: streams of VM through a 3D volume ── */
+#stage {
+  position: fixed; inset: 0; z-index: 0;
+  display: block; pointer-events: none;
+}
+#veil {
+  position: fixed; inset: 0; z-index: 1; pointer-events: none;
+  background: radial-gradient(120% 90% at 50% 40%,
+    rgba(5, 13, 11, 0.10) 0%, rgba(5, 13, 11, 0.62) 55%, rgba(5, 13, 11, 0.90) 100%);
+}
+.vs-shell { position: relative; z-index: 5; }
+
+.vz-grid {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 1px;
+  background: var(--line); border: 1px solid var(--line);
+}
+@media (max-width: 780px) { .vz-grid { grid-template-columns: 1fr; } }
+
+.vz-pane { background: rgba(10, 23, 20, 0.88); display: flex; flex-direction: column; }
+.vz-pane-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  padding: 6px 14px; border-bottom: 1px solid var(--line); height: 46px;
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+}
+
+#input, #output {
+  flex: 1; min-height: 340px; padding: 18px;
+  font-family: var(--mono); font-size: 16px; line-height: 1.7;
+  background: transparent; border: 0; color: var(--bone);
+  word-break: break-word; white-space: pre-wrap;
+}
+#input { width: 100%; resize: none; }
+#input:focus { outline: none; }
+#input:focus-visible { outline: 1px solid var(--acid); outline-offset: -1px; }
+#input::placeholder { color: var(--ghost); }
+#output:empty::before { content: 'vmnothing vmyet'; color: var(--ghost); }
+.vz-pane-head .vs-btn--quiet { min-height: 32px; padding: 4px 8px; font-size: 14px; }
+
+#output mark {
+  background: transparent; color: var(--acid);
+  text-shadow: 0 0 10px rgba(0, 255, 156, 0.45);
+}
+
+.vz-count {
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; color: var(--ghost); font-variant-numeric: tabular-nums;
+}
+.vz-count b { color: var(--acid); font-weight: 700; }
+</style>
+</head>
+<body class="has-orb">
+<a class="skip-link" href="#main">Skip to content</a>
+
+<!-- the way back to the index -->
+<a class="orb-home" href="../index.html" data-hue="#7CFF4D"
+   style="--hue:#7CFF4D" aria-label="VmesteSoft — all tools">
+  <canvas aria-hidden="true"></canvas>
+</a>
+
+
+<canvas id="stage" aria-hidden="true"></canvas>
+<div id="veil" aria-hidden="true"></div>
+
+
+<main class="vs-shell" id="main">
+<h1 class="sr-only">Vmestenizer</h1>
+
+  <div class="vz-grid">
+    <section class="vz-pane">
+      <div class="vz-pane-head">
+        <span>Your text</span>
+        <span class="vz-count" id="inCount">0 words</span>
+      </div>
+      <label class="sr-only" for="input">Text to vmestenize</label>
+      <textarea id="input" spellcheck="false" placeholder="type something here"></textarea>
+    </section>
+
+    <section class="vz-pane">
+      <div class="vz-pane-head">
+        <span>Vmestenized</span>
+        <button class="vs-btn vs-btn--quiet" id="copy" type="button">Copy</button>
+      </div>
+      <div id="output" aria-label="Vmestenized result"></div>
+    </section>
+  </div>
+
+</main>
+
+
+<div id="status" class="sr-only" role="status" aria-live="polite" aria-atomic="true"></div>
+
+<!-- ── backdrop: VM streams through a 3D volume ──────────────────────────
+     Passive: never captures the cursor, never hijacks keys. Freezes to a
+     single correct still frame under prefers-reduced-motion. -->
+<script>
+(function () {
+  'use strict';
+
+  const canvas = document.getElementById('stage');
+  const ctx = canvas.getContext('2d', { alpha: false });
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+  const GRID_Y = 9, GRID_Z = 8, SPACING = 1.05;
+  const MAX_LEN = 22, TURN_PROB = 0.26;
+  const CAM_DIST = 12.5, FOV = 620;
+  const SPAWN_MS = 340, STEP_MS = 68;
+  const LIFE_MIN = 12000, LIFE_MAX = 22000;
+  const TOKEN = 'VM';
+
+  let W = 0, H = 0, dpr = 1;
+  function size() {
+    dpr = Math.min(window.devicePixelRatio || 1, 2);
+    W = canvas.width  = Math.floor(innerWidth  * dpr);
+    H = canvas.height = Math.floor(innerHeight * dpr);
+    canvas.style.width = innerWidth + 'px';
+    canvas.style.height = innerHeight + 'px';
+  }
+  size();
+  addEventListener('resize', size, { passive: true });
+
+  const DIRS = [[1,0,0],[-1,0,0],[0,1,0],[0,-1,0],[0,0,1],[0,0,-1]];
+  const streams = [];
+
+  function spawn(t) {
+    const y = (Math.random() * GRID_Y - GRID_Y / 2) * SPACING;
+    const z = (Math.random() * GRID_Z - GRID_Z / 2) * SPACING;
+    streams.push({
+      head: [(Math.random() * 18 - 9), y, z],
+      dir: DIRS[(Math.random() * DIRS.length) | 0],
+      cells: [],
+      born: t,
+      life: LIFE_MIN + Math.random() * (LIFE_MAX - LIFE_MIN),
+      next: t
+    });
+  }
+
+  function step(s, t) {
+    if (t < s.next) return;
+    s.next = t + STEP_MS;
+    if (Math.random() < TURN_PROB) s.dir = DIRS[(Math.random() * DIRS.length) | 0];
+    s.head = [
+      s.head[0] + s.dir[0] * SPACING,
+      s.head[1] + s.dir[1] * SPACING,
+      s.head[2] + s.dir[2] * SPACING
+    ];
+    s.cells.push({ p: s.head.slice(), t });
+    if (s.cells.length > MAX_LEN) s.cells.shift();
+  }
+
+  // yaw/pitch drift on a slow sine — no cursor coupling, nothing to fight over
+  function project(p, yaw, pitch) {
+    const cy = Math.cos(yaw),  sy = Math.sin(yaw);
+    const cp = Math.cos(pitch), sp = Math.sin(pitch);
+    let x = p[0] * cy - p[2] * sy;
+    let z = p[0] * sy + p[2] * cy;
+    let y = p[1] * cp - z * sp;
+    z = p[1] * sp + z * cp;
+    const d = z + CAM_DIST;
+    if (d <= 0.4) return null;
+    const k = FOV / d;
+    return { x: W / 2 + x * k * dpr / 1.4, y: H / 2 + y * k * dpr / 1.4, d: d, k: k };
+  }
+
+  function draw(t) {
+    ctx.fillStyle = '#050D0B';
+    ctx.fillRect(0, 0, W, H);
+    const yaw   = still ? 0.22 : Math.sin(t / 9000) * 0.30;
+    const pitch = still ? 0.10 : Math.sin(t / 13000) * 0.14 + 0.06;
+
+    for (const s of streams) {
+      const n = s.cells.length;
+      for (let i = 0; i < n; i++) {
+        const c = s.cells[i];
+        const pr = project(c.p, yaw, pitch);
+        if (!pr) continue;
+        const depth = Math.max(0, Math.min(1, 1 - (pr.d - 5) / 16));
+        const trail = (i + 1) / n;                     // head is brightest
+        const agefade = Math.max(0, 1 - (t - s.born) / s.life);
+        const a = depth * trail * agefade * 0.9;
+        if (a <= 0.02) continue;
+        const px = Math.max(7, pr.k * 0.032) * dpr;
+        ctx.font = '700 ' + px.toFixed(1) + "px 'Space Mono', monospace";
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        // the head burns acid; the tail retires into deep green
+        ctx.fillStyle = i === n - 1
+          ? 'rgba(0,255,156,' + a.toFixed(3) + ')'
+          : 'rgba(0,184,113,' + (a * 0.55).toFixed(3) + ')';
+        ctx.fillText(TOKEN, pr.x, pr.y);
+      }
+    }
+  }
+
+  if (still) {
+    // one correct still frame: seed a field, walk it forward, draw once
+    for (let i = 0; i < 26; i++) spawn(0);
+    for (let t = 0; t < 60; t++) for (const s of streams) { s.next = 0; step(s, t * STEP_MS); }
+    draw(2000);
+  } else {
+    let last = 0, nextSpawn = 0;
+    function frame(t) {
+      if (t - last > 16) {
+        last = t;
+        if (t > nextSpawn && streams.length < 34) { spawn(t); nextSpawn = t + SPAWN_MS; }
+        for (let i = streams.length - 1; i >= 0; i--) {
+          const s = streams[i];
+          if (t - s.born > s.life) { streams.splice(i, 1); continue; }
+          step(s, t);
+        }
+        draw(t);
+      }
+      requestAnimationFrame(frame);
+    }
+    requestAnimationFrame(frame);
+  }
+})();
+</script>
+
+<script>
+'use strict';
+
+/* Prefix every word with "vm", matching the word's own case:
+   world → vmworld, Hello → VmHello, SHOUT → VMSHOUT.
+   The original word is never altered — only prefixed.
+   URLs, www-links and email addresses pass through untouched. */
+
+const LINK_RE = /(https?:\/\/\S+|www\.\S+|\S+@\S+\.\S+)/gi;
+const WORD_RE = /[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
+const esc = (s) => s.replace(/[&<>]/g, c => ({ '&': '&#38;', '<': '&#60;', '>': '&#62;' }[c]));
+
+function prefixFor(word) {
+  const letters = word.replace(/[^\p{L}]/gu, '');
+  if (letters.length > 1 && letters === letters.toUpperCase()) return 'VM';  // SHOUT
+  if (/^\p{Lu}/u.test(word)) return 'Vm';                                    // Title
+  return 'vm';                                                               // plain
+}
+
+let hits = 0;
+
+function vmestenize(text) {
+  hits = 0;
+  return text.split(LINK_RE).map((part, i) =>
+    i % 2 ? part : part.replace(WORD_RE, w => { hits++; return prefixFor(w) + w; })
+  ).join('');
+}
+
+// Same, but the added prefix is wrapped in <mark> so the damage is visible.
+function vmestenizeHTML(text) {
+  return text.split(LINK_RE).map((part, i) =>
+    i % 2
+      ? esc(part)
+      : esc(part).replace(WORD_RE, w => '<mark>' + prefixFor(w) + '</mark>' + w)
+  ).join('');
+}
+
+const input    = document.getElementById('input');
+const output   = document.getElementById('output');
+const status   = document.getElementById('status');
+const inCount  = document.getElementById('inCount');
+
+// Screen readers get the result on a debounce — announcing the whole text
+// after every keystroke would be unusable.
+let announceTimer = null;
+function run() {
+  const plain = vmestenize(input.value);
+  output.innerHTML = vmestenizeHTML(input.value);
+  inCount.textContent = hits + (hits === 1 ? ' word' : ' words');
+  clearTimeout(announceTimer);
+  announceTimer = setTimeout(() => {
+    status.textContent = input.value ? plain : '';
+  }, 700);
+}
+input.addEventListener('input', run);
+
+// No autofocus on touch — it throws the keyboard over half the screen
+// before the page has been seen.
+if (!window.matchMedia('(pointer: coarse)').matches) input.focus();
+
+document.getElementById('copy').addEventListener('click', async (e) => {
+  const text = vmestenize(input.value);
+  if (!text) return;
+  try { await navigator.clipboard.writeText(text); }
+  catch (err) {
+    const ta = document.createElement('textarea');
+    ta.value = text; document.body.appendChild(ta); ta.select();
+    document.execCommand('copy'); ta.remove();
+  }
+  const btn = e.currentTarget;
+  btn.textContent = 'Copied';
+  clearTimeout(announceTimer);
+  status.textContent = 'Copied to clipboard';
+  setTimeout(() => { btn.textContent = 'Copy'; }, 1200);
+});
+</script>
+
+<script src="../orbhome.js"></script>
+</body>
+</html>
