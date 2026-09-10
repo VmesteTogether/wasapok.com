@@ -1,0 +1,435 @@
+/* ════════════════════════════════════════════════════════════════
+   VMESTESOFT — shared design system
+   Implements soft/DESIGN_SPEC.md. Tokens live here and nowhere else.
+   Dark only. Radius 0. One accent.
+   ════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ── ground ── */
+  --void:       #050D0B;
+  --tar:        #0A1714;
+  --slab:       #0F221D;
+  --house:      #003332;
+  --pit:        #020706;
+
+  /* ── line ── */
+  --line:       #193830;
+  --line-hi:    #2A5B4E;
+
+  /* ── accent ── */
+  --acid:       #00FF9C;
+  --acid-dim:   #00B871;
+  --acid-ghost: rgba(0, 255, 156, 0.10);
+  --toxic:      #C6FF3D;
+  --rust:       #FF4A2B;
+  --amber:      #FFB020;
+
+  /* ── text ── */
+  --bone:       #E4F3EC;
+  --ash:        #8DAFA3;
+  --ghost:      #4C6E64;
+
+  /* ── type ── */
+  --shout: 'Barlow Condensed', 'Arial Narrow', sans-serif;
+  --mono:  'Space Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
+  --body:  'Barlow', system-ui, -apple-system, 'Segoe UI', sans-serif;
+
+  --t-display: 44px;
+  --t-title:   24px;
+  --t-label:   12px;
+  --t-body:    15px;
+  --t-data:    13px;
+  --t-micro:   11px;
+
+  /* ── metrics ── */
+  --bar-h:     52px;
+  --maxw:      1180px;
+  --gutter:    24px;
+  --notch:     8px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { color-scheme: dark; }
+
+body {
+  background: var(--void);
+  color: var(--bone);
+  font-family: var(--body);
+  font-size: var(--t-body);
+  line-height: 1.5;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+::selection { background: var(--acid); color: var(--void); }
+
+/* ── the notch: signature corner cut ── */
+.notch {
+  clip-path: polygon(
+    0 0,
+    calc(100% - var(--notch)) 0,
+    100% var(--notch),
+    100% 100%,
+    var(--notch) 100%,
+    0 calc(100% - var(--notch))
+  );
+}
+
+/* ── hazard stripes: indeterminate work, drag-over ── */
+.hazard {
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 184, 113, 0.10) 0 4px,
+    transparent 4px 8px
+  );
+  background-size: 11.32px 11.32px;
+  animation: hazard-crawl 800ms linear infinite;
+}
+@keyframes hazard-crawl { to { background-position: 11.32px 0; } }
+
+/* ── scanline: canvas / preview wells only, never over text ── */
+.scanline { position: relative; }
+.scanline::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(0, 255, 156, 0.06) 0 1px,
+    transparent 1px 3px
+  );
+}
+
+/* ════════════════════════════════════════════════════════════════
+   ACCESSIBILITY
+   ════════════════════════════════════════════════════════════════ */
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px;
+  padding: 0; margin: -1px; overflow: hidden;
+  clip: rect(0 0 0 0); clip-path: inset(50%); white-space: nowrap;
+}
+
+.skip-link {
+  position: absolute; top: -60px; left: 0; z-index: 1000;
+  background: var(--acid); color: var(--void);
+  font-family: var(--shout); font-weight: 800;
+  text-transform: uppercase; letter-spacing: 0.12em;
+  padding: 12px 20px; text-decoration: none;
+}
+.skip-link:focus { top: 0; }
+
+:focus-visible { outline: 1px solid var(--acid); outline-offset: 2px; }
+
+/* ════════════════════════════════════════════════════════════════
+   HOME ORB — the only chrome on a tool page
+
+   A tool page has no bar and no title block. The way back to the
+   index is the same distorted sphere the index draws, at corner
+   size, in that tool's own hue. It is the one element on a tool
+   page that carries a hue other than --acid.
+   ════════════════════════════════════════════════════════════════ */
+
+.orb-home {
+  /* Hung over the corner, not placed inside it: the viewport edge crops a
+     slice off the sphere, so it reads as something drifting in from outside
+     the page. The box never changes size — growing it would re-quantise the
+     character grid and the swell would come out stepped. The sphere itself
+     eases, in the renderer. */
+  position: fixed; top: -64px; left: -64px; z-index: 200;
+  display: block; width: 176px; height: 176px;
+  text-decoration: none;
+  -webkit-tap-highlight-color: transparent;
+}
+.orb-home canvas { display: block; width: 100%; height: 100%; }
+
+.orb-home::after {
+  content: 'All tools';
+  position: absolute; left: 100%; bottom: 12px; margin-left: -46px;
+  font-family: var(--mono); font-size: 9px; font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--hue, var(--acid)); white-space: nowrap;
+  opacity: 0; transition: opacity 260ms ease; pointer-events: none;
+}
+.orb-home:hover::after, .orb-home:focus-visible::after { opacity: 1; }
+.orb-home:focus-visible { outline: none; }
+
+/* Every tool page starts below the orb at its fullest. This lives on <body>
+   because each tool's skin sets a `padding` shorthand on its own main
+   element, which would reset a padding-top set there. */
+body.has-orb { padding-top: 132px; }
+
+@media (max-width: 860px) {
+  .orb-home { width: 128px; height: 128px; top: -48px; left: -48px; }
+  body.has-orb { padding-top: 100px; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   SHELL
+   ════════════════════════════════════════════════════════════════ */
+
+.vs-shell {
+  max-width: var(--maxw);
+  margin: 0 auto;
+  padding: 40px var(--gutter) 80px;
+}
+
+h2 {
+  font-family: var(--shout); font-weight: 800;
+  font-size: var(--t-title); line-height: 1.1;
+  letter-spacing: 0.06em; text-transform: uppercase;
+  color: var(--bone);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   PANEL
+   ════════════════════════════════════════════════════════════════ */
+
+.vs-panel {
+  background: var(--tar);
+  border: 1px solid var(--line);
+  padding: var(--gutter);
+}
+
+.vs-panel-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 12px;
+  margin: calc(var(--gutter) * -1) calc(var(--gutter) * -1) var(--gutter);
+  padding: 12px var(--gutter);
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ash);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   BUTTONS
+   ════════════════════════════════════════════════════════════════ */
+
+.vs-btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 10px 20px; min-height: 40px;
+  font-family: var(--shout); font-weight: 800; font-size: 15px;
+  letter-spacing: 0.12em; text-transform: uppercase;
+  background: transparent; color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0;
+  cursor: pointer; text-decoration: none;
+  transition: transform 100ms linear, box-shadow 100ms linear,
+              border-color 100ms linear, color 100ms linear;
+}
+.vs-btn:hover:not(:disabled) {
+  border-color: var(--line-hi); color: var(--bone);
+  transform: translate(-1px, -1px);
+  box-shadow: 2px 2px 0 var(--line-hi);
+}
+.vs-btn:active:not(:disabled) { transform: translate(0, 0); box-shadow: 1px 1px 0 var(--line-hi); }
+
+.vs-btn--primary {
+  background: var(--acid); color: var(--void); border-color: var(--acid);
+  clip-path: polygon(
+    0 0, calc(100% - var(--notch)) 0, 100% var(--notch),
+    100% 100%, var(--notch) 100%, 0 calc(100% - var(--notch))
+  );
+}
+.vs-btn--primary:hover:not(:disabled) {
+  background: var(--acid); border-color: var(--acid); color: var(--void);
+  box-shadow: 2px 2px 0 var(--acid-dim), 0 0 12px rgba(0, 255, 156, 0.25);
+}
+.vs-btn--primary:active:not(:disabled) { box-shadow: 1px 1px 0 var(--acid-dim); }
+
+.vs-btn--danger { color: var(--rust); border-color: var(--rust); }
+.vs-btn--danger:hover:not(:disabled) {
+  color: var(--rust); border-color: var(--rust); box-shadow: 2px 2px 0 var(--rust);
+}
+
+.vs-btn--quiet { color: var(--ash); border-color: transparent; padding: 8px 10px; }
+.vs-btn--quiet:hover:not(:disabled) {
+  color: var(--bone); border-color: transparent; box-shadow: none; transform: none;
+}
+
+.vs-btn:disabled {
+  color: var(--ghost); border-color: var(--line); background: transparent;
+  cursor: not-allowed; transform: none; box-shadow: none;
+}
+.vs-btn--primary:disabled { background: var(--slab); border-color: var(--line); }
+
+/* ════════════════════════════════════════════════════════════════
+   FIELDS
+   ════════════════════════════════════════════════════════════════ */
+
+.vs-label {
+  display: block; margin-bottom: 6px;
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase;
+  color: var(--ash);
+}
+
+.vs-input, .vs-select, .vs-textarea {
+  width: 100%; padding: 10px 12px;
+  background: var(--pit); color: var(--bone);
+  border: 1px solid var(--line); border-radius: 0;
+  font-family: var(--mono); font-size: var(--t-data);
+  transition: border-color 100ms linear;
+}
+.vs-textarea { resize: vertical; min-height: 120px; line-height: 1.5; }
+.vs-input::placeholder, .vs-textarea::placeholder { color: var(--ghost); }
+.vs-input:focus, .vs-select:focus, .vs-textarea:focus {
+  border-color: var(--acid);
+  outline: 1px solid var(--acid); outline-offset: 1px;
+}
+
+.vs-select {
+  appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ash) 50%),
+                    linear-gradient(135deg, var(--ash) 50%, transparent 50%);
+  background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%;
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  padding-right: 32px;
+}
+
+/* range */
+.vs-range { -webkit-appearance: none; appearance: none; width: 100%; height: 14px; background: transparent; }
+.vs-range::-webkit-slider-runnable-track { height: 2px; background: var(--line); }
+.vs-range::-moz-range-track { height: 2px; background: var(--line); }
+.vs-range::-moz-range-progress { height: 2px; background: var(--acid-dim); }
+.vs-range::-webkit-slider-thumb {
+  -webkit-appearance: none; appearance: none;
+  width: 14px; height: 14px; margin-top: -6px;
+  background: var(--acid); border: 0; border-radius: 0; cursor: pointer;
+}
+.vs-range::-moz-range-thumb {
+  width: 14px; height: 14px; background: var(--acid);
+  border: 0; border-radius: 0; cursor: pointer;
+}
+.vs-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 2px var(--void), 0 0 0 3px var(--acid); }
+
+.vs-value {
+  font-family: var(--mono); font-size: var(--t-data);
+  color: var(--acid); font-variant-numeric: tabular-nums;
+}
+
+/* ── chips / toggle group ── */
+.vs-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.vs-chip {
+  padding: 7px 12px; min-height: 34px;
+  background: transparent; color: var(--ash);
+  border: 1px solid var(--line); border-radius: 0;
+  font-family: var(--mono); font-size: var(--t-micro); font-weight: 700;
+  letter-spacing: 0.14em; text-transform: uppercase;
+  cursor: pointer;
+  transition: color 100ms linear, border-color 100ms linear, background 100ms linear;
+}
+.vs-chip:hover { color: var(--bone); border-color: var(--line-hi); }
+.vs-chip[aria-pressed="true"] {
+  color: var(--acid); border-color: var(--acid); background: var(--acid-ghost);
+}
+
+/* ── checkbox ── */
+.vs-check { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; }
+.vs-check input {
+  appearance: none; -webkit-appearance: none;
+  width: 16px; height: 16px; flex-shrink: 0;
+  background: var(--pit); border: 1px solid var(--line); border-radius: 0;
+  cursor: pointer; position: relative;
+}
+.vs-check input:checked { background: var(--acid); border-color: var(--acid); }
+.vs-check input:checked::after {
+  content: ''; position: absolute; left: 4px; top: 1px;
+  width: 5px; height: 9px;
+  border: solid var(--void); border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+.vs-check span {
+  font-family: var(--mono); font-size: var(--t-data); color: var(--ash);
+}
+
+/* ════════════════════════════════════════════════════════════════
+   DROP ZONE
+   ════════════════════════════════════════════════════════════════ */
+
+.vs-drop {
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 10px; min-height: 180px; padding: 32px;
+  background: var(--pit);
+  border: 1px dashed var(--line);
+  text-align: center; cursor: pointer;
+  transition: border-color 100ms linear;
+}
+.vs-drop:hover { border-color: var(--line-hi); }
+.vs-drop-title {
+  font-family: var(--mono); font-size: var(--t-label); font-weight: 700;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--ash);
+}
+.vs-drop-hint { font-family: var(--mono); font-size: var(--t-micro); color: var(--ghost); }
+.vs-drop.is-over {
+  border-style: solid; border-color: var(--acid);
+  background-image: repeating-linear-gradient(
+    45deg, rgba(0, 184, 113, 0.10) 0 4px, transparent 4px 8px
+  );
+  background-size: 11.32px 11.32px;
+  animation: hazard-crawl 800ms linear infinite;
+}
+.vs-drop.is-over .vs-drop-title { color: var(--acid); }
+
+/* ════════════════════════════════════════════════════════════════
+   ROWS · BANNERS · PROGRESS
+   ════════════════════════════════════════════════════════════════ */
+
+.vs-row {
+  display: flex; align-items: center; gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  font-family: var(--mono); font-size: var(--t-data);
+  transition: background 100ms linear;
+}
+.vs-row:hover { background: var(--slab); }
+.vs-row-name {
+  flex: 1; min-width: 0;
+  color: var(--bone);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.vs-row-meta { color: var(--ghost); font-variant-numeric: tabular-nums; flex-shrink: 0; }
+
+.vs-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px; margin-bottom: 16px;
+  background: var(--slab);
+  border: 1px solid var(--line); border-left-width: 3px;
+  font-family: var(--mono); font-size: var(--t-data);
+  color: var(--ash);
+}
+.vs-banner--info  { border-left-color: var(--acid); }
+.vs-banner--ok    { border-left-color: var(--acid);  color: var(--bone); }
+.vs-banner--warn  { border-left-color: var(--amber); }
+.vs-banner--error { border-left-color: var(--rust);  color: var(--bone); }
+.vs-banner[hidden] { display: none; }
+
+.vs-progress {
+  display: flex; align-items: center; gap: 12px;
+}
+.vs-progress-track { flex: 1; height: 2px; background: var(--line); }
+.vs-progress-fill { height: 100%; width: 0; background: var(--acid); transition: width 160ms linear; }
+.vs-progress-pct {
+  font-family: var(--mono); font-size: var(--t-data); color: var(--acid);
+  font-variant-numeric: tabular-nums; flex-shrink: 0;
+}
+
+/* ════════════════════════════════════════════════════════════════
+   RESPONSIVE
+   ════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 860px) {
+  :root { --gutter: 16px; --t-display: 32px; --t-title: 20px; }
+  .vs-shell { padding: 28px var(--gutter) 64px; }
+}
+
+/* ════════════════════════════════════════════════════════════════
+   REDUCED MOTION
+   ════════════════════════════════════════════════════════════════ */
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
