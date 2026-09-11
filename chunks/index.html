@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Gnominium Chunk Viewer</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <!-- ==================== STAGE ==================== -->
+  <main id="stage">
+    <div id="stageInner">
+      <canvas id="chunk"></canvas>
+    </div>
+    <div id="hud">
+      <span id="hudSize">–</span>
+      <span id="hudSeed">–</span>
+      <span id="hudSprites">–</span>
+    </div>
+  </main>
+
+  <!-- ==================== CONTROLS ==================== -->
+  <aside id="panel">
+    <h1>Gnominium <span>Chunk Viewer</span></h1>
+
+    <section>
+      <div class="row"><button id="reroll" class="primary">⟳ Reroll (space)</button></div>
+      <div class="row">
+        <label>Seed</label>
+        <input type="number" id="seed" value="1">
+        <button id="copySeed" title="pin this seed">pin</button>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="autoCycle"> Auto-cycle every</label>
+        <input type="number" id="autoMs" value="900" min="150" step="50" style="width:5.5em"> ms
+      </div>
+    </section>
+
+    <section>
+      <h2>Chunk</h2>
+      <div class="row">
+        <label>Size</label>
+        <input type="range" id="size" min="128" max="2048" step="64" value="1024">
+        <output id="sizeOut">1024</output>
+      </div>
+      <div class="row">
+        <label>Zoom</label>
+        <input type="range" id="zoom" min="0.25" max="3" step="0.05" value="0.6">
+        <output id="zoomOut">0.6×</output>
+        <button id="fit" title="fit to window">fit</button>
+      </div>
+      <div class="row">
+        <label>Tile set</label>
+        <select id="tileset"></select>
+      </div>
+      <p class="hint">Tiles are laid so no two identical variants ever touch (up/down/left/right).</p>
+    </section>
+
+    <section>
+      <h2>Glass roof</h2>
+      <div class="row">
+        <label><input type="checkbox" id="glassOn" checked> Show</label>
+        <select id="glassSel"></select>
+      </div>
+      <div class="row">
+        <label>Opacity</label>
+        <input type="range" id="glassOp" min="0" max="1" step="0.05" value="0.85">
+        <output id="glassOpOut">0.85</output>
+      </div>
+      <p class="hint">64×64 panes overlaid above the tiles, below the walls.</p>
+    </section>
+
+    <section>
+      <h2>Walls</h2>
+      <div class="row">
+        <label>Theme</label>
+        <select id="wallset"></select>
+      </div>
+      <div class="row">
+        <label>Source</label>
+        <select id="wallSource">
+          <option value="proc">Procedural</option>
+          <option value="tpl">Authored templates (rm1–rm9)</option>
+        </select>
+      </div>
+      <div class="row" id="densityRow">
+        <label>Density</label>
+        <input type="range" id="wallDensity" min="0" max="1" step="0.05" value="0.5">
+        <output id="wallDensityOut">0.50</output>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="edgeOpen" checked> Open walls to chunk edge</label>
+      </div>
+      <p class="hint" id="tplHint" hidden>Templates are a fixed 32×32 grid — set chunk size to 1024 to use them.</p>
+    </section>
+
+    <section>
+      <h2>Sprites <small id="spriteCount"></small></h2>
+      <div class="row">
+        <label>Global density</label>
+        <input type="range" id="spriteDensity" min="0" max="3" step="0.05" value="1">
+        <output id="spriteDensityOut">1.00×</output>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="showBoxes"> Show spawn boxes</label>
+        <label><input type="checkbox" id="lockSprites"> Keep on reroll</label>
+      </div>
+      <div id="spriteList"></div>
+      <p class="hint">Sprites only land where their spawn box is clear of walls and inside the chunk. Raise a slider to make one more common; drop it to 0 to remove it.</p>
+    </section>
+
+    <section>
+      <h2>Overlays</h2>
+      <div class="row wrap">
+        <label><input type="checkbox" id="showGrid"> Tile grid</label>
+        <label><input type="checkbox" id="showWallGrid"> Wall cells</label>
+        <label><input type="checkbox" id="showMaskTest"> Autotile test</label>
+      </div>
+      <div class="row"><button id="export">Export PNG</button></div>
+    </section>
+
+    <p class="foot">Drop new PNGs into <code>assets\tiles · walls · glass · sprites</code>, then run <code>scan-assets.bat</code> and refresh.</p>
+  </aside>
+</div>
+
+<script src="assets.js"></script>
+<script src="templates.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

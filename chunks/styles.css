@@ -1,0 +1,90 @@
+:root{
+  --bg:#12140f; --panel:#1b1f16; --panel2:#232819; --ink:#e7efdd;
+  --muted:#9aa88a; --line:#333a29; --accent:#8fd14f; --accent2:#3a7d2c; --hud:#c7f59a;
+}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{
+  background:var(--bg); color:var(--ink);
+  font:13px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;
+}
+#app{display:flex;height:100vh;overflow:hidden}
+
+/* ---------------- stage ---------------- */
+#stage{
+  flex:1;min-width:0;position:relative;
+  display:flex;align-items:center;justify-content:center;
+  overflow:auto;
+  background:
+    linear-gradient(45deg,#0d0f0a 25%,transparent 25%,transparent 75%,#0d0f0a 75%) 0 0/24px 24px,
+    linear-gradient(45deg,#0d0f0a 25%,#151810 25%,#151810 75%,#0d0f0a 75%) 12px 12px/24px 24px;
+}
+#stageInner{margin:auto;padding:32px}
+canvas#chunk{
+  display:block;
+  image-rendering:pixelated; image-rendering:crisp-edges;
+  box-shadow:0 0 0 1px #000, 0 18px 50px rgba(0,0,0,.55);
+  background:#000;
+}
+#hud{
+  position:absolute;left:10px;bottom:10px;display:flex;gap:14px;
+  padding:6px 10px;background:rgba(10,12,8,.8);border:1px solid var(--line);
+  border-radius:6px;color:var(--hud);font-size:12px;pointer-events:none;
+}
+
+/* ---------------- panel ---------------- */
+#panel{
+  width:320px;flex:0 0 320px;height:100%;overflow-y:auto;
+  background:var(--panel);border-left:1px solid var(--line);padding:14px 14px 40px;
+}
+#panel h1{font-size:15px;margin:2px 0 12px;letter-spacing:.5px}
+#panel h1 span{color:var(--accent);font-weight:400}
+#panel section{
+  background:var(--panel2);border:1px solid var(--line);border-radius:8px;
+  padding:10px;margin-bottom:12px;
+}
+#panel h2{font-size:12px;text-transform:uppercase;letter-spacing:.8px;color:var(--muted);margin:0 0 8px}
+#panel h2 small{color:var(--accent);text-transform:none;letter-spacing:0}
+.row{display:flex;align-items:center;gap:8px;margin:6px 0}
+.row.wrap{flex-wrap:wrap}
+.row label{color:var(--muted);white-space:nowrap}
+.row label:has(input[type=checkbox]){color:var(--ink);cursor:pointer}
+input[type=range]{flex:1;min-width:60px;accent-color:var(--accent)}
+input[type=checkbox]{accent-color:var(--accent);vertical-align:-2px}
+input[type=number],select{
+  background:#0f120b;color:var(--ink);border:1px solid var(--line);border-radius:5px;
+  padding:4px 6px;font:inherit;max-width:100%;
+}
+select{flex:1;min-width:0}
+input[type=number]{width:6em}
+output{color:var(--hud);min-width:3.2em;text-align:right;font-variant-numeric:tabular-nums}
+button{
+  background:#2a3320;color:var(--ink);border:1px solid var(--line);border-radius:6px;
+  padding:6px 10px;font:inherit;cursor:pointer;
+}
+button:hover{border-color:var(--accent2);background:#31401f}
+button.primary{width:100%;background:var(--accent2);border-color:#4f9f38;font-weight:600}
+button.primary:hover{background:#4f9f38}
+.hint{color:var(--muted);font-size:11px;margin:6px 2px 0;line-height:1.35}
+.foot{color:#6f7d60;font-size:11px;margin-top:16px;line-height:1.4}
+code{background:#0f120b;border:1px solid var(--line);border-radius:4px;padding:1px 4px;color:var(--hud)}
+
+/* ---------------- sprite rows ---------------- */
+.sprite{
+  display:grid;grid-template-columns:34px 1fr auto;gap:8px;align-items:center;
+  padding:6px 4px;border-top:1px solid var(--line);
+}
+.sprite:first-child{border-top:0}
+.sprite .thumb{
+  width:34px;height:34px;background:#0d100a;border:1px solid var(--line);border-radius:4px;
+  display:grid;place-items:center;overflow:hidden;
+}
+.sprite .thumb img{image-rendering:pixelated;max-width:30px;max-height:30px}
+.sprite .meta{min-width:0}
+.sprite .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
+.sprite .ctrls{display:flex;align-items:center;gap:6px;margin-top:3px}
+.sprite .ctrls input[type=range]{width:100%}
+.sprite .box{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:10px;white-space:nowrap}
+.sprite .box input[type=range]{width:52px}
+.sprite.off{opacity:.4}
+.tag{font-size:10px;color:var(--hud);min-width:2.2em;text-align:right}
