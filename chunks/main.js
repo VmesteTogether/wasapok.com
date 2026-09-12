@@ -477,6 +477,135 @@ function buildTileThumbs(){
   });
 }
 
+/* ---- user-uploaded glass panes (added to the glass dropdown) --------- */
+const GLASS_KEY = 'gnom_glass_v1';
+
+function addGlassFromSrc(name, src){
+  return loadImg(src).then(im => {
+    A.glass.push({ name, w: im.naturalWidth||im.width, h: im.naturalHeight||im.height, src, _img: im, uploaded: true });
+  });
+}
+function persistGlass(){
+  try { localStorage.setItem(GLASS_KEY, JSON.stringify(A.glass.filter(g => g.uploaded).map(g => ({ name: g.name, src: g.src })))); } catch (e) {}
+}
+async function loadPersistedGlass(){
+  let a = []; try { a = JSON.parse(localStorage.getItem(GLASS_KEY) || '[]'); } catch (e) { a = []; }
+  for (const g of a){ try { await addGlassFromSrc(g.name, g.src); } catch (e) {} }
+}
+function handleGlassFiles(files){
+  const imgs = [...files].filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return;
+  let pending = imgs.length;
+  const done = () => { if (--pending === 0){ persistGlass(); state.glassIdx = A.glass.length - 1; state.glassOn = true; el('glassOn').checked = true; buildSelects(); buildGlassThumbs(); draw(); } };
+  imgs.forEach(f => {
+    const rd = new FileReader();
+    rd.onload  = () => addGlassFromSrc(f.name.replace(/\.[^.]+$/, ''), rd.result).then(done, done);
+    rd.onerror = done;
+    rd.readAsDataURL(f);
+  });
+}
+function fixIdxAfterRemoval(gi){                    // keep state.glassIdx valid after splicing gi
+  if (state.glassIdx === gi) state.glassIdx = Math.min(gi, A.glass.length - 1);
+  else if (state.glassIdx > gi) state.glassIdx--;
+  if (state.glassIdx < 0) state.glassIdx = 0;
+}
+function removeUploadedGlass(gi){
+  if (!A.glass[gi] || !A.glass[gi].uploaded) return;
+  A.glass.splice(gi, 1); fixIdxAfterRemoval(gi);
+  persistGlass(); buildSelects(); buildGlassThumbs(); draw();
+}
+function clearGlass(){
+  for (let i = A.glass.length - 1; i >= 0; i--) if (A.glass[i].uploaded){ A.glass.splice(i, 1); fixIdxAfterRemoval(i); }
+  try { localStorage.removeItem(GLASS_KEY); } catch (e) {}
+  buildSelects(); buildGlassThumbs(); draw();
+}
+function buildGlassThumbs(){
+  const host = el('glassThumbs'); if (!host) return;
+  host.innerHTML = '';
+  const ups = A.glass.map((g, i) => ({ g, i })).filter(o => o.g.uploaded);
+  el('clearGlass').style.display = ups.length ? '' : 'none';
+  ups.forEach(({ g, i }) => {
+    const d = document.createElement('div'); d.className = 't';
+    d.innerHTML = `<img src="${g.src}" alt="" title="${g.name} · ${g.w}×${g.h}"><button class="rm" title="remove">×</button>`;
+    d.querySelector('.rm').onclick = () => removeUploadedGlass(i);
+    host.append(d);
+  });
+}
+
+/* ---- user-uploaded wall themes (pieces grouped by filename) ---------- */
+const WALL_KEY = 'gnom_walls_v1';
+
+function parseWallName(fname){
+  const base = fname.replace(/\.[^.]+$/, '');
+  const dash = base.indexOf('-');
+  return dash >= 0 ? { theme: base.slice(0, dash), role: base.slice(dash + 1) } : { theme: 'uploaded', role: base };
+}
+function ensureWallset(theme){
+  let ws = A.wallsets.find(w => w.name === theme);
+  if (!ws){ ws = { name: theme, roles: {}, uploaded: true }; A.wallsets.push(ws); }
+  return ws;
+}
+function addWallFromSrc(theme, role, src){
+  return loadImg(src).then(im => {
+    ensureWallset(theme).roles[role] = { w: im.naturalWidth||im.width, h: im.naturalHeight||im.height, src, _img: im };
+  });
+}
+function persistWalls(){
+  try {
+    const out = [];
+    A.wallsets.forEach(w => { if (w.uploaded) Object.keys(w.roles).forEach(role => out.push({ theme: w.name, role, src: w.roles[role].src })); });
+    localStorage.setItem(WALL_KEY, JSON.stringify(out));
+  } catch (e) {}
+}
+async function loadPersistedWalls(){
+  let a = []; try { a = JSON.parse(localStorage.getItem(WALL_KEY) || '[]'); } catch (e) { a = []; }
+  for (const w of a){ try { await addWallFromSrc(w.theme, w.role, w.src); } catch (e) {} }
+}
+function handleWallFiles(files){
+  const imgs = [...files].filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return;
+  let pending = imgs.length, lastTheme = null;
+  const done = () => { if (--pending === 0){ persistWalls(); if (lastTheme){ const i = A.wallsets.findIndex(w => w.name === lastTheme); if (i >= 0) state.wallsetIdx = i; } buildSelects(); buildWallThemes(); regen(); } };
+  imgs.forEach(f => {
+    const { theme, role } = parseWallName(f.name);
+    lastTheme = theme;
+    const rd = new FileReader();
+    rd.onload  = () => addWallFromSrc(theme, role, rd.result).then(done, done);
+    rd.onerror = done;
+    rd.readAsDataURL(f);
+  });
+}
+function dropWallsetAt(idx){
+  A.wallsets.splice(idx, 1);
+  if (state.wallsetIdx === idx) state.wallsetIdx = 0;
+  else if (state.wallsetIdx > idx) state.wallsetIdx--;
+  if (state.wallsetIdx >= A.wallsets.length) state.wallsetIdx = 0;
+}
+function removeUploadedWallset(theme){
+  const idx = A.wallsets.findIndex(w => w.name === theme && w.uploaded);
+  if (idx < 0) return;
+  dropWallsetAt(idx);
+  persistWalls(); buildSelects(); buildWallThemes(); regen();
+}
+function clearWalls(){
+  for (let i = A.wallsets.length - 1; i >= 0; i--) if (A.wallsets[i].uploaded) dropWallsetAt(i);
+  try { localStorage.removeItem(WALL_KEY); } catch (e) {}
+  buildSelects(); buildWallThemes(); regen();
+}
+function buildWallThemes(){
+  const host = el('wallThemes'); if (!host) return;
+  host.innerHTML = '';
+  const ups = A.wallsets.filter(w => w.uploaded);
+  el('clearWalls').style.display = ups.length ? '' : 'none';
+  ups.forEach(w => {
+    const n = Object.keys(w.roles).length;
+    const c = document.createElement('span'); c.className = 'chip';
+    c.innerHTML = `${w.name} · ${n}/16<button class="rm" title="remove theme">×</button>`;
+    c.querySelector('.rm').onclick = () => removeUploadedWallset(w.name);
+    host.append(c);
+  });
+}
+
 function buildSpriteList(){
   const host = el('spriteList'); host.innerHTML = '';
   el('spriteCount').textContent = `(${A.sprites.length})`;
@@ -607,13 +736,27 @@ function bindUI(){
   el('spriteUpload').onchange = e => { handleFiles(e.target.files); e.target.value = ''; };
   el('clearUploads').onclick = clearUploads;
 
+  // dropping on a section's own upload row routes to that type (not the global sprite drop)
+  const dropZone = (rowId, handler) => {
+    const row = el(rowId);
+    row.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+    row.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.files?.length) handler(e.dataTransfer.files); });
+  };
+
   el('tileUploadBtn').onclick = () => el('tileUpload').click();
   el('tileUpload').onchange = e => { handleTileFiles(e.target.files); e.target.value = ''; };
   el('clearTiles').onclick = clearTiles;
-  // tile drop zone: dropping on this row adds tiles (and not sprites)
-  const trow = el('tileUploadRow');
-  trow.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
-  trow.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.files?.length) handleTileFiles(e.dataTransfer.files); });
+  dropZone('tileUploadRow', handleTileFiles);
+
+  el('glassUploadBtn').onclick = () => el('glassUpload').click();
+  el('glassUpload').onchange = e => { handleGlassFiles(e.target.files); e.target.value = ''; };
+  el('clearGlass').onclick = clearGlass;
+  dropZone('glassUploadRow', handleGlassFiles);
+
+  el('wallUploadBtn').onclick = () => el('wallUpload').click();
+  el('wallUpload').onchange = e => { handleWallFiles(e.target.files); e.target.value = ''; };
+  el('clearWalls').onclick = clearWalls;
+  dropZone('wallUploadRow', handleWallFiles);
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -660,15 +803,19 @@ async function init(){
 
   state.spriteCfg = A.sprites.map(() => ({ enabled: true, freq: 2, boxScale: 0.7 }));
   await loadPersistedUploads();   // re-attach sprites uploaded in this browser before
-  await loadPersistedTiles();     // ...and any uploaded floor tiles
+  await loadPersistedTiles();     // ...uploaded floor tiles
+  await loadPersistedGlass();     // ...uploaded glass panes
+  await loadPersistedWalls();     // ...uploaded wall themes
 
-  // default glass = the "...2" pane the game uses, if present (set once)
-  const g2 = A.glass.findIndex(g => /2\b|2$|glass-?0?2/i.test(g.name));
+  // default glass = the built-in "...2" pane the game uses (built-ins come first)
+  const g2 = A.glass.findIndex(g => !g.uploaded && /2\b|2$|glass-?0?2/i.test(g.name));
   state.glassIdx = g2 >= 0 ? g2 : 0;
 
   buildSelects();
   buildSpriteList();
   buildTileThumbs();
+  buildGlassThumbs();
+  buildWallThemes();
   bindUI();
   refreshTplAvailability();
 

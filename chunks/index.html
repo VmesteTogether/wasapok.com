@@ -74,7 +74,13 @@
         <input type="range" id="glassOp" min="0" max="1" step="0.05" value="0.85">
         <output id="glassOpOut">0.85</output>
       </div>
-      <p class="hint">64×64 panes overlaid above the tiles, below the walls.</p>
+      <div class="row" id="glassUploadRow">
+        <button id="glassUploadBtn" class="primary" style="flex:1">＋ Upload glass…</button>
+        <button id="clearGlass" title="remove uploaded glass">clear</button>
+        <input type="file" id="glassUpload" accept="image/*" multiple hidden>
+      </div>
+      <div id="glassThumbs" class="thumbs"></div>
+      <p class="hint">64×64 panes overlaid above the tiles, below the walls. Uploads (drop on the button too) are picked in the dropdown and remembered in this browser.</p>
     </section>
 
     <section>
@@ -98,6 +104,13 @@
       <div class="row">
         <label><input type="checkbox" id="edgeOpen" checked> Open walls to chunk edge</label>
       </div>
+      <div class="row" id="wallUploadRow">
+        <button id="wallUploadBtn" class="primary" style="flex:1">＋ Upload walls…</button>
+        <button id="clearWalls" title="remove uploaded wall themes">clear</button>
+        <input type="file" id="wallUpload" accept="image/*" multiple hidden>
+      </div>
+      <div id="wallThemes" class="chips"></div>
+      <p class="hint">Name pieces <code>theme-role.png</code> (e.g. <code>stone-top_cap.png</code>) — roles: <code>01</code>, the four <code>*_cap</code>, <code>center_vertical/horizontal</code>, the <code>*_trans</code> corners/T-junctions, <code>middle_trans</code>. Bare names (<code>middle_trans.png</code>) join an “uploaded” theme. Missing pieces fall back; remembered in this browser.</p>
       <p class="hint" id="tplHint" hidden>Templates are a fixed 32×32 grid — set chunk size to 1024 to use them.</p>
     </section>
 
