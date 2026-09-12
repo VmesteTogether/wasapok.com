@@ -398,6 +398,7 @@ function drawMaskTest(){
 function applyZoom(){
   canvas.style.width  = (canvas.width  * state.zoom) + 'px';
   canvas.style.height = (canvas.height * state.zoom) + 'px';
+  scheduleSave();                                   // every redraw/zoom ends here -> persist settings
 }
 function updateHud(){
   el('hudSize').textContent = `${state.N}×${state.N} tiles · ${state.N*TILE}px`;
@@ -721,6 +722,87 @@ function clearUploads(){
   buildSpriteList(); updateBrushUI(); regen();
 }
 
+/* ---- remember settings across refreshes (per-browser) --------------- */
+const SETTINGS_KEY = 'gnom_settings_v1';
+let _saveTimer = null;
+function scheduleSave(){ clearTimeout(_saveTimer); _saveTimer = setTimeout(saveSettings, 300); }
+function saveSettings(){
+  try {
+    const s = {
+      v: 1,
+      seed: state.seed, size: state.size, zoom: state.zoom,
+      glassOn: state.glassOn, glassOp: state.glassOp,
+      wallSource: state.wallSource, wallDensity: state.wallDensity, edgeOpen: state.edgeOpen,
+      spriteDensity: state.spriteDensity,
+      showBoxes: state.showBoxes, lockSprites: state.lockSprites,
+      showGrid: state.showGrid, showWallGrid: state.showWallGrid,
+      tilesetName: A.tilesets[state.tilesetIdx]?.name,
+      wallsetName: A.wallsets[state.wallsetIdx]?.name,
+      glassName:   A.glass[state.glassIdx]?.name,
+      spriteCfg: {},
+    };
+    A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
+    // a hand-made arrangement isn't reproducible from the seed, so store it
+    if (state.lockSprites)
+      s.placements = state.placements.map(p => ({ name: A.sprites[p.i]?.name, dx: p.dx, dy: p.dy })).filter(p => p.name);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
+  } catch (e) { /* storage full or blocked: settings just won't persist */ }
+}
+function loadSettings(){
+  try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch (e) { return null; }
+}
+function applySettings(s){
+  if (!s) return false;
+  const num = (v, d) => (typeof v === 'number' && isFinite(v)) ? v : d;
+  state.seed         = num(s.seed, state.seed);
+  state.size         = num(s.size, state.size);
+  state.zoom         = num(s.zoom, state.zoom);
+  state.glassOn      = s.glassOn !== false;
+  state.glassOp      = num(s.glassOp, state.glassOp);
+  state.wallSource   = (s.wallSource === 'tpl' || s.wallSource === 'proc') ? s.wallSource : state.wallSource;
+  state.wallDensity  = num(s.wallDensity, state.wallDensity);
+  state.edgeOpen     = s.edgeOpen !== false;
+  state.spriteDensity = num(s.spriteDensity, state.spriteDensity);
+  state.showBoxes    = !!s.showBoxes;
+  state.lockSprites  = !!s.lockSprites;
+  state.showGrid     = !!s.showGrid;
+  state.showWallGrid = !!s.showWallGrid;
+  const ti = A.tilesets.findIndex(t => t.name === s.tilesetName); if (ti >= 0) state.tilesetIdx = ti;
+  const wi = A.wallsets.findIndex(w => w.name === s.wallsetName); if (wi >= 0) state.wallsetIdx = wi;
+  const gi = A.glass.findIndex(g => g.name === s.glassName);       if (gi >= 0) state.glassIdx   = gi;
+  if (s.spriteCfg) A.sprites.forEach((sp, i) => {
+    const c = s.spriteCfg[sp.name];
+    if (c) state.spriteCfg[i] = { enabled: c.enabled !== false, freq: num(c.freq, 2), boxScale: num(c.boxScale, 0.7) };
+  });
+  if (state.lockSprites && Array.isArray(s.placements) && s.placements.length){
+    const rebuilt = [];
+    for (const pp of s.placements){
+      const idx = A.sprites.findIndex(sp => sp.name === pp.name);
+      if (idx >= 0) rebuilt.push(makePlacement(idx, pp.dx, pp.dy));
+    }
+    if (rebuilt.length) state.placements = rebuilt;
+  }
+  return true;
+}
+function syncControls(){                            // push restored state into the DOM controls
+  el('seed').value = state.seed;
+  el('size').value = state.size; el('sizeOut').textContent = state.size;
+  el('zoom').value = state.zoom; el('zoomOut').textContent = state.zoom.toFixed(2) + '×';
+  el('glassOn').checked = state.glassOn;
+  el('glassOp').value = state.glassOp; el('glassOpOut').textContent = state.glassOp.toFixed(2);
+  el('wallSource').value = state.wallSource;
+  el('wallDensity').value = state.wallDensity; el('wallDensityOut').textContent = state.wallDensity.toFixed(2);
+  el('edgeOpen').checked = state.edgeOpen;
+  el('spriteDensity').value = state.spriteDensity; el('spriteDensityOut').textContent = state.spriteDensity.toFixed(2) + '×';
+  el('showBoxes').checked = state.showBoxes;
+  el('lockSprites').checked = state.lockSprites;
+  el('showGrid').checked = state.showGrid;
+  el('showWallGrid').checked = state.showWallGrid;
+  el('tileset').value = state.tilesetIdx;
+  el('wallset').value = state.wallsetIdx;
+  el('glassSel').value = state.glassIdx;
+}
+
 function refreshTplAvailability(){
   const hasT = !!window.GNOM_TEMPLATES;
   const fits = state.size === 1024;
@@ -878,7 +960,7 @@ function bindUI(){
 
   el('spriteDensity').oninput = e => { state.spriteDensity = +e.target.value; el('spriteDensityOut').textContent = state.spriteDensity.toFixed(2)+'×'; regen(); };
   el('showBoxes').onchange = e => { state.showBoxes = e.target.checked; draw(); };
-  el('lockSprites').onchange = e => { state.lockSprites = e.target.checked; };
+  el('lockSprites').onchange = e => { state.lockSprites = e.target.checked; scheduleSave(); };
 
   el('uploadBtn').onclick = () => el('spriteUpload').click();
   el('spriteUpload').onchange = e => { handleFiles(e.target.files); e.target.value = ''; };
@@ -961,6 +1043,9 @@ async function init(){
   const g2 = A.glass.findIndex(g => !g.uploaded && /2\b|2$|glass-?0?2/i.test(g.name));
   state.glassIdx = g2 >= 0 ? g2 : 0;
 
+  // restore the last session's settings (seed reproduces the same chunk)
+  const restored = applySettings(loadSettings());
+
   buildSelects();
   buildSpriteList();
   buildTileThumbs();
@@ -968,13 +1053,11 @@ async function init(){
   buildWallThemes();
   bindUI();
   refreshTplAvailability();
-
-  el('seed').value = state.seed;
-  el('sizeOut').textContent = state.size;
-  el('zoomOut').textContent = state.zoom.toFixed(2)+'×';
+  updateBrushUI();
+  syncControls();
 
   regen();
-  fitZoom();
+  if (restored) applyZoom(); else fitZoom();   // keep the saved zoom; only auto-fit on a fresh start
 }
 
 if (!A.tilesets.length && !A.wallsets.length){
