@@ -96,6 +96,9 @@ let canvas, ctx;
 // dragged (-1 = none); dragBG caches the rest of the scene so a drag repaints
 // as one blit + one sprite instead of the whole chunk.
 let dragK = -1, dragBG = null, dragOff = { x: 0, y: 0 };
+// per-instance editing: selK = selected placement (for Delete key / highlight),
+// brushType = sprite type armed for click-to-place on the map (-1 = none).
+let selK = -1, brushType = -1;
 
 /* ============================ generation ============================ */
 
@@ -330,6 +333,13 @@ function draw(){
   if (state.showGrid)     drawGrid(px, TILE, 'rgba(255,255,255,.08)');
   if (state.showWallGrid) drawWallCells(N);
   if (state.showBoxes)    drawBoxes();
+
+  // selected-sprite highlight (for Delete / clarity), except while dragging it
+  if (selK >= 0 && selK < state.placements.length && dragK < 0){
+    const p = state.placements[selK];
+    ctx.lineWidth = 2; ctx.strokeStyle = 'rgba(143,209,79,.95)';
+    ctx.strokeRect(p.dx - 1.5, p.dy - 1.5, p.w + 3, p.h + 3);
+  }
 
   updateHud();
   applyZoom();
@@ -627,6 +637,7 @@ function buildSpriteList(){
           <input type="checkbox" ${cfg.enabled ? 'checked' : ''} data-k="enabled">
           <input type="range" min="0" max="8" step="0.25" value="${cfg.freq}" data-k="freq">
           <span class="tag">${cfg.freq.toFixed(2)}</span>
+          <button class="place" data-i="${i}" title="place instances by clicking the map (arm, then click)">place</button>
         </div>
       </div>
       <div class="box" title="spawn box size (fraction of sprite)">
@@ -644,6 +655,9 @@ function buildSpriteList(){
     });
     const rm = row.querySelector('.rm');
     if (rm) rm.addEventListener('click', () => removeUploadedAt(i));
+    const placeBtn = row.querySelector('.place');
+    placeBtn.classList.toggle('on', brushType === i);
+    placeBtn.addEventListener('click', () => { brushType === i ? disarmBrush() : armBrush(i); });
     host.append(row);
   });
 }
@@ -690,13 +704,21 @@ function handleFiles(files){
 function removeUploadedAt(i){
   if (!A.sprites[i] || !A.sprites[i].uploaded) return;
   A.sprites.splice(i, 1); state.spriteCfg.splice(i, 1);
-  persistUploads(); state.placements = []; buildSpriteList(); regen();
+  // keep the manual arrangement: drop this type's instances, shift higher type-indices down
+  state.placements = state.placements.filter(p => p.i !== i).map(p => (p.i > i ? (p.i--, p) : p));
+  if (brushType === i) brushType = -1; else if (brushType > i) brushType--;
+  selK = -1; dragK = -1;
+  persistUploads(); buildSpriteList(); updateBrushUI(); regen();
 }
 function clearUploads(){
   for (let i = A.sprites.length - 1; i >= 0; i--)
     if (A.sprites[i].uploaded){ A.sprites.splice(i, 1); state.spriteCfg.splice(i, 1); }
+  const n = A.sprites.length;
+  state.placements = state.placements.filter(p => p.i < n);   // uploads are appended at the tail
+  if (brushType >= n) brushType = -1;
+  selK = -1; dragK = -1;
   try { localStorage.removeItem(UP_KEY); } catch (e) {}
-  state.placements = []; buildSpriteList(); regen();
+  buildSpriteList(); updateBrushUI(); regen();
 }
 
 function refreshTplAvailability(){
@@ -720,6 +742,34 @@ function pickSprite(x, y){                          // topmost sprite under the 
   }
   return -1;
 }
+function makePlacement(i, dx, dy){                  // a single sprite instance + its spawn box
+  const sp = A.sprites[i]; const w = sp.w || 16, h = sp.h || 16;
+  const s = state.spriteCfg[i]?.boxScale ?? 0.7;
+  const bw = Math.max(2, Math.round(w * s)), bh = Math.max(2, Math.round(h * s));
+  return { i, dx, dy, w, h, bw, bh, bx: dx + Math.round((w - bw) / 2), by: dy + Math.round((h - bh) / 2) };
+}
+function markManual(){                              // hand-editing implies "keep this arrangement"
+  if (!state.lockSprites){ state.lockSprites = true; el('lockSprites').checked = true; }
+}
+function deletePlacement(k){
+  if (k < 0 || k >= state.placements.length) return;
+  state.placements.splice(k, 1);
+  if (selK === k) selK = -1; else if (selK > k) selK--;
+  if (dragK === k) dragK = -1; else if (dragK > k) dragK--;
+  markManual(); draw();
+}
+function armBrush(i){ brushType = i; selK = -1; updateBrushUI(); draw(); }
+function disarmBrush(){ brushType = -1; updateBrushUI(); }
+function updateBrushUI(){
+  document.querySelectorAll('#spriteList .place').forEach(b => b.classList.toggle('on', +b.dataset.i === brushType));
+  const st = el('brushStatus');
+  if (brushType >= 0 && A.sprites[brushType]){
+    st.hidden = false;
+    st.innerHTML = `Placing <b>${A.sprites[brushType].name}</b> — click the map to drop one. <button id="brushStop">stop</button>`;
+    el('brushStop').onclick = disarmBrush;
+  } else st.hidden = true;
+  if (canvas) canvas.style.cursor = brushType >= 0 ? 'copy' : 'default';
+}
 function applyDragBox(p){                            // recompute spawn box after a move
   const s = state.spriteCfg[p.i]?.boxScale ?? 0.7;
   p.bw = Math.max(2, Math.round(p.w * s));
@@ -742,15 +792,33 @@ function paintDrag(x, y){
   ctx.strokeRect(p.bx + 1, p.by + 1, p.bw - 2, p.bh - 2);
 }
 function bindCanvasDrag(){
+  canvas.addEventListener('contextmenu', e => e.preventDefault());   // right-click = delete, no menu
+
   canvas.addEventListener('pointerdown', e => {
     if (state.showMaskTest) return;
     const { x, y } = canvasPos(e);
-    const k = pickSprite(x, y);
+
+    if (e.button === 2){                             // right-click: delete the sprite under cursor
+      const k = pickSprite(x, y);
+      if (k >= 0) deletePlacement(k);
+      e.preventDefault(); return;
+    }
+    if (e.button !== 0) return;
+
+    let k = pickSprite(x, y);
+    if (k < 0 && brushType >= 0){                    // empty spot + armed brush: stamp a new instance
+      const sp = A.sprites[brushType]; const w = sp.w || 16, h = sp.h || 16, px = state.N * TILE;
+      const dx = Math.max(0, Math.min(px - w, Math.round(x - w / 2)));
+      const dy = Math.max(0, Math.min(px - h, Math.round(y - h / 2)));
+      state.placements.push(makePlacement(brushType, dx, dy));
+      k = state.placements.length - 1;
+      markManual();
+    }
     if (k < 0) return;
-    dragK = k;
+
+    selK = k; dragK = k;                             // begin dragging (also lets you fine-tune a just-placed one)
     dragOff = { x: x - state.placements[k].dx, y: y - state.placements[k].dy };
-    // hand-placing a sprite implies you want it kept, so lock the arrangement
-    if (!state.lockSprites){ state.lockSprites = true; el('lockSprites').checked = true; }
+    markManual();
     draw();                                          // repaint scene minus the dragged sprite
     dragBG = document.createElement('canvas');
     dragBG.width = canvas.width; dragBG.height = canvas.height;
@@ -760,14 +828,26 @@ function bindCanvasDrag(){
     paintDrag(x, y);
     e.preventDefault();
   });
+
   canvas.addEventListener('pointermove', e => {
     const { x, y } = canvasPos(e);
-    if (dragK < 0){ canvas.style.cursor = pickSprite(x, y) >= 0 ? 'grab' : 'default'; return; }
+    if (dragK < 0){
+      const over = pickSprite(x, y) >= 0;
+      canvas.style.cursor = over ? 'grab' : (brushType >= 0 ? 'copy' : 'default');
+      return;
+    }
     paintDrag(x, y);
   });
-  const end = () => { if (dragK < 0) return; dragK = -1; dragBG = null; canvas.style.cursor = 'default'; draw(); };
+
+  const end = () => { if (dragK < 0) return; dragK = -1; dragBG = null; canvas.style.cursor = brushType >= 0 ? 'copy' : 'default'; draw(); };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
+
+  window.addEventListener('keydown', e => {
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+    if (e.key === 'Escape' && brushType >= 0){ disarmBrush(); }
+    else if ((e.key === 'Delete' || e.key === 'Backspace') && selK >= 0){ e.preventDefault(); deletePlacement(selK); }
+  });
 }
 
 function bindUI(){

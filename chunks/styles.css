@@ -83,7 +83,13 @@ code{background:#0f120b;border:1px solid var(--line);border-radius:4px;padding:1
 .sprite .meta{min-width:0}
 .sprite .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px}
 .sprite .ctrls{display:flex;align-items:center;gap:6px;margin-top:3px}
-.sprite .ctrls input[type=range]{width:100%}
+.sprite .ctrls input[type=range]{flex:1;min-width:36px}
+.sprite .place{background:#22301a;border:1px solid var(--line);color:var(--muted);border-radius:4px;padding:1px 6px;font-size:10px;cursor:pointer;white-space:nowrap}
+.sprite .place:hover{border-color:var(--accent2);color:var(--ink)}
+.sprite .place.on{background:var(--accent2);border-color:#4f9f38;color:#fff}
+.brushbar{background:#22301a;border:1px solid var(--accent2);border-radius:6px;padding:6px 8px;margin:8px 0 4px;color:var(--hud);font-size:11px;display:flex;align-items:center;gap:8px;justify-content:space-between}
+.brushbar b{color:#fff}
+.brushbar button{padding:2px 8px;font-size:11px}
 .sprite .box{display:flex;align-items:center;gap:4px;color:var(--muted);font-size:10px;white-space:nowrap}
 .sprite .box input[type=range]{width:52px}
 .sprite.off{opacity:.4}
