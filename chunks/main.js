@@ -92,6 +92,11 @@ const state = {
 
 let canvas, ctx;
 
+// live drag of a placed sprite: dragK is the index into state.placements being
+// dragged (-1 = none); dragBG caches the rest of the scene so a drag repaints
+// as one blit + one sprite instead of the whole chunk.
+let dragK = -1, dragBG = null, dragOff = { x: 0, y: 0 };
+
 /* ============================ generation ============================ */
 
 // floor tiles, filled row-major so no variant equals its left/up neighbour
@@ -313,12 +318,13 @@ function draw(){
       }
   }
 
-  // 4) sprites
-  for (const p of state.placements){
+  // 4) sprites  (skip the one being dragged — it's painted on top during the drag)
+  state.placements.forEach((p, k) => {
+    if (k === dragK) return;
     const sp = A.sprites[p.i];
-    if (!sp || !sp._img) continue;
+    if (!sp || !sp._img) return;
     ctx.drawImage(sp._img, p.dx, p.dy, p.w, p.h);
-  }
+  });
 
   // overlays
   if (state.showGrid)     drawGrid(px, TILE, 'rgba(255,255,255,.08)');
@@ -702,6 +708,68 @@ function refreshTplAvailability(){
   el('densityRow').style.display = state.wallSource === 'proc' ? '' : 'none';
 }
 
+/* -------- drag a placed sprite to position it exactly -------------- */
+function canvasPos(e){
+  const r = canvas.getBoundingClientRect();
+  return { x: (e.clientX - r.left) / r.width * canvas.width, y: (e.clientY - r.top) / r.height * canvas.height };
+}
+function pickSprite(x, y){                          // topmost sprite under the point
+  for (let k = state.placements.length - 1; k >= 0; k--){
+    const p = state.placements[k];
+    if (x >= p.dx && x < p.dx + p.w && y >= p.dy && y < p.dy + p.h) return k;
+  }
+  return -1;
+}
+function applyDragBox(p){                            // recompute spawn box after a move
+  const s = state.spriteCfg[p.i]?.boxScale ?? 0.7;
+  p.bw = Math.max(2, Math.round(p.w * s));
+  p.bh = Math.max(2, Math.round(p.h * s));
+  p.bx = p.dx + Math.round((p.w - p.bw) / 2);
+  p.by = p.dy + Math.round((p.h - p.bh) / 2);
+}
+function paintDrag(x, y){
+  const p = state.placements[dragK]; if (!p) return;
+  const px = state.N * TILE;
+  p.dx = Math.max(0, Math.min(px - p.w, Math.round(x - dragOff.x)));
+  p.dy = Math.max(0, Math.min(px - p.h, Math.round(y - dragOff.y)));
+  applyDragBox(p);
+  ctx.drawImage(dragBG, 0, 0);                       // everything else, cached
+  const sp = A.sprites[p.i];
+  if (sp && sp._img) ctx.drawImage(sp._img, p.dx, p.dy, p.w, p.h);
+  const onWall = boxHitsWall(state.wallGrid, state.N, p.bx, p.by, p.bw, p.bh);
+  ctx.lineWidth = 2;
+  ctx.strokeStyle = onWall ? 'rgba(255,80,80,.95)' : 'rgba(120,220,255,.95)';
+  ctx.strokeRect(p.bx + 1, p.by + 1, p.bw - 2, p.bh - 2);
+}
+function bindCanvasDrag(){
+  canvas.addEventListener('pointerdown', e => {
+    if (state.showMaskTest) return;
+    const { x, y } = canvasPos(e);
+    const k = pickSprite(x, y);
+    if (k < 0) return;
+    dragK = k;
+    dragOff = { x: x - state.placements[k].dx, y: y - state.placements[k].dy };
+    // hand-placing a sprite implies you want it kept, so lock the arrangement
+    if (!state.lockSprites){ state.lockSprites = true; el('lockSprites').checked = true; }
+    draw();                                          // repaint scene minus the dragged sprite
+    dragBG = document.createElement('canvas');
+    dragBG.width = canvas.width; dragBG.height = canvas.height;
+    dragBG.getContext('2d').drawImage(canvas, 0, 0);
+    try { canvas.setPointerCapture?.(e.pointerId); } catch (_) {}
+    canvas.style.cursor = 'grabbing';
+    paintDrag(x, y);
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', e => {
+    const { x, y } = canvasPos(e);
+    if (dragK < 0){ canvas.style.cursor = pickSprite(x, y) >= 0 ? 'grab' : 'default'; return; }
+    paintDrag(x, y);
+  });
+  const end = () => { if (dragK < 0) return; dragK = -1; dragBG = null; canvas.style.cursor = 'default'; draw(); };
+  canvas.addEventListener('pointerup', end);
+  canvas.addEventListener('pointercancel', end);
+}
+
 function bindUI(){
   el('reroll').onclick = () => { state.seed = (Math.random()*1e9)|0; el('seed').value = state.seed; regen(); };
   el('seed').onchange = e => { state.seed = parseInt(e.target.value)||0; regen(); };
@@ -771,6 +839,8 @@ function bindUI(){
   window.addEventListener('keydown', e => {
     if (e.code === 'Space' && e.target.tagName !== 'INPUT'){ e.preventDefault(); el('reroll').click(); }
   });
+
+  bindCanvasDrag();
 }
 
 function fitZoom(){
