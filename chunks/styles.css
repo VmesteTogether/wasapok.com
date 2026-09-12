@@ -88,3 +88,6 @@ code{background:#0f120b;border:1px solid var(--line);border-radius:4px;padding:1
 .sprite .box input[type=range]{width:52px}
 .sprite.off{opacity:.4}
 .tag{font-size:10px;color:var(--hud);min-width:2.2em;text-align:right}
+.sprite .rm{background:#3a2020;border:1px solid #6a3030;color:#ffb4b4;border-radius:4px;padding:0 5px;cursor:pointer;font-size:12px;line-height:1.5}
+.sprite .rm:hover{background:#5a2a2a;border-color:#8a3a3a}
+#app.drag{outline:3px dashed var(--accent);outline-offset:-3px}

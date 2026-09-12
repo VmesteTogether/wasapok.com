@@ -316,6 +316,7 @@ function draw(){
   // 4) sprites
   for (const p of state.placements){
     const sp = A.sprites[p.i];
+    if (!sp || !sp._img) continue;
     ctx.drawImage(sp._img, p.dx, p.dy, p.w, p.h);
   }
 
@@ -414,7 +415,7 @@ function buildSpriteList(){
     row.innerHTML = `
       <div class="thumb"><img src="${sp.src}" alt=""></div>
       <div class="meta">
-        <div class="nm" title="${sp.name} · ${sp.w}×${sp.h}">${sp.name}</div>
+        <div class="nm" title="${sp.name} · ${sp.w}×${sp.h}${sp.uploaded?' · uploaded':''}">${sp.uploaded?'↑ ':''}${sp.name}</div>
         <div class="ctrls">
           <input type="checkbox" ${cfg.enabled ? 'checked' : ''} data-k="enabled">
           <input type="range" min="0" max="8" step="0.25" value="${cfg.freq}" data-k="freq">
@@ -423,17 +424,72 @@ function buildSpriteList(){
       </div>
       <div class="box" title="spawn box size (fraction of sprite)">
         box<input type="range" min="0.2" max="1" step="0.05" value="${cfg.boxScale}" data-k="boxScale">
+        ${sp.uploaded ? '<button class="rm" title="remove this upload">×</button>' : ''}
       </div>`;
     row.querySelectorAll('input').forEach(inp => {
       inp.addEventListener('input', () => {
         const k = inp.dataset.k;
         if (k === 'enabled'){ cfg.enabled = inp.checked; row.classList.toggle('off', !cfg.enabled); }
         else { cfg[k] = parseFloat(inp.value); if (k==='freq') row.querySelector('.tag').textContent = cfg.freq.toFixed(2); }
+        if (sp.uploaded) persistUploads();
         regen();
       });
     });
+    const rm = row.querySelector('.rm');
+    if (rm) rm.addEventListener('click', () => removeUploadedAt(i));
     host.append(row);
   });
+}
+
+/* ---- user-uploaded sprites (runtime, remembered per-browser) -------- */
+const UP_KEY = 'gnom_uploads_v1';
+
+function addSpriteFromSrc(name, src, cfg){
+  return loadImg(src).then(im => {
+    A.sprites.push({ name, w: im.naturalWidth || im.width, h: im.naturalHeight || im.height, src, _img: im, uploaded: true });
+    state.spriteCfg.push(Object.assign({ enabled: true, freq: 2, boxScale: 0.7 }, cfg || {}));
+  });
+}
+function persistUploads(){
+  try {
+    const ups = [];
+    A.sprites.forEach((s, i) => {
+      if (!s.uploaded) return;
+      const c = state.spriteCfg[i] || {};
+      ups.push({ name: s.name, src: s.src, freq: c.freq, boxScale: c.boxScale, enabled: c.enabled });
+    });
+    localStorage.setItem(UP_KEY, JSON.stringify(ups));
+  } catch (e) { /* storage full or blocked: uploads just won't persist */ }
+}
+async function loadPersistedUploads(){
+  let ups = [];
+  try { ups = JSON.parse(localStorage.getItem(UP_KEY) || '[]'); } catch (e) { ups = []; }
+  for (const u of ups){
+    try { await addSpriteFromSrc(u.name, u.src, { enabled: u.enabled !== false, freq: u.freq ?? 2, boxScale: u.boxScale ?? 0.7 }); } catch (e) {}
+  }
+}
+function handleFiles(files){
+  const imgs = [...files].filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return;
+  let pending = imgs.length;
+  const done = () => { if (--pending === 0){ persistUploads(); state.placements = []; buildSpriteList(); regen(); } };
+  imgs.forEach(f => {
+    const rd = new FileReader();
+    rd.onload  = () => addSpriteFromSrc(f.name.replace(/\.[^.]+$/, ''), rd.result).then(done, done);
+    rd.onerror = done;
+    rd.readAsDataURL(f);
+  });
+}
+function removeUploadedAt(i){
+  if (!A.sprites[i] || !A.sprites[i].uploaded) return;
+  A.sprites.splice(i, 1); state.spriteCfg.splice(i, 1);
+  persistUploads(); state.placements = []; buildSpriteList(); regen();
+}
+function clearUploads(){
+  for (let i = A.sprites.length - 1; i >= 0; i--)
+    if (A.sprites[i].uploaded){ A.sprites.splice(i, 1); state.spriteCfg.splice(i, 1); }
+  try { localStorage.removeItem(UP_KEY); } catch (e) {}
+  state.placements = []; buildSpriteList(); regen();
 }
 
 function refreshTplAvailability(){
@@ -475,6 +531,15 @@ function bindUI(){
   el('showBoxes').onchange = e => { state.showBoxes = e.target.checked; draw(); };
   el('lockSprites').onchange = e => { state.lockSprites = e.target.checked; };
 
+  el('uploadBtn').onclick = () => el('spriteUpload').click();
+  el('spriteUpload').onchange = e => { handleFiles(e.target.files); e.target.value = ''; };
+  el('clearUploads').onclick = clearUploads;
+  // drag & drop image files anywhere on the tool
+  const dz = document.getElementById('app');
+  dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
+  dz.addEventListener('dragleave', e => { if (e.target === dz) dz.classList.remove('drag'); });
+  dz.addEventListener('drop', e => { e.preventDefault(); dz.classList.remove('drag'); if (e.dataTransfer?.files?.length) handleFiles(e.dataTransfer.files); });
+
   el('showGrid').onchange = e => { state.showGrid = e.target.checked; draw(); };
   el('showWallGrid').onchange = e => { state.showWallGrid = e.target.checked; draw(); };
   el('showMaskTest').onchange = e => { state.showMaskTest = e.target.checked; draw(); };
@@ -514,6 +579,7 @@ async function init(){
   await Promise.all(jobs);
 
   state.spriteCfg = A.sprites.map(() => ({ enabled: true, freq: 2, boxScale: 0.7 }));
+  await loadPersistedUploads();   // re-attach sprites uploaded in this browser before
 
   buildSelects();
   buildSpriteList();

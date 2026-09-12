@@ -106,6 +106,12 @@
         <label><input type="checkbox" id="showBoxes"> Show spawn boxes</label>
         <label><input type="checkbox" id="lockSprites"> Keep on reroll</label>
       </div>
+      <div class="row" id="uploadRow">
+        <button id="uploadBtn" class="primary" style="flex:1">＋ Upload sprites…</button>
+        <button id="clearUploads" title="remove all uploaded sprites">clear</button>
+        <input type="file" id="spriteUpload" accept="image/*" multiple hidden>
+      </div>
+      <p class="hint">Drop PNGs here or use the button — they spawn like the rest and are remembered in this browser. (Uploads are per-browser; for the built-in set on every device, add files to <code>assets\sprites</code> and rescan.)</p>
       <div id="spriteList"></div>
       <p class="hint">Sprites only land where their spawn box is clear of walls and inside the chunk. Raise a slider to make one more common; drop it to 0 to remove it.</p>
     </section>
