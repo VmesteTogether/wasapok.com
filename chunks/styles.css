@@ -91,3 +91,8 @@ code{background:#0f120b;border:1px solid var(--line);border-radius:4px;padding:1
 .sprite .rm{background:#3a2020;border:1px solid #6a3030;color:#ffb4b4;border-radius:4px;padding:0 5px;cursor:pointer;font-size:12px;line-height:1.5}
 .sprite .rm:hover{background:#5a2a2a;border-color:#8a3a3a}
 #app.drag{outline:3px dashed var(--accent);outline-offset:-3px}
+.thumbs{display:flex;flex-wrap:wrap;gap:5px;margin:8px 0 0}
+.thumbs .t{position:relative;width:32px;height:32px;border:1px solid var(--line);border-radius:4px;overflow:hidden;background:#0d100a}
+.thumbs .t img{width:100%;height:100%;image-rendering:pixelated;object-fit:cover}
+.thumbs .t .rm{position:absolute;top:0;right:0;background:rgba(58,32,32,.92);border:0;border-radius:0 3px 0 4px;color:#ffb4b4;font-size:10px;line-height:1;padding:1px 3px;cursor:pointer}
+.thumbs .t .rm:hover{background:#5a2a2a}

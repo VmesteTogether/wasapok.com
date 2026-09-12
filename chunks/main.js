@@ -395,14 +395,86 @@ const el = id => document.getElementById(id);
 function buildSelects(){
   const tset = el('tileset'); tset.innerHTML = '';
   A.tilesets.forEach((t,i) => tset.append(new Option(`${t.name} (${t.variants.length})`, i)));
+  tset.value = state.tilesetIdx;
   const wset = el('wallset'); wset.innerHTML = '';
   A.wallsets.forEach((w,i) => wset.append(new Option(`${w.name} (${Object.keys(w.roles).length})`, i)));
+  wset.value = state.wallsetIdx;
   const gsel = el('glassSel'); gsel.innerHTML = '';
   A.glass.forEach((g,i) => gsel.append(new Option(g.name, i)));
-  // default glass = the "...2" pane the game uses, if present
-  const g2 = A.glass.findIndex(g => /2\b|2$|glass-?0?2/i.test(g.name));
-  state.glassIdx = g2 >= 0 ? g2 : 0;
   gsel.value = state.glassIdx;
+}
+
+/* ---- user-uploaded floor tiles (a per-browser "uploaded" tile set) --- */
+const TILE_KEY = 'gnom_tiles_v1';
+
+function ensureUploadedTileset(){
+  let ts = A.tilesets.find(t => t.name === 'uploaded');
+  if (!ts){ ts = { name: 'uploaded', variants: [], uploaded: true }; A.tilesets.push(ts); }
+  return ts;
+}
+function addTileFromSrc(name, src){
+  return loadImg(src).then(im => {
+    ensureUploadedTileset().variants.push({ name, w: im.naturalWidth||im.width, h: im.naturalHeight||im.height, src, _img: im, uploaded: true });
+  });
+}
+function persistTiles(){
+  try {
+    const ts = A.tilesets.find(t => t.name === 'uploaded');
+    localStorage.setItem(TILE_KEY, JSON.stringify(ts ? ts.variants.map(v => ({ name: v.name, src: v.src })) : []));
+  } catch (e) {}
+}
+async function loadPersistedTiles(){
+  let arr = [];
+  try { arr = JSON.parse(localStorage.getItem(TILE_KEY) || '[]'); } catch (e) { arr = []; }
+  for (const t of arr){ try { await addTileFromSrc(t.name, t.src); } catch (e) {} }
+}
+function selectUploadedTileset(){
+  const i = A.tilesets.findIndex(t => t.name === 'uploaded');
+  if (i >= 0) state.tilesetIdx = i;
+}
+function handleTileFiles(files){
+  const imgs = [...files].filter(f => f.type.startsWith('image/'));
+  if (!imgs.length) return;
+  let pending = imgs.length;
+  const done = () => { if (--pending === 0){ persistTiles(); selectUploadedTileset(); buildSelects(); buildTileThumbs(); regen(); } };
+  imgs.forEach(f => {
+    const rd = new FileReader();
+    rd.onload  = () => addTileFromSrc(f.name.replace(/\.[^.]+$/, ''), rd.result).then(done, done);
+    rd.onerror = done;
+    rd.readAsDataURL(f);
+  });
+}
+function dropTilesetAt(idx){                       // remove a tileset, keep selection sane
+  A.tilesets.splice(idx, 1);
+  if (state.tilesetIdx === idx) state.tilesetIdx = 0;
+  else if (state.tilesetIdx > idx) state.tilesetIdx--;
+  if (state.tilesetIdx >= A.tilesets.length) state.tilesetIdx = 0;
+}
+function removeUploadedTile(vi){
+  const ts = A.tilesets.find(t => t.name === 'uploaded');
+  if (!ts) return;
+  ts.variants.splice(vi, 1);
+  if (!ts.variants.length) dropTilesetAt(A.tilesets.indexOf(ts));  // last one gone: drop the set
+  persistTiles(); buildSelects(); buildTileThumbs(); regen();
+}
+function clearTiles(){
+  const idx = A.tilesets.findIndex(t => t.name === 'uploaded');
+  if (idx >= 0) dropTilesetAt(idx);
+  try { localStorage.removeItem(TILE_KEY); } catch (e) {}
+  buildSelects(); buildTileThumbs(); regen();
+}
+function buildTileThumbs(){
+  const host = el('tileThumbs'); if (!host) return;
+  host.innerHTML = '';
+  const ts = A.tilesets.find(t => t.name === 'uploaded');
+  el('clearTiles').style.display = (ts && ts.variants.length) ? '' : 'none';
+  if (!ts) return;
+  ts.variants.forEach((v, vi) => {
+    const d = document.createElement('div'); d.className = 't';
+    d.innerHTML = `<img src="${v.src}" alt="" title="${v.name} · ${v.w}×${v.h}"><button class="rm" title="remove">×</button>`;
+    d.querySelector('.rm').onclick = () => removeUploadedTile(vi);
+    host.append(d);
+  });
 }
 
 function buildSpriteList(){
@@ -534,6 +606,14 @@ function bindUI(){
   el('uploadBtn').onclick = () => el('spriteUpload').click();
   el('spriteUpload').onchange = e => { handleFiles(e.target.files); e.target.value = ''; };
   el('clearUploads').onclick = clearUploads;
+
+  el('tileUploadBtn').onclick = () => el('tileUpload').click();
+  el('tileUpload').onchange = e => { handleTileFiles(e.target.files); e.target.value = ''; };
+  el('clearTiles').onclick = clearTiles;
+  // tile drop zone: dropping on this row adds tiles (and not sprites)
+  const trow = el('tileUploadRow');
+  trow.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); });
+  trow.addEventListener('drop', e => { e.preventDefault(); e.stopPropagation(); if (e.dataTransfer?.files?.length) handleTileFiles(e.dataTransfer.files); });
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -580,9 +660,15 @@ async function init(){
 
   state.spriteCfg = A.sprites.map(() => ({ enabled: true, freq: 2, boxScale: 0.7 }));
   await loadPersistedUploads();   // re-attach sprites uploaded in this browser before
+  await loadPersistedTiles();     // ...and any uploaded floor tiles
+
+  // default glass = the "...2" pane the game uses, if present (set once)
+  const g2 = A.glass.findIndex(g => /2\b|2$|glass-?0?2/i.test(g.name));
+  state.glassIdx = g2 >= 0 ? g2 : 0;
 
   buildSelects();
   buildSpriteList();
+  buildTileThumbs();
   bindUI();
   refreshTplAvailability();
 

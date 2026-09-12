@@ -54,7 +54,13 @@
         <label>Tile set</label>
         <select id="tileset"></select>
       </div>
-      <p class="hint">Tiles are laid so no two identical variants ever touch (up/down/left/right).</p>
+      <div class="row" id="tileUploadRow">
+        <button id="tileUploadBtn" class="primary" style="flex:1">＋ Upload tiles…</button>
+        <button id="clearTiles" title="remove all uploaded tiles">clear</button>
+        <input type="file" id="tileUpload" accept="image/*" multiple hidden>
+      </div>
+      <div id="tileThumbs" class="thumbs"></div>
+      <p class="hint">Tiles are laid so no two identical variants ever touch. Uploads (drop on the button too) form an “uploaded” set you pick above — 32×32 works best; remembered in this browser.</p>
     </section>
 
     <section>
