@@ -91,7 +91,7 @@ const state = {
   // caustics video overlay
   caustics: { enabled: false, pixel: 16, binary: true, flip: false, threshold: 0.5, opacity: 0.6, blend: 'multiply', color: '#0d1b2e' },
   // blinking panel LEDs (auto-detected from the tiles)
-  lightsCfg: { enabled: true, speed: 1, jitter: 0.5, glow: 1 },
+  lightsCfg: { enabled: true, speed: 1, jitter: 0.5, glow: 1, vibrant: false },
   lightList: [],
   lightPalette: [],
 };
@@ -808,6 +808,7 @@ function applySettings(s){
     lc.speed = num(c.speed, lc.speed);
     lc.jitter = num(c.jitter, lc.jitter);
     lc.glow = num(c.glow, lc.glow);
+    lc.vibrant = !!c.vibrant;
   }
   if (s.spriteCfg) A.sprites.forEach((sp, i) => {
     const c = s.spriteCfg[sp.name];
@@ -851,6 +852,7 @@ function syncControls(){                            // push restored state into 
   el('cxColor').value = c.color;
   const lc = state.lightsCfg;
   el('lxOn').checked = lc.enabled;
+  el('lxVibrant').checked = lc.vibrant;
   el('lxSpeed').value = lc.speed; el('lxSpeedOut').textContent = lc.speed.toFixed(1) + '×';
   el('lxJitter').value = lc.jitter; el('lxJitterOut').textContent = lc.jitter.toFixed(2);
   el('lxGlow').value = lc.glow; el('lxGlowOut').textContent = lc.glow.toFixed(2);
@@ -1129,7 +1131,8 @@ function applyLightPositions(v, refLights){
   for (const l of refLights){
     const x = l.x, y = l.y; if (x < 0 || y < 0 || x >= w || y >= h) continue;
     const i = (y * w + x) * 4;
-    lights.push({ x, y, r: d[i], g: d[i+1], b: d[i+2] });      // this tile's own colour at that spot
+    // own colour (this palette) + tile1's vibrant colour, so a toggle can pick either
+    lights.push({ x, y, r: d[i], g: d[i+1], b: d[i+2], vr: l.r, vg: l.g, vb: l.b });
     const bg = neighborBg(d, w, h, x, y);
     base.data[i] = bg[0]; base.data[i+1] = bg[1]; base.data[i+2] = bg[2]; base.data[i+3] = 255;
   }
@@ -1159,6 +1162,7 @@ function buildLights(){
   state.lightList = [];
   state.lightPalette = [];
   const palMap = new Map();
+  const palOf = (r, g, b) => { const key = `rgb(${r},${g},${b})`; let ci = palMap.get(key); if (ci === undefined){ ci = state.lightPalette.length; palMap.set(key, ci); state.lightPalette.push(key); } return ci; };
   const ts = A.tilesets[state.tilesetIdx]; if (!ts){ if (el('lxCount')) el('lxCount').textContent = ''; return; }
   const N = state.N;
   for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
@@ -1166,11 +1170,10 @@ function buildLights(){
     const v = ts.variants[state.tileGrid[y*N + x]];
     if (!v || !v._lights || !v._lights.length) continue;
     for (const l of v._lights){
-      const key = `rgb(${l.r},${l.g},${l.b})`;
-      let ci = palMap.get(key);
-      if (ci === undefined){ ci = state.lightPalette.length; palMap.set(key, ci); state.lightPalette.push(key); }
+      const ciOwn = palOf(l.r, l.g, l.b);
+      const ciVib = (l.vr !== undefined) ? palOf(l.vr, l.vg, l.vb) : ciOwn;   // tile1 twin colour if any
       state.lightList.push({
-        x: x*TILE + l.x, y: y*TILE + l.y, ci,
+        x: x*TILE + l.x, y: y*TILE + l.y, ciOwn, ciVib,
         phase: Math.random() * 6.283,
         speed: 0.6 + Math.random() * 2.2,
         blinker: Math.random() < 0.5,               // ~half also blink fully off now and then
@@ -1202,13 +1205,13 @@ function renderLights(){
   if (_lbucketsN !== need){ _lbuckets = new Array(need); for (let i = 0; i < need; i++) _lbuckets[i] = []; _lbucketsN = need; }
   for (let i = 0; i < need; i++) _lbuckets[i].length = 0;
 
-  const t = performance.now() / 1000, LV = LX_LEVELS - 1;
+  const t = performance.now() / 1000, LV = LX_LEVELS - 1, vib = L.vibrant;
   for (let k = 0; k < list.length; k++){
     const li = list[k], b = lightBrightness(li, t);
     if (b <= 0.03) continue;
     const lvl = (b * LV) | 0;
-    const arr = _lbuckets[li.ci * LX_LEVELS + lvl];
-    arr.push(li.x, li.y);
+    const ci = vib ? li.ciVib : li.ciOwn;
+    _lbuckets[ci * LX_LEVELS + lvl].push(li.x, li.y);
   }
   // glow halo first (low alpha), then the bright cores on top — batched per bucket.
   // The 3×3 halo is the costly part, so skip it on very dense chunks to stay smooth.
@@ -1312,6 +1315,7 @@ function bindUI(){
   el('lxSpeed').oninput = e => { state.lightsCfg.speed = +e.target.value; el('lxSpeedOut').textContent = (+e.target.value).toFixed(1) + '×'; scheduleSave(); };
   el('lxJitter').oninput = e => { state.lightsCfg.jitter = +e.target.value; el('lxJitterOut').textContent = (+e.target.value).toFixed(2); scheduleSave(); };
   el('lxGlow').oninput = e => { state.lightsCfg.glow = +e.target.value; el('lxGlowOut').textContent = (+e.target.value).toFixed(2); scheduleSave(); };
+  el('lxVibrant').onchange = e => { state.lightsCfg.vibrant = e.target.checked; renderLights(); scheduleSave(); };
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
