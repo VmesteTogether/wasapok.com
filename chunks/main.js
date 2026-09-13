@@ -90,6 +90,10 @@ const state = {
   spriteCfg: [],
   // caustics video overlay
   caustics: { enabled: false, pixel: 16, binary: true, flip: false, threshold: 0.5, opacity: 0.6, blend: 'multiply', color: '#0d1b2e' },
+  // blinking panel LEDs (auto-detected from the tiles)
+  lightsCfg: { enabled: true, speed: 1, jitter: 0.5, glow: 1 },
+  lightList: [],
+  lightPalette: [],
 };
 
 let canvas, ctx;
@@ -105,6 +109,11 @@ let selK = -1, brushType = -1;
 // caustics overlay: a <video> pixelated + thresholded into a moving alpha mask
 // drawn on a separate canvas stacked above the scene (its own animation loop).
 let cxVideo = null, cxURL = null, overlay = null, octx = null, cxBuf = null, cxBufCtx = null, cxRAF = 0;
+
+// panel-lights overlay: animated LED pixels on their own top canvas + rAF loop.
+let lightsCanvas = null, lightsCtx = null, lightsRAF = 0;
+let _lbuckets = null, _lbucketsN = 0;   // reused per-frame draw buckets (color × brightness)
+const LX_LEVELS = 14;
 
 /* ============================ generation ============================ */
 
@@ -283,6 +292,7 @@ function regen(){
   if (!(state.lockSprites && state.placements.length))
     state.placements = placeSprites(N, rng, state.wallGrid);
 
+  buildLights();
   draw();
 }
 
@@ -297,10 +307,11 @@ function draw(){
   // 1) floor tiles
   const ts = A.tilesets[state.tilesetIdx];
   if (ts && ts.variants.length){
+    const litless = state.lightsCfg.enabled;   // draw LED-removed copies; the overlay animates them
     for (let y = 0; y < N; y++)
       for (let x = 0; x < N; x++){
         const v = ts.variants[state.tileGrid[y*N + x]] || ts.variants[0];
-        ctx.drawImage(v._img, x*TILE, y*TILE, TILE, TILE);
+        ctx.drawImage((litless && v._base) ? v._base : v._img, x*TILE, y*TILE, TILE, TILE);
       }
   }
 
@@ -437,7 +448,9 @@ function ensureUploadedTileset(){
 }
 function addTileFromSrc(name, src){
   return loadImg(src).then(im => {
-    ensureUploadedTileset().variants.push({ name, w: im.naturalWidth||im.width, h: im.naturalHeight||im.height, src, _img: im, uploaded: true });
+    const v = { name, w: im.naturalWidth||im.width, h: im.naturalHeight||im.height, src, _img: im, uploaded: true };
+    ensureUploadedTileset().variants.push(v);
+    scanTileLights(v);
   });
 }
 function persistTiles(){
@@ -746,6 +759,7 @@ function saveSettings(){
       wallsetName: A.wallsets[state.wallsetIdx]?.name,
       glassName:   A.glass[state.glassIdx]?.name,
       caustics: { ...state.caustics },
+      lightsCfg: { ...state.lightsCfg },
       spriteCfg: {},
     };
     A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
@@ -788,6 +802,13 @@ function applySettings(s){
     cc.blend = ['multiply', 'screen', 'normal'].includes(c.blend) ? c.blend : cc.blend;
     cc.color = typeof c.color === 'string' ? c.color : cc.color;
   }
+  if (s.lightsCfg && typeof s.lightsCfg === 'object'){
+    const c = s.lightsCfg, lc = state.lightsCfg;
+    lc.enabled = c.enabled !== false;
+    lc.speed = num(c.speed, lc.speed);
+    lc.jitter = num(c.jitter, lc.jitter);
+    lc.glow = num(c.glow, lc.glow);
+  }
   if (s.spriteCfg) A.sprites.forEach((sp, i) => {
     const c = s.spriteCfg[sp.name];
     if (c) state.spriteCfg[i] = { enabled: c.enabled !== false, freq: num(c.freq, 2), boxScale: num(c.boxScale, 0.7) };
@@ -828,6 +849,11 @@ function syncControls(){                            // push restored state into 
   el('cxOpacity').value = c.opacity; el('cxOpacityOut').textContent = c.opacity.toFixed(2);
   el('cxBlend').value = c.blend;
   el('cxColor').value = c.color;
+  const lc = state.lightsCfg;
+  el('lxOn').checked = lc.enabled;
+  el('lxSpeed').value = lc.speed; el('lxSpeedOut').textContent = lc.speed.toFixed(1) + '×';
+  el('lxJitter').value = lc.jitter; el('lxJitterOut').textContent = lc.jitter.toFixed(2);
+  el('lxGlow').value = lc.glow; el('lxGlowOut').textContent = lc.glow.toFixed(2);
 }
 
 function refreshTplAvailability(){
@@ -1045,6 +1071,135 @@ function renderCaustics(){
   octx.putImageData(img, 0, 0);
 }
 
+/* ================= blinking panel LEDs ============================= */
+// an LED pixel is saturated AND bright — that separates it from the pale
+// blue background (low saturation) and the dark navy wires (low brightness).
+function isLightColor(r, g, b){
+  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
+  const v = mx / 255, s = mx === 0 ? 0 : (mx - mn) / mx;
+  return s >= 0.5 && v >= 0.6;
+}
+function neighborBg(d, w, h, x, y){                 // a nearby non-LED colour, to paint the LED out
+  const offs = [[0,-1],[0,1],[-1,0],[1,0],[-1,-1],[1,-1],[-1,1],[1,1],[0,-2],[0,2],[-2,0],[2,0]];
+  for (const [dx, dy] of offs){
+    const nx = x + dx, ny = y + dy;
+    if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+    const i = (ny * w + nx) * 4;
+    if (d[i+3] < 128) continue;
+    if (!isLightColor(d[i], d[i+1], d[i+2])) return [d[i], d[i+1], d[i+2]];
+  }
+  return [197, 216, 240];                            // fallback: the pale panel blue
+}
+// scan a tile variant once: record its LED pixels (v._lights) and a copy with
+// the LEDs painted out (v._base), drawn when the blink effect is on.
+function scanTileLights(v){
+  if (!v._img) { v._lights = []; v._base = null; return; }
+  const w = v._img.naturalWidth || v.w || 32, h = v._img.naturalHeight || v.h || 32;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true });
+  g.drawImage(v._img, 0, 0);
+  let id; try { id = g.getImageData(0, 0, w, h); } catch (e) { v._lights = []; v._base = null; return; }
+  const d = id.data, lights = [];
+  const base = g.createImageData(w, h); base.data.set(d);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++){
+    const i = (y * w + x) * 4;
+    if (d[i+3] >= 128 && isLightColor(d[i], d[i+1], d[i+2])){
+      lights.push({ x, y, r: d[i], g: d[i+1], b: d[i+2] });
+      const bg = neighborBg(d, w, h, x, y);
+      base.data[i] = bg[0]; base.data[i+1] = bg[1]; base.data[i+2] = bg[2]; base.data[i+3] = 255;
+    }
+  }
+  v._lights = lights;
+  if (lights.length){ const bc = document.createElement('canvas'); bc.width = w; bc.height = h; bc.getContext('2d').putImageData(base, 0, 0); v._base = bc; }
+  else v._base = null;
+}
+function scanAllTiles(){ A.tilesets.forEach(t => t.variants.forEach(v => { if (v._lights === undefined) scanTileLights(v); })); }
+
+// gather every LED in the current chunk (skip cells hidden under a wall).
+// Each light carries a colour index into state.lightPalette so the renderer can
+// batch draws by colour+brightness instead of touching canvas state per pixel.
+function buildLights(){
+  state.lightList = [];
+  state.lightPalette = [];
+  const palMap = new Map();
+  const ts = A.tilesets[state.tilesetIdx]; if (!ts){ if (el('lxCount')) el('lxCount').textContent = ''; return; }
+  const N = state.N;
+  for (let y = 0; y < N; y++) for (let x = 0; x < N; x++){
+    if (state.wallGrid[y*N + x]) continue;
+    const v = ts.variants[state.tileGrid[y*N + x]];
+    if (!v || !v._lights || !v._lights.length) continue;
+    for (const l of v._lights){
+      const key = `rgb(${l.r},${l.g},${l.b})`;
+      let ci = palMap.get(key);
+      if (ci === undefined){ ci = state.lightPalette.length; palMap.set(key, ci); state.lightPalette.push(key); }
+      state.lightList.push({
+        x: x*TILE + l.x, y: y*TILE + l.y, ci,
+        phase: Math.random() * 6.283,
+        speed: 0.6 + Math.random() * 2.2,
+        blinker: Math.random() < 0.5,               // ~half also blink fully off now and then
+        blinkRate: 0.3 + Math.random() * 0.9,
+        blinkThresh: -0.15 - Math.random() * 0.55,
+        jit: 0.5 + Math.random() * 1.5,
+      });
+    }
+  }
+  if (el('lxCount')) el('lxCount').textContent = state.lightList.length ? `· ${state.lightList.length}` : '';
+}
+function lightBrightness(li, t){
+  const L = state.lightsCfg;
+  let b = 0.62 + 0.38 * Math.sin(t * li.speed * L.speed + li.phase);   // gentle pulse
+  b += Math.sin(t * 9.3 * li.jit + li.phase * 2.3) * 0.3 * L.jitter;   // jitter
+  if (li.blinker && Math.sin(t * li.blinkRate * L.speed + li.phase) < li.blinkThresh) b *= 0.06;  // blink off
+  return b < 0 ? 0 : (b > 1 ? 1 : b);
+}
+function renderLights(){
+  const L = state.lightsCfg, o = lightsCanvas, g = lightsCtx;
+  if (!o) return;
+  const px = state.N * TILE;
+  if (o.width !== px){ o.width = px; o.height = px; }
+  const list = state.lightList, pal = state.lightPalette;
+  if (!L.enabled || !list.length){ g.clearRect(0, 0, o.width, o.height); return; }
+  g.clearRect(0, 0, px, px);
+
+  const np = pal.length, need = np * LX_LEVELS;
+  if (_lbucketsN !== need){ _lbuckets = new Array(need); for (let i = 0; i < need; i++) _lbuckets[i] = []; _lbucketsN = need; }
+  for (let i = 0; i < need; i++) _lbuckets[i].length = 0;
+
+  const t = performance.now() / 1000, LV = LX_LEVELS - 1;
+  for (let k = 0; k < list.length; k++){
+    const li = list[k], b = lightBrightness(li, t);
+    if (b <= 0.03) continue;
+    const lvl = (b * LV) | 0;
+    const arr = _lbuckets[li.ci * LX_LEVELS + lvl];
+    arr.push(li.x, li.y);
+  }
+  // glow halo first (low alpha), then the bright cores on top — batched per bucket.
+  // The 3×3 halo is the costly part, so skip it on very dense chunks to stay smooth.
+  const glow = (list.length <= 4000) ? L.glow : 0;
+  if (glow > 0){
+    for (let ci = 0; ci < np; ci++){ g.fillStyle = pal[ci];
+      for (let lvl = 1; lvl <= LV; lvl++){ const arr = _lbuckets[ci*LX_LEVELS + lvl]; if (!arr.length) continue;
+        g.globalAlpha = Math.min(0.5, (lvl/LV) * 0.22 * glow);
+        for (let j = 0; j < arr.length; j += 2) g.fillRect(arr[j]-1, arr[j+1]-1, 3, 3);
+      }
+    }
+  }
+  for (let ci = 0; ci < np; ci++){ g.fillStyle = pal[ci];
+    for (let lvl = 1; lvl <= LV; lvl++){ const arr = _lbuckets[ci*LX_LEVELS + lvl]; if (!arr.length) continue;
+      g.globalAlpha = lvl / LV;
+      for (let j = 0; j < arr.length; j += 2) g.fillRect(arr[j], arr[j+1], 1, 1);
+    }
+  }
+  g.globalAlpha = 1;
+}
+function lightsTick(){ renderLights(); lightsRAF = requestAnimationFrame(lightsTick); }
+function updateLightsRun(){
+  if (!lightsCanvas) return;
+  lightsCanvas.hidden = !state.lightsCfg.enabled;
+  if (state.lightsCfg.enabled){ renderLights(); if (!lightsRAF) lightsRAF = requestAnimationFrame(lightsTick); }
+  else { if (lightsRAF){ cancelAnimationFrame(lightsRAF); lightsRAF = 0; } lightsCtx && lightsCtx.clearRect(0, 0, lightsCanvas.width, lightsCanvas.height); }
+}
+
 function bindUI(){
   el('reroll').onclick = () => { state.seed = (Math.random()*1e9)|0; el('seed').value = state.seed; regen(); };
   el('seed').onchange = e => { state.seed = parseInt(e.target.value)||0; regen(); };
@@ -1114,6 +1269,12 @@ function bindUI(){
   el('cxOpacity').oninput = e => { state.caustics.opacity = +e.target.value; el('cxOpacityOut').textContent = (+e.target.value).toFixed(2); updateCausticsStyle(); scheduleSave(); };
   el('cxBlend').onchange = e => { state.caustics.blend = e.target.value; updateCausticsStyle(); scheduleSave(); };
   el('cxColor').oninput = e => { state.caustics.color = e.target.value; scheduleSave(); };
+
+  // panel lights
+  el('lxOn').onchange = e => { state.lightsCfg.enabled = e.target.checked; draw(); updateLightsRun(); scheduleSave(); };
+  el('lxSpeed').oninput = e => { state.lightsCfg.speed = +e.target.value; el('lxSpeedOut').textContent = (+e.target.value).toFixed(1) + '×'; scheduleSave(); };
+  el('lxJitter').oninput = e => { state.lightsCfg.jitter = +e.target.value; el('lxJitterOut').textContent = (+e.target.value).toFixed(2); scheduleSave(); };
+  el('lxGlow').oninput = e => { state.lightsCfg.glow = +e.target.value; el('lxGlowOut').textContent = (+e.target.value).toFixed(2); scheduleSave(); };
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -1153,6 +1314,7 @@ async function init(){
   canvas = el('chunk'); ctx = canvas.getContext('2d');
   overlay = el('caustics'); octx = overlay.getContext('2d');
   cxBuf = document.createElement('canvas'); cxBufCtx = cxBuf.getContext('2d', { willReadFrequently: true });
+  lightsCanvas = el('lights'); lightsCtx = lightsCanvas.getContext('2d');
 
   // decode every embedded png into an <img> once
   const jobs = [];
@@ -1167,6 +1329,7 @@ async function init(){
   await loadPersistedTiles();     // ...uploaded floor tiles
   await loadPersistedGlass();     // ...uploaded glass panes
   await loadPersistedWalls();     // ...uploaded wall themes
+  scanAllTiles();                 // find the LED pixels in every tile variant
 
   // default glass = the built-in "...2" pane the game uses (built-ins come first)
   const g2 = A.glass.findIndex(g => !g.uploaded && /2\b|2$|glass-?0?2/i.test(g.name));
@@ -1187,6 +1350,8 @@ async function init(){
 
   regen();
   if (restored) applyZoom(); else fitZoom();   // keep the saved zoom; only auto-fit on a fresh start
+
+  updateLightsRun();               // start the LED blink loop
 
   // restore the caustics video (stored in IndexedDB) and start its overlay
   updateCausticsStyle();
