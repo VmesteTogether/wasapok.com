@@ -1115,6 +1115,43 @@ function scanTileLights(v){
 }
 function scanAllTiles(){ A.tilesets.forEach(t => t.variants.forEach(v => { if (v._lights === undefined) scanTileLights(v); })); }
 
+// give a recolor tile the SAME LED positions as its overworldTile1 twin, but
+// sampling its own palette's colour at each spot (identical layout, so positions
+// carry over exactly — no need to re-detect on the new palette).
+function applyLightPositions(v, refLights){
+  if (!v._img) return;
+  const w = v._img.naturalWidth || v.w || 32, h = v._img.naturalHeight || v.h || 32;
+  const c = document.createElement('canvas'); c.width = w; c.height = h;
+  const g = c.getContext('2d', { willReadFrequently: true }); g.drawImage(v._img, 0, 0);
+  let id; try { id = g.getImageData(0, 0, w, h); } catch (e) { return; }
+  const d = id.data, base = g.createImageData(w, h); base.data.set(d);
+  const lights = [];
+  for (const l of refLights){
+    const x = l.x, y = l.y; if (x < 0 || y < 0 || x >= w || y >= h) continue;
+    const i = (y * w + x) * 4;
+    lights.push({ x, y, r: d[i], g: d[i+1], b: d[i+2] });      // this tile's own colour at that spot
+    const bg = neighborBg(d, w, h, x, y);
+    base.data[i] = bg[0]; base.data[i+1] = bg[1]; base.data[i+2] = bg[2]; base.data[i+3] = 255;
+  }
+  v._lights = lights;
+  if (lights.length){ const bc = document.createElement('canvas'); bc.width = w; bc.height = h; bc.getContext('2d').putImageData(base, 0, 0); v._base = bc; }
+  else v._base = null;
+}
+// overworldTile2, overworldTile3, ... are palette recolors of overworldTile1 with
+// the exact same layout, so they copy tile1's LED positions instead of re-detecting.
+function inheritTileLights(){
+  const ref = A.tilesets.find(t => t.name === 'overworldTile1');
+  if (!ref) return;
+  for (const ts of A.tilesets){
+    if (ts.name === 'overworldTile1' || !/^overworldTile\d+$/.test(ts.name)) continue;
+    for (const v of ts.variants){
+      const m = /-(\w+)$/.exec(v.name); if (!m) continue;
+      const v1 = ref.variants.find(r => r.name === `overworldTile1-${m[1]}`);
+      if (v1 && v1._lights && v1._lights.length) applyLightPositions(v, v1._lights);
+    }
+  }
+}
+
 // gather every LED in the current chunk (skip cells hidden under a wall).
 // Each light carries a colour index into state.lightPalette so the renderer can
 // batch draws by colour+brightness instead of touching canvas state per pixel.
@@ -1330,6 +1367,7 @@ async function init(){
   await loadPersistedGlass();     // ...uploaded glass panes
   await loadPersistedWalls();     // ...uploaded wall themes
   scanAllTiles();                 // find the LED pixels in every tile variant
+  inheritTileLights();            // overworldTile2+ copy tile1's LED positions
 
   // default glass = the built-in "...2" pane the game uses (built-ins come first)
   const g2 = A.glass.findIndex(g => !g.uploaded && /2\b|2$|glass-?0?2/i.test(g.name));
