@@ -11,7 +11,10 @@
   <!-- ==================== STAGE ==================== -->
   <main id="stage">
     <div id="stageInner">
-      <canvas id="chunk"></canvas>
+      <div id="canvasWrap">
+        <canvas id="chunk"></canvas>
+        <canvas id="caustics" hidden></canvas>
+      </div>
     </div>
     <div id="hud">
       <span id="hudSize">–</span>
@@ -134,6 +137,49 @@
       <div id="brushStatus" class="brushbar" hidden></div>
       <div id="spriteList"></div>
       <p class="hint">Sliders scatter sprites randomly (clear of walls). For exact control: <b>drag</b> a sprite to move it, <b>right-click</b> (or select + <b>Delete</b>) to remove one, and hit <b>place</b> on a row then <b>click the map</b> to add that type anywhere — even types set to 0. Editing turns on “Keep on reroll” so your arrangement sticks; Export PNG saves it.</p>
+    </section>
+
+    <section>
+      <h2>Caustics overlay <small id="cxState"></small></h2>
+      <div class="row" id="cxUploadRow">
+        <label><input type="checkbox" id="cxOn"> Show</label>
+        <button id="cxUploadBtn" class="primary" style="flex:1">＋ Upload video…</button>
+        <button id="cxClear" title="remove the caustics video">clear</button>
+        <input type="file" id="cxUpload" accept="video/*" hidden>
+      </div>
+      <div class="row">
+        <label>Pixelate</label>
+        <input type="range" id="cxPixel" min="2" max="96" step="1" value="16">
+        <output id="cxPixelOut">16</output>
+      </div>
+      <div class="row">
+        <label><input type="checkbox" id="cxBinary" checked> Binary</label>
+        <label><input type="checkbox" id="cxFlip"> Flip colors</label>
+      </div>
+      <div class="row">
+        <label>Threshold</label>
+        <input type="range" id="cxThresh" min="0" max="100" step="1" value="50">
+        <output id="cxThreshOut">50%</output>
+      </div>
+      <div class="row">
+        <label>Opacity</label>
+        <input type="range" id="cxOpacity" min="0" max="1" step="0.05" value="0.6">
+        <output id="cxOpacityOut">0.60</output>
+      </div>
+      <div class="row">
+        <label>Blend</label>
+        <select id="cxBlend">
+          <option value="multiply">Multiply (shadow)</option>
+          <option value="screen">Screen (light)</option>
+          <option value="normal">Normal</option>
+        </select>
+      </div>
+      <div class="row">
+        <label>Tint</label>
+        <input type="color" id="cxColor" value="#0d1b2e">
+        <span class="hint" style="margin:0">color of the opaque cells</span>
+      </div>
+      <p class="hint">Upload a caustics clip → it's pixelated and thresholded into a moving black/white mask: one side opaque, the other see-through (Flip swaps them). Multiply reads as shadow, Screen as light; turn off Binary for a softer luminance version. The video is remembered in this browser.</p>
     </section>
 
     <section>

@@ -88,6 +88,8 @@ const state = {
   placements: [],
   // sprite config (per sprite): {enabled, freq, boxScale}
   spriteCfg: [],
+  // caustics video overlay
+  caustics: { enabled: false, pixel: 16, binary: true, flip: false, threshold: 0.5, opacity: 0.6, blend: 'multiply', color: '#0d1b2e' },
 };
 
 let canvas, ctx;
@@ -99,6 +101,10 @@ let dragK = -1, dragBG = null, dragOff = { x: 0, y: 0 };
 // per-instance editing: selK = selected placement (for Delete key / highlight),
 // brushType = sprite type armed for click-to-place on the map (-1 = none).
 let selK = -1, brushType = -1;
+
+// caustics overlay: a <video> pixelated + thresholded into a moving alpha mask
+// drawn on a separate canvas stacked above the scene (its own animation loop).
+let cxVideo = null, cxURL = null, overlay = null, octx = null, cxBuf = null, cxBufCtx = null, cxRAF = 0;
 
 /* ============================ generation ============================ */
 
@@ -739,6 +745,7 @@ function saveSettings(){
       tilesetName: A.tilesets[state.tilesetIdx]?.name,
       wallsetName: A.wallsets[state.wallsetIdx]?.name,
       glassName:   A.glass[state.glassIdx]?.name,
+      caustics: { ...state.caustics },
       spriteCfg: {},
     };
     A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
@@ -770,6 +777,17 @@ function applySettings(s){
   const ti = A.tilesets.findIndex(t => t.name === s.tilesetName); if (ti >= 0) state.tilesetIdx = ti;
   const wi = A.wallsets.findIndex(w => w.name === s.wallsetName); if (wi >= 0) state.wallsetIdx = wi;
   const gi = A.glass.findIndex(g => g.name === s.glassName);       if (gi >= 0) state.glassIdx   = gi;
+  if (s.caustics && typeof s.caustics === 'object'){
+    const c = s.caustics, cc = state.caustics;
+    cc.enabled = !!c.enabled;
+    cc.pixel = num(c.pixel, cc.pixel);
+    cc.binary = c.binary !== false;
+    cc.flip = !!c.flip;
+    cc.threshold = num(c.threshold, cc.threshold);
+    cc.opacity = num(c.opacity, cc.opacity);
+    cc.blend = ['multiply', 'screen', 'normal'].includes(c.blend) ? c.blend : cc.blend;
+    cc.color = typeof c.color === 'string' ? c.color : cc.color;
+  }
   if (s.spriteCfg) A.sprites.forEach((sp, i) => {
     const c = s.spriteCfg[sp.name];
     if (c) state.spriteCfg[i] = { enabled: c.enabled !== false, freq: num(c.freq, 2), boxScale: num(c.boxScale, 0.7) };
@@ -801,6 +819,15 @@ function syncControls(){                            // push restored state into 
   el('tileset').value = state.tilesetIdx;
   el('wallset').value = state.wallsetIdx;
   el('glassSel').value = state.glassIdx;
+  const c = state.caustics;
+  el('cxOn').checked = c.enabled;
+  el('cxPixel').value = c.pixel; el('cxPixelOut').textContent = c.pixel;
+  el('cxBinary').checked = c.binary;
+  el('cxFlip').checked = c.flip;
+  el('cxThresh').value = Math.round(c.threshold * 100); el('cxThreshOut').textContent = Math.round(c.threshold * 100) + '%';
+  el('cxOpacity').value = c.opacity; el('cxOpacityOut').textContent = c.opacity.toFixed(2);
+  el('cxBlend').value = c.blend;
+  el('cxColor').value = c.color;
 }
 
 function refreshTplAvailability(){
@@ -932,6 +959,92 @@ function bindCanvasDrag(){
   });
 }
 
+/* ================= caustics video overlay ========================== */
+// tiny IndexedDB kv store — the video blob is too big for localStorage
+function idbOpen(){
+  return new Promise((res, rej) => {
+    const r = indexedDB.open('gnom_media', 1);
+    r.onupgradeneeded = () => r.result.createObjectStore('kv');
+    r.onsuccess = () => res(r.result);
+    r.onerror = () => rej(r.error);
+  });
+}
+async function idbSet(k, v){ try { const db = await idbOpen(); await new Promise((res, rej) => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = () => rej(tx.error); }); } catch (e) {} }
+async function idbGet(k){ try { const db = await idbOpen(); return await new Promise((res, rej) => { const rq = db.transaction('kv', 'readonly').objectStore('kv').get(k); rq.onsuccess = () => res(rq.result); rq.onerror = () => rej(rq.error); }); } catch (e) { return null; } }
+async function idbDel(k){ try { const db = await idbOpen(); await new Promise(res => { const tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').delete(k); tx.oncomplete = res; tx.onerror = res; }); } catch (e) {} }
+
+function hexToRgb(h){
+  const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})$/i.exec(h || '');
+  return m ? { r: parseInt(m[1],16), g: parseInt(m[2],16), b: parseInt(m[3],16) } : { r: 13, g: 27, b: 46 };
+}
+function updateCausticsState(){ if (el('cxState')) el('cxState').textContent = (cxVideo && cxVideo.src) ? '· loaded' : ''; }
+function updateCausticsStyle(){ if (overlay){ overlay.style.opacity = state.caustics.opacity; overlay.style.mixBlendMode = state.caustics.blend; } }
+
+function setCausticsVideo(blob){
+  if (!cxVideo){
+    cxVideo = document.createElement('video');
+    cxVideo.muted = true; cxVideo.loop = true; cxVideo.playsInline = true; cxVideo.autoplay = true;
+    cxVideo.style.display = 'none';
+    document.body.appendChild(cxVideo);   // some browsers decode more reliably when attached
+  }
+  if (cxURL){ URL.revokeObjectURL(cxURL); cxURL = null; }
+  cxURL = URL.createObjectURL(blob);
+  cxVideo.src = cxURL;
+  cxVideo.load();                        // kick the pipeline (a bare play() can stall at readyState 0)
+  cxVideo.play().catch(() => {});
+  updateCausticsState();
+  updateCausticsRun();
+}
+function handleCausticsFile(file){
+  if (!file || !file.type.startsWith('video/')) return;
+  idbSet('caustics', file);
+  state.caustics.enabled = true; el('cxOn').checked = true;
+  setCausticsVideo(file);
+  scheduleSave();
+}
+function clearCaustics(){
+  idbDel('caustics');
+  if (cxURL){ URL.revokeObjectURL(cxURL); cxURL = null; }
+  if (cxVideo){ cxVideo.pause?.(); cxVideo.removeAttribute('src'); cxVideo.load?.(); }
+  state.caustics.enabled = false; el('cxOn').checked = false;
+  updateCausticsState(); updateCausticsRun(); scheduleSave();
+}
+function updateCausticsRun(){
+  const on = state.caustics.enabled;
+  if (overlay) overlay.hidden = !on;
+  if (on && cxVideo && cxVideo.src){ cxVideo.play?.().catch(() => {}); startCaustics(); }
+  else stopCaustics();
+}
+function startCaustics(){ if (!cxRAF) cxRAF = requestAnimationFrame(causticsTick); }
+function stopCaustics(){ if (cxRAF){ cancelAnimationFrame(cxRAF); cxRAF = 0; } if (octx && overlay) octx.clearRect(0, 0, overlay.width, overlay.height); }
+function causticsTick(){ renderCaustics(); cxRAF = requestAnimationFrame(causticsTick); }
+
+function renderCaustics(){
+  const cx = state.caustics;
+  if (!cx.enabled || !cxVideo || cxVideo.readyState < 2 || !cxVideo.videoWidth){
+    if (octx && overlay) octx.clearRect(0, 0, overlay.width, overlay.height);
+    return;
+  }
+  const chunkPx = state.N * TILE;
+  const cell = Math.max(1, cx.pixel);
+  const gw = Math.max(1, Math.round(chunkPx / cell)), gh = gw;   // square chunk
+  if (cxBuf.width !== gw) cxBuf.width = gw;
+  if (cxBuf.height !== gh) cxBuf.height = gh;
+  cxBufCtx.drawImage(cxVideo, 0, 0, gw, gh);                     // downscale video -> pixel grid
+  const img = cxBufCtx.getImageData(0, 0, gw, gh), d = img.data;
+  const thr = cx.threshold * 255, c = hexToRgb(cx.color);
+  for (let i = 0; i < d.length; i += 4){
+    const lum = 0.299 * d[i] + 0.587 * d[i+1] + 0.114 * d[i+2];
+    let a;
+    if (cx.binary) a = (cx.flip ? lum < thr : lum >= thr) ? 255 : 0;   // hard mask
+    else           a = cx.flip ? 255 - lum : lum;                       // soft luminance
+    d[i] = c.r; d[i+1] = c.g; d[i+2] = c.b; d[i+3] = a;
+  }
+  if (overlay.width !== gw) overlay.width = gw;
+  if (overlay.height !== gh) overlay.height = gh;
+  octx.putImageData(img, 0, 0);
+}
+
 function bindUI(){
   el('reroll').onclick = () => { state.seed = (Math.random()*1e9)|0; el('seed').value = state.seed; regen(); };
   el('seed').onchange = e => { state.seed = parseInt(e.target.value)||0; regen(); };
@@ -987,6 +1100,20 @@ function bindUI(){
   el('wallUpload').onchange = e => { handleWallFiles(e.target.files); e.target.value = ''; };
   el('clearWalls').onclick = clearWalls;
   dropZone('wallUploadRow', handleWallFiles);
+
+  // caustics overlay
+  el('cxOn').onchange = e => { state.caustics.enabled = e.target.checked; updateCausticsRun(); scheduleSave(); };
+  el('cxUploadBtn').onclick = () => el('cxUpload').click();
+  el('cxUpload').onchange = e => { if (e.target.files[0]) handleCausticsFile(e.target.files[0]); e.target.value = ''; };
+  el('cxClear').onclick = clearCaustics;
+  dropZone('cxUploadRow', files => { if (files[0]) handleCausticsFile(files[0]); });
+  el('cxPixel').oninput = e => { state.caustics.pixel = +e.target.value; el('cxPixelOut').textContent = e.target.value; scheduleSave(); };
+  el('cxBinary').onchange = e => { state.caustics.binary = e.target.checked; scheduleSave(); };
+  el('cxFlip').onchange = e => { state.caustics.flip = e.target.checked; scheduleSave(); };
+  el('cxThresh').oninput = e => { state.caustics.threshold = +e.target.value / 100; el('cxThreshOut').textContent = e.target.value + '%'; scheduleSave(); };
+  el('cxOpacity').oninput = e => { state.caustics.opacity = +e.target.value; el('cxOpacityOut').textContent = (+e.target.value).toFixed(2); updateCausticsStyle(); scheduleSave(); };
+  el('cxBlend').onchange = e => { state.caustics.blend = e.target.value; updateCausticsStyle(); scheduleSave(); };
+  el('cxColor').oninput = e => { state.caustics.color = e.target.value; scheduleSave(); };
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -1024,6 +1151,8 @@ function exportPng(){
 /* ============================== init =============================== */
 async function init(){
   canvas = el('chunk'); ctx = canvas.getContext('2d');
+  overlay = el('caustics'); octx = overlay.getContext('2d');
+  cxBuf = document.createElement('canvas'); cxBufCtx = cxBuf.getContext('2d', { willReadFrequently: true });
 
   // decode every embedded png into an <img> once
   const jobs = [];
@@ -1058,6 +1187,11 @@ async function init(){
 
   regen();
   if (restored) applyZoom(); else fitZoom();   // keep the saved zoom; only auto-fit on a fresh start
+
+  // restore the caustics video (stored in IndexedDB) and start its overlay
+  updateCausticsStyle();
+  const vid = await idbGet('caustics');
+  if (vid) setCausticsVideo(vid); else updateCausticsRun();
 }
 
 if (!A.tilesets.length && !A.wallsets.length){
