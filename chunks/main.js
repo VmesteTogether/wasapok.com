@@ -89,7 +89,7 @@ const state = {
   // sprite config (per sprite): {enabled, freq, boxScale}
   spriteCfg: [],
   // caustics video overlay
-  caustics: { enabled: false, pixel: 16, binary: true, flip: false, threshold: 0.5, opacity: 0.6, blend: 'multiply', color: '#0d1b2e' },
+  caustics: { enabled: false, pixel: 16, speed: 1, binary: true, flip: false, threshold: 0.5, opacity: 0.6, blend: 'multiply', color: '#0d1b2e' },
   // blinking panel LEDs (auto-detected from the tiles)
   lightsCfg: { enabled: true, speed: 1, jitter: 0.5, glow: 1, vibrant: false },
   lightList: [],
@@ -795,6 +795,7 @@ function applySettings(s){
     const c = s.caustics, cc = state.caustics;
     cc.enabled = !!c.enabled;
     cc.pixel = num(c.pixel, cc.pixel);
+    cc.speed = num(c.speed, cc.speed);
     cc.binary = c.binary !== false;
     cc.flip = !!c.flip;
     cc.threshold = num(c.threshold, cc.threshold);
@@ -844,6 +845,7 @@ function syncControls(){                            // push restored state into 
   const c = state.caustics;
   el('cxOn').checked = c.enabled;
   el('cxPixel').value = c.pixel; el('cxPixelOut').textContent = c.pixel;
+  el('cxSpeed').value = c.speed; el('cxSpeedOut').textContent = c.speed.toFixed(2) + '×';
   el('cxBinary').checked = c.binary;
   el('cxFlip').checked = c.flip;
   el('cxThresh').value = Math.round(c.threshold * 100); el('cxThreshOut').textContent = Math.round(c.threshold * 100) + '%';
@@ -1007,6 +1009,7 @@ function hexToRgb(h){
 }
 function updateCausticsState(){ if (el('cxState')) el('cxState').textContent = (cxVideo && cxVideo.src) ? '· loaded' : ''; }
 function updateCausticsStyle(){ if (overlay){ overlay.style.opacity = state.caustics.opacity; overlay.style.mixBlendMode = state.caustics.blend; } }
+function updateCausticsPlayback(){ if (cxVideo) try { cxVideo.playbackRate = state.caustics.speed; } catch (e) {} }
 
 function setCausticsVideo(blob){
   if (!cxVideo){
@@ -1020,6 +1023,7 @@ function setCausticsVideo(blob){
   cxVideo.src = cxURL;
   cxVideo.load();                        // kick the pipeline (a bare play() can stall at readyState 0)
   cxVideo.play().catch(() => {});
+  updateCausticsPlayback();
   updateCausticsState();
   updateCausticsRun();
 }
@@ -1303,6 +1307,7 @@ function bindUI(){
   el('cxClear').onclick = clearCaustics;
   dropZone('cxUploadRow', files => { if (files[0]) handleCausticsFile(files[0]); });
   el('cxPixel').oninput = e => { state.caustics.pixel = +e.target.value; el('cxPixelOut').textContent = e.target.value; scheduleSave(); };
+  el('cxSpeed').oninput = e => { state.caustics.speed = +e.target.value; el('cxSpeedOut').textContent = (+e.target.value).toFixed(2) + '×'; updateCausticsPlayback(); scheduleSave(); };
   el('cxBinary').onchange = e => { state.caustics.binary = e.target.checked; scheduleSave(); };
   el('cxFlip').onchange = e => { state.caustics.flip = e.target.checked; scheduleSave(); };
   el('cxThresh').oninput = e => { state.caustics.threshold = +e.target.value / 100; el('cxThreshOut').textContent = e.target.value + '%'; scheduleSave(); };
