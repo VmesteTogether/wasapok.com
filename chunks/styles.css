@@ -77,6 +77,8 @@ button{
 button:hover{border-color:var(--accent2);background:#31401f}
 button.primary{width:100%;background:var(--accent2);border-color:#4f9f38;font-weight:600}
 button.primary:hover{background:#4f9f38}
+button.on{background:var(--accent2);border-color:#4f9f38;color:#fff}
+button.on:hover{background:#4f9f38}
 .hint{color:var(--muted);font-size:11px;margin:6px 2px 0;line-height:1.35}
 .foot{color:#6f7d60;font-size:11px;margin-top:16px;line-height:1.4}
 code{background:#0f120b;border:1px solid var(--line);border-radius:4px;padding:1px 4px;color:var(--hud)}

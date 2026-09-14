@@ -120,6 +120,7 @@ let lightsCanvas = null, lightsCtx = null, lightsRAF = 0;
 // glow-lights overlay (top, screen-blended): static radial gradients, re-rendered
 // only when they change. selGlow = selected glow index, dragGlow while moving one.
 let glowCanvas = null, glowCtx = null, selGlow = -1, dragGlow = -1;
+let fullLitArmed = false, _glowSil = null;   // "full-light sprite" mode + reused silhouette canvas
 let _lbuckets = null, _lbucketsN = 0;   // reused per-frame draw buckets (color × brightness)
 const LX_LEVELS = 14;
 
@@ -777,7 +778,7 @@ function saveSettings(){
     A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
     // a hand-made arrangement isn't reproducible from the seed, so store it
     if (state.lockSprites)
-      s.placements = state.placements.map(p => ({ name: A.sprites[p.i]?.name, dx: p.dx, dy: p.dy })).filter(p => p.name);
+      s.placements = state.placements.map(p => ({ name: A.sprites[p.i]?.name, dx: p.dx, dy: p.dy, fullLit: !!p.fullLit })).filter(p => p.name);
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
   } catch (e) { /* storage full or blocked: settings just won't persist */ }
 }
@@ -843,7 +844,7 @@ function applySettings(s){
     const rebuilt = [];
     for (const pp of s.placements){
       const idx = A.sprites.findIndex(sp => sp.name === pp.name);
-      if (idx >= 0) rebuilt.push(makePlacement(idx, pp.dx, pp.dy));
+      if (idx >= 0){ const p = makePlacement(idx, pp.dx, pp.dy); if (pp.fullLit) p.fullLit = true; rebuilt.push(p); }
     }
     if (rebuilt.length) state.placements = rebuilt;
   }
@@ -960,6 +961,7 @@ function bindCanvasDrag(){
 
   canvas.addEventListener('pointerdown', e => {
     if (state.showMaskTest) return;
+    if (fullLitArmed) return;                        // armed for double-click only; don't drag/select
     const { x, y } = canvasPos(e);
 
     // glow lights are the top editable layer — they take priority
@@ -1032,8 +1034,20 @@ function bindCanvasDrag(){
 
   window.addEventListener('keydown', e => {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
-    if (e.key === 'Escape' && brushType >= 0){ disarmBrush(); }
+    if (e.key === 'Escape'){
+      if (brushType >= 0) disarmBrush();
+      if (fullLitArmed){ fullLitArmed = false; el('glFullLit').classList.remove('on'); canvas.style.cursor = 'default'; }
+    }
     else if ((e.key === 'Delete' || e.key === 'Backspace') && selK >= 0){ e.preventDefault(); deletePlacement(selK); }
+  });
+
+  // double-click a sprite (while armed) to toggle "fully lit by the spotlight"
+  canvas.addEventListener('dblclick', e => {
+    if (!fullLitArmed || state.showMaskTest) return;
+    const { x, y } = canvasPos(e);
+    const k = pickSprite(x, y);
+    if (k >= 0){ const p = state.placements[k]; p.fullLit = !p.fullLit; markManual(); draw(); scheduleSave(); }
+    e.preventDefault();
   });
 }
 
@@ -1349,18 +1363,64 @@ function fillEllipseScanline(g, cx, cy, rx, ry, rot, px){
     if (xe >= xs) g.fillRect(xs, y, xe - xs + 1, 1);
   }
 }
+// a glow's effective light colour (with >1 whitening) and its alpha (intensity)
+function glowLightRGBA(gl){
+  let col = glowTempColor(gl.temp);
+  const a = Math.min(1, gl.intensity);
+  if (gl.intensity > 1){ const w = Math.min(1, gl.intensity - 1);
+    col = [Math.round(col[0]+(255-col[0])*w), Math.round(col[1]+(255-col[1])*w), Math.round(col[2]+(255-col[2])*w)]; }
+  return { rgb: `rgb(${col[0]},${col[1]},${col[2]})`, a };
+}
+function pointInGlow(gl, x, y){
+  const dx = x - gl.x, dy = y - gl.y, c = Math.cos(gl.rot || 0), s = Math.sin(gl.rot || 0);
+  const lx = dx*c + dy*s, ly = -dx*s + dy*c;
+  return (lx*lx)/(gl.rx*gl.rx) + (ly*ly)/(gl.ry*gl.ry) <= 1;
+}
+// the spotlight a "full-light" sprite belongs to: the overlapping one whose centre is nearest
+function glowForSprite(p){
+  const cx = p.dx + p.w/2, cy = p.dy + p.h/2;
+  let best = -1, bestD = Infinity;
+  for (let i = 0; i < state.glows.length; i++){
+    const gl = state.glows[i];
+    const overlaps = pointInGlow(gl, cx, cy) || pointInGlow(gl, cx, p.dy + p.h) || pointInGlow(gl, cx, p.dy)
+      || pointInGlow(gl, p.dx, cy) || pointInGlow(gl, p.dx + p.w, cy)
+      || (gl.x >= p.dx && gl.x <= p.dx + p.w && gl.y >= p.dy && gl.y <= p.dy + p.h);
+    if (!overlaps) continue;
+    const d = (gl.x - cx)**2 + (gl.y - cy)**2;
+    if (d < bestD){ bestD = d; best = i; }
+  }
+  return best;
+}
 function renderGlows(){
   const o = glowCanvas, g = glowCtx; if (!o) return;
   const px = state.N * TILE; if (o.width !== px){ o.width = px; o.height = px; }
   g.imageSmoothingEnabled = false;
   g.clearRect(0, 0, px, px);
   for (const gl of state.glows){
-    let col = glowTempColor(gl.temp);
-    const a = Math.min(1, gl.intensity);
-    if (gl.intensity > 1){ const w = Math.min(1, gl.intensity - 1);   // >1 whitens for extra lift
-      col = [Math.round(col[0]+(255-col[0])*w), Math.round(col[1]+(255-col[1])*w), Math.round(col[2]+(255-col[2])*w)]; }
-    g.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${a})`;
+    const lc = glowLightRGBA(gl);
+    g.globalAlpha = lc.a; g.fillStyle = lc.rgb;
     fillEllipseScanline(g, gl.x, gl.y, Math.max(1, gl.rx), Math.max(1, gl.ry), gl.rot || 0, px);
+  }
+  g.globalAlpha = 1;
+
+  // "full-light" sprites: paint the whole sprite silhouette with its spotlight's
+  // colour so tall sprites that poke out of the beam still read as fully lit
+  for (const p of state.placements){
+    if (!p.fullLit) continue;
+    const gi = glowForSprite(p); if (gi < 0) continue;
+    const sp = A.sprites[p.i]; if (!sp || !sp._img) continue;
+    const lc = glowLightRGBA(state.glows[gi]);
+    const tw = Math.max(1, Math.round(p.w)), th = Math.max(1, Math.round(p.h));
+    if (!_glowSil) _glowSil = document.createElement('canvas');
+    _glowSil.width = tw; _glowSil.height = th;
+    const tctx = _glowSil.getContext('2d');
+    tctx.clearRect(0, 0, tw, th); tctx.imageSmoothingEnabled = false;
+    tctx.globalCompositeOperation = 'source-over'; tctx.drawImage(sp._img, 0, 0, tw, th);
+    tctx.globalCompositeOperation = 'source-in'; tctx.fillStyle = lc.rgb; tctx.fillRect(0, 0, tw, th);
+    tctx.globalCompositeOperation = 'source-over';
+    g.globalAlpha = lc.a;
+    g.drawImage(_glowSil, Math.round(p.dx), Math.round(p.dy), tw, th);
+    g.globalAlpha = 1;
   }
   if (selGlow >= 0 && state.glows[selGlow]){           // dashed selection outline (editing only)
     const gl = state.glows[selGlow];
@@ -1495,6 +1555,11 @@ function bindUI(){
   el('glInt').oninput = e => { glowEditTarget().intensity = +e.target.value; el('glIntOut').textContent = (+e.target.value).toFixed(2); renderGlows(); scheduleSave(); };
   el('glTemp').oninput = e => { glowEditTarget().temp = +e.target.value; renderGlows(); scheduleSave(); };
   el('glBlend').onchange = e => { state.glowBlend = e.target.value; updateGlowBlend(); scheduleSave(); };
+  el('glFullLit').onclick = () => {
+    fullLitArmed = !fullLitArmed;
+    el('glFullLit').classList.toggle('on', fullLitArmed);
+    if (canvas) canvas.style.cursor = fullLitArmed ? 'cell' : 'default';
+  };
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });

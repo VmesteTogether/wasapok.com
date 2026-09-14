@@ -149,6 +149,10 @@
       </div>
       <p class="hint">Click a glow on the map to select/move it; right-click deletes one. The sliders below shape the selected glow (or the next one you add).</p>
       <div class="row">
+        <button id="glFullLit" style="flex:1">Toggle full-light sprite</button>
+      </div>
+      <p class="hint">Arm this, then <b>double-click a sprite</b> to light its whole shape as if fully inside the nearest spotlight — fixes tall sprites that clip out of the beam. Double-click again to undo.</p>
+      <div class="row">
         <label>Size X</label>
         <input type="range" id="glRx" min="8" max="480" step="2" value="70">
         <output id="glRxOut">70</output>
