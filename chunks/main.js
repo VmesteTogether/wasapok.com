@@ -1123,6 +1123,24 @@ function renderCaustics(){
   if (overlay.width !== gw) overlay.width = gw;
   if (overlay.height !== gh) overlay.height = gh;
   octx.putImageData(img, 0, 0);
+
+  // spotlights block the caustics: erase the caustic mask inside each glow so
+  // the shadows never lay over a spotlight (mapped into the caustic grid's scale)
+  if (state.glows.length){
+    const sc = gw / chunkPx;
+    octx.globalCompositeOperation = 'destination-out';
+    octx.fillStyle = '#000';
+    for (const gl of state.glows){
+      octx.save();
+      octx.translate(gl.x * sc, gl.y * sc);
+      octx.rotate(gl.rot || 0);
+      octx.beginPath();
+      octx.ellipse(0, 0, Math.max(0.5, gl.rx * sc), Math.max(0.5, gl.ry * sc), 0, 0, 6.2832);
+      octx.fill();
+      octx.restore();
+    }
+    octx.globalCompositeOperation = 'source-over';
+  }
 }
 
 /* ================= blinking panel LEDs ============================= */
