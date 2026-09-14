@@ -1480,8 +1480,8 @@ function deleteSelectedGlow(){ if (selGlow >= 0) deleteGlowAt(selGlow); }
 function updateGlowBlend(){ if (glowCanvas) glowCanvas.style.mixBlendMode = state.glowBlend; }
 
 /* ================= record example (WebM) =========================== */
-let recording = false;
-let sessionExampleSettings = null, committedExampleSettings = null;
+let recording = false, recSnapshot = null, recCount = 0;
+let examples = [];   // {videoSrc, settings, jsonUrl, label}
 // flatten every live layer into one buffer, reproducing the CSS blend stack
 function compositeScene(rctx, size){
   rctx.imageSmoothingEnabled = false;
@@ -1508,17 +1508,45 @@ function setRecUI(on, text){
 }
 function finishExample(blob){
   if (!blob || !blob.size) return;
+  recCount++;
   const url = URL.createObjectURL(blob);
-  const v = el('exampleVid');
-  v.src = url; el('exampleBanner').hidden = false;
-  el('exampleCap').textContent = `example · ${(blob.size/1048576).toFixed(1)} MB · click to load`;
-  v.play?.().catch(() => {});
-  const a = document.createElement('a'); a.href = url; a.download = 'gnominium_example.webm'; a.click();
-  // also save the scene settings so clicking the example loads it (and so it can be committed site-wide)
-  if (sessionExampleSettings){
-    const jb = new Blob([JSON.stringify(sessionExampleSettings)], { type: 'application/json' });
-    const ja = document.createElement('a'); ja.href = URL.createObjectURL(jb); ja.download = 'gnominium_example.json'; ja.click();
+  // download the webm + its scene settings (so it can be committed as a site-wide example)
+  const a = document.createElement('a'); a.href = url; a.download = `gnominium_example_${recCount}.webm`; a.click();
+  if (recSnapshot){
+    const jb = new Blob([JSON.stringify(recSnapshot)], { type: 'application/json' });
+    const ja = document.createElement('a'); ja.href = URL.createObjectURL(jb); ja.download = `gnominium_example_${recCount}.json`; ja.click();
   }
+  // add it as a card at the top (click to load that scene)
+  addExample({ videoSrc: url, settings: recSnapshot, label: `recording ${recCount}` });
+}
+function addExample(ex){
+  examples.push(ex);
+  el('exampleBanner').hidden = false;
+  renderExampleRow();
+}
+function renderExampleRow(){
+  const row = el('exampleRow'); if (!row) return;
+  row.innerHTML = '';
+  examples.forEach(ex => {
+    const card = document.createElement('div'); card.className = 'exCard';
+    const v = document.createElement('video'); v.autoplay = true; v.loop = true; v.muted = true; v.playsInline = true; v.src = ex.videoSrc;
+    v.addEventListener('error', () => {                     // drop a card whose video is missing
+      card.remove(); examples = examples.filter(x => x !== ex);
+      el('exampleCount').textContent = examples.length ? `· ${examples.length}` : '';
+      if (!row.children.length) el('exampleBanner').hidden = true;
+    });
+    const lbl = document.createElement('span'); lbl.className = 'lbl'; lbl.textContent = ex.label || 'example';
+    card.append(v, lbl);
+    card.addEventListener('click', () => loadExample(ex));
+    row.append(card);
+    v.play?.().catch(() => {});
+  });
+  el('exampleCount').textContent = examples.length ? `· ${examples.length}` : '';
+}
+function loadExample(ex){
+  const apply = obj => { if (obj){ loadSceneFrom(obj); el('stageInner')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); } };
+  if (ex.settings) apply(ex.settings);
+  else if (ex.jsonUrl) fetch(ex.jsonUrl).then(r => r.ok ? r.json() : null).then(j => { ex.settings = j; apply(j); }).catch(() => {});
 }
 function recordExample(durationSec, onDone){
   if (recording) return;
@@ -1537,7 +1565,7 @@ function recordExample(durationSec, onDone){
   const parts = [];
   mr.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   mr.onstop = () => { recording = false; setRecUI(false, ''); const blob = new Blob(parts, { type: 'video/webm' }); finishExample(blob); if (onDone) onDone(blob); };
-  sessionExampleSettings = snapshotSettings();          // the scene as recorded, for click-to-load
+  recSnapshot = snapshotSettings();                     // the scene as recorded, for click-to-load
   recording = true;
   const start = performance.now();
   function tick(){
@@ -1560,32 +1588,17 @@ function setExampleCollapsed(c){
   btn.title = c ? 'expand example' : 'collapse example';
   try { localStorage.setItem(EXAMPLE_COLLAPSE_KEY, c ? '1' : '0'); } catch (e) {}
 }
-function loadCommittedExample(){
-  const v = el('exampleVid'), b = el('exampleBanner');
-  if (!v) return;
-  v.addEventListener('error', () => { if ((v.currentSrc || '').indexOf('example.webm') >= 0) b.hidden = true; });
-  v.addEventListener('loadeddata', () => {
-    b.hidden = false;
-    if ((v.currentSrc || '').indexOf('example.webm') >= 0) el('exampleCap').textContent = 'example · click to load';
-  });
-  v.src = 'example.webm';                 // committed site-wide example (404 => banner stays hidden)
-  // its scene settings, so clicking the example loads it into the viewer
-  fetch('example.json').then(r => r.ok ? r.json() : null).then(j => { if (j) committedExampleSettings = j; }).catch(() => {});
-
+function loadCommittedExamples(){
+  const b = el('exampleBanner');
+  // site-wide examples come from a committed manifest: [{webm,json,label}, ...]
+  fetch('examples.json').then(r => r.ok ? r.json() : null).then(list => {
+    if (Array.isArray(list)) list.forEach((e, i) => addExample({ videoSrc: e.webm, jsonUrl: e.json, label: e.label || `example ${i + 1}` }));
+  }).catch(() => {});
   // collapse toggle (remembers state)
   let collapsed = false;
   try { collapsed = localStorage.getItem(EXAMPLE_COLLAPSE_KEY) === '1'; } catch (e) {}
   setExampleCollapsed(collapsed);
   el('exampleCollapse').addEventListener('click', e => { e.stopPropagation(); setExampleCollapsed(!b.classList.contains('collapsed')); });
-
-  // click the example -> expand if collapsed, otherwise load that scene into the viewer
-  b.addEventListener('click', () => {
-    if (b.classList.contains('collapsed')){ setExampleCollapsed(false); return; }
-    const obj = sessionExampleSettings || committedExampleSettings;
-    if (!obj) return;
-    loadSceneFrom(obj);
-    el('stageInner')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
-  });
 }
 
 function bindUI(){
@@ -1761,7 +1774,7 @@ async function init(){
 
   updateLightsRun();               // start the LED blink loop
   updateGlowBlend();               // apply the spotlight blend mode
-  loadCommittedExample();          // show the site-wide example at top if one is committed
+  loadCommittedExamples();         // show any site-wide examples at top
 
   // restore the caustics video (stored in IndexedDB) and start its overlay
   updateCausticsStyle();

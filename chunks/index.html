@@ -9,9 +9,12 @@
 <body>
 <!-- ==================== EXAMPLE (top of page) ==================== -->
 <div id="exampleBanner" hidden>
-  <video id="exampleVid" autoplay loop muted playsinline></video>
-  <span id="exampleCap" class="cap">example</span>
-  <button id="exampleCollapse" title="collapse" aria-label="collapse example">▾</button>
+  <div id="exampleHeader">
+    <span class="cap">examples <small id="exampleCount"></small></span>
+    <span class="hint" id="exampleHint">click one to load its scene</span>
+    <button id="exampleCollapse" title="collapse" aria-label="collapse examples">▾</button>
+  </div>
+  <div id="exampleRow"></div>
 </div>
 
 <div id="app">
