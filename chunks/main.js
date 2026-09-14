@@ -1552,6 +1552,14 @@ function recordExample(durationSec, onDone){
   setRecUI(true, `Recording example… ${durationSec}s`);
   requestAnimationFrame(tick);
 }
+const EXAMPLE_COLLAPSE_KEY = 'gnom_example_collapsed';
+function setExampleCollapsed(c){
+  el('exampleBanner').classList.toggle('collapsed', c);
+  const btn = el('exampleCollapse');
+  btn.textContent = c ? '▸' : '▾';
+  btn.title = c ? 'expand example' : 'collapse example';
+  try { localStorage.setItem(EXAMPLE_COLLAPSE_KEY, c ? '1' : '0'); } catch (e) {}
+}
 function loadCommittedExample(){
   const v = el('exampleVid'), b = el('exampleBanner');
   if (!v) return;
@@ -1563,8 +1571,16 @@ function loadCommittedExample(){
   v.src = 'example.webm';                 // committed site-wide example (404 => banner stays hidden)
   // its scene settings, so clicking the example loads it into the viewer
   fetch('example.json').then(r => r.ok ? r.json() : null).then(j => { if (j) committedExampleSettings = j; }).catch(() => {});
-  // click the example -> load that scene into the viewer
+
+  // collapse toggle (remembers state)
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(EXAMPLE_COLLAPSE_KEY) === '1'; } catch (e) {}
+  setExampleCollapsed(collapsed);
+  el('exampleCollapse').addEventListener('click', e => { e.stopPropagation(); setExampleCollapsed(!b.classList.contains('collapsed')); });
+
+  // click the example -> expand if collapsed, otherwise load that scene into the viewer
   b.addEventListener('click', () => {
+    if (b.classList.contains('collapsed')){ setExampleCollapsed(false); return; }
     const obj = sessionExampleSettings || committedExampleSettings;
     if (!obj) return;
     loadSceneFrom(obj);
