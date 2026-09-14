@@ -97,6 +97,7 @@ const state = {
   // placeable elliptical glow lights: {x,y,rx,ry,rot(rad),intensity,temp}
   glows: [],
   glowDefaults: { rx: 70, ry: 70, rot: 0, intensity: 1, temp: 0.5 },
+  glowBlend: 'overlay',   // how spotlights interact with the scene (blend mode)
 };
 
 let canvas, ctx;
@@ -770,6 +771,7 @@ function saveSettings(){
       lightsCfg: { ...state.lightsCfg },
       glows: state.glows.map(g => ({ ...g })),
       glowDefaults: { ...state.glowDefaults },
+      glowBlend: state.glowBlend,
       spriteCfg: {},
     };
     A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
@@ -832,6 +834,7 @@ function applySettings(s){
     gd.rx = num(d.rx, gd.rx); gd.ry = num(d.ry, gd.ry); gd.rot = num(d.rot, gd.rot);
     gd.intensity = num(d.intensity, gd.intensity); gd.temp = num(d.temp, gd.temp);
   }
+  if (['overlay','soft-light','color-dodge','screen','lighten'].includes(s.glowBlend)) state.glowBlend = s.glowBlend;
   if (s.spriteCfg) A.sprites.forEach((sp, i) => {
     const c = s.spriteCfg[sp.name];
     if (c) state.spriteCfg[i] = { enabled: c.enabled !== false, freq: num(c.freq, 2), boxScale: num(c.boxScale, 0.7) };
@@ -1368,6 +1371,7 @@ function syncGlowEditor(){
   el('glRot').value = deg; el('glRotOut').textContent = deg + '°';
   el('glInt').value = g.intensity; el('glIntOut').textContent = g.intensity.toFixed(2);
   el('glTemp').value = g.temp;
+  el('glBlend').value = state.glowBlend;
   el('glCount').textContent = state.glows.length ? `· ${state.glows.length}${selGlow >= 0 ? ' (1 selected)' : ''}` : '';
 }
 function addGlow(){
@@ -1384,6 +1388,7 @@ function deleteGlowAt(i){
   syncGlowEditor(); renderGlows(); scheduleSave();
 }
 function deleteSelectedGlow(){ if (selGlow >= 0) deleteGlowAt(selGlow); }
+function updateGlowBlend(){ if (glowCanvas) glowCanvas.style.mixBlendMode = state.glowBlend; }
 
 function bindUI(){
   el('reroll').onclick = () => { state.seed = (Math.random()*1e9)|0; el('seed').value = state.seed; regen(); };
@@ -1471,6 +1476,7 @@ function bindUI(){
   el('glRot').oninput = e => { glowEditTarget().rot = (+e.target.value) * Math.PI / 180; el('glRotOut').textContent = e.target.value + '°'; renderGlows(); scheduleSave(); };
   el('glInt').oninput = e => { glowEditTarget().intensity = +e.target.value; el('glIntOut').textContent = (+e.target.value).toFixed(2); renderGlows(); scheduleSave(); };
   el('glTemp').oninput = e => { glowEditTarget().temp = +e.target.value; renderGlows(); scheduleSave(); };
+  el('glBlend').onchange = e => { state.glowBlend = e.target.value; updateGlowBlend(); scheduleSave(); };
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -1550,6 +1556,7 @@ async function init(){
   if (restored) applyZoom(); else fitZoom();   // keep the saved zoom; only auto-fit on a fresh start
 
   updateLightsRun();               // start the LED blink loop
+  updateGlowBlend();               // apply the spotlight blend mode
 
   // restore the caustics video (stored in IndexedDB) and start its overlay
   updateCausticsStyle();
