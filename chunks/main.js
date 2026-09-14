@@ -1235,6 +1235,17 @@ function renderLights(){
     }
   }
   g.globalAlpha = 1;
+
+  // sprites block the lights behind them: erase lit pixels under each sprite's
+  // actual (alpha) shape, so the sprite (on the layer below) reads as opaque.
+  if (state.placements.length){
+    g.globalCompositeOperation = 'destination-out';
+    for (const p of state.placements){
+      const sp = A.sprites[p.i];
+      if (sp && sp._img) g.drawImage(sp._img, p.dx, p.dy, p.w, p.h);
+    }
+    g.globalCompositeOperation = 'source-over';
+  }
 }
 function lightsTick(){ renderLights(); lightsRAF = requestAnimationFrame(lightsTick); }
 function updateLightsRun(){
