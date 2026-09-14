@@ -3,12 +3,35 @@
   --muted:#9aa88a; --line:#333a29; --accent:#8fd14f; --accent2:#3a7d2c; --hud:#c7f59a;
 }
 *{box-sizing:border-box}
+[hidden]{display:none!important}
 html,body{height:100%;margin:0}
 body{
   background:var(--bg); color:var(--ink);
   font:13px/1.45 ui-monospace,"Cascadia Mono",Consolas,monospace;
+  display:flex; flex-direction:column; height:100vh;
 }
-#app{display:flex;height:100vh;overflow:hidden}
+#app{display:flex;flex:1 1 auto;min-height:0;overflow:hidden}
+
+/* ---------------- example banner (top of page) ---------------- */
+#exampleBanner{
+  flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:14px;
+  background:#0c0e08; border-bottom:1px solid var(--line); padding:12px;
+}
+#exampleVid{
+  height:200px; max-width:70vw; border:1px solid var(--line); border-radius:6px;
+  background:#000; image-rendering:pixelated; box-shadow:0 6px 22px rgba(0,0,0,.5);
+}
+#exampleBanner .cap{color:var(--muted);font-size:12px;letter-spacing:.5px;text-transform:uppercase}
+
+/* ---------------- recording overlay ---------------- */
+#recOverlay{
+  position:absolute; top:10px; left:50%; transform:translateX(-50%);
+  display:flex; align-items:center; gap:8px;
+  background:rgba(10,12,8,.9); border:1px solid #6a3030; color:#ffd0d0;
+  padding:7px 14px; border-radius:20px; font-size:13px; z-index:5; pointer-events:none;
+}
+#recOverlay .dot{color:#ff5252; animation:recblink 1s steps(1) infinite}
+@keyframes recblink{50%{opacity:.25}}
 
 /* ---------------- stage ---------------- */
 #stage{

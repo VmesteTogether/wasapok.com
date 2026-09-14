@@ -1468,8 +1468,83 @@ function deleteGlowAt(i){
 function deleteSelectedGlow(){ if (selGlow >= 0) deleteGlowAt(selGlow); }
 function updateGlowBlend(){ if (glowCanvas) glowCanvas.style.mixBlendMode = state.glowBlend; }
 
+/* ================= record example (WebM) =========================== */
+let recording = false;
+// flatten every live layer into one buffer, reproducing the CSS blend stack
+function compositeScene(rctx, size){
+  rctx.imageSmoothingEnabled = false;
+  rctx.globalCompositeOperation = 'source-over'; rctx.globalAlpha = 1;
+  rctx.clearRect(0, 0, size, size);
+  rctx.drawImage(canvas, 0, 0, size, size);                              // chunk (tiles/glass/walls/sprites)
+  if (state.caustics.enabled && overlay && !overlay.hidden && overlay.width > 1){
+    rctx.globalCompositeOperation = state.caustics.blend;
+    rctx.globalAlpha = state.caustics.opacity;
+    rctx.drawImage(overlay, 0, 0, size, size);
+    rctx.globalAlpha = 1; rctx.globalCompositeOperation = 'source-over';
+  }
+  if (state.lightsCfg.enabled && lightsCanvas && !lightsCanvas.hidden)
+    rctx.drawImage(lightsCanvas, 0, 0, size, size);                      // LEDs (normal)
+  if (glowCanvas && state.glows.length){
+    rctx.globalCompositeOperation = state.glowBlend;                     // spotlights (blend)
+    rctx.drawImage(glowCanvas, 0, 0, size, size);
+    rctx.globalCompositeOperation = 'source-over';
+  }
+}
+function setRecUI(on, text){
+  const o = el('recOverlay'); if (o){ o.hidden = !on; if (on) el('recText').textContent = text; }
+  const b = el('recExample'); if (b){ b.disabled = on; b.textContent = on ? 'Recording…' : '● Record 30s example (WebM)'; }
+}
+function finishExample(blob){
+  if (!blob || !blob.size) return;
+  const url = URL.createObjectURL(blob);
+  const v = el('exampleVid');
+  v.src = url; el('exampleBanner').hidden = false;
+  el('exampleCap').textContent = `example · ${(blob.size/1048576).toFixed(1)} MB`;
+  v.play?.().catch(() => {});
+  const a = document.createElement('a'); a.href = url; a.download = 'gnominium_example.webm'; a.click();
+}
+function recordExample(durationSec, onDone){
+  if (recording) return;
+  durationSec = durationSec || 30;
+  if (typeof MediaRecorder === 'undefined'){ alert('Recording is not supported in this browser.'); return; }
+  const size = state.N * TILE;
+  const rec = document.createElement('canvas'); rec.width = size; rec.height = size;
+  const rctx = rec.getContext('2d');
+  const stream = rec.captureStream(30);
+  let mime = 'video/webm;codecs=vp9';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm;codecs=vp8';
+  if (!MediaRecorder.isTypeSupported(mime)) mime = 'video/webm';
+  let mr;
+  try { mr = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 8000000 }); }
+  catch (e){ mr = new MediaRecorder(stream); }
+  const parts = [];
+  mr.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
+  mr.onstop = () => { recording = false; setRecUI(false, ''); const blob = new Blob(parts, { type: 'video/webm' }); finishExample(blob); if (onDone) onDone(blob); };
+  recording = true;
+  const start = performance.now();
+  function tick(){
+    if (!recording) return;
+    compositeScene(rctx, size);
+    const left = durationSec - (performance.now() - start) / 1000;
+    setRecUI(true, `Recording example… ${Math.ceil(Math.max(0, left))}s`);
+    if (left <= 0){ try { mr.stop(); } catch (e){} return; }
+    requestAnimationFrame(tick);
+  }
+  mr.start();
+  setRecUI(true, `Recording example… ${durationSec}s`);
+  requestAnimationFrame(tick);
+}
+function loadCommittedExample(){
+  const v = el('exampleVid'), b = el('exampleBanner');
+  if (!v) return;
+  v.addEventListener('error', () => { if ((v.currentSrc || '').indexOf('example.webm') >= 0) b.hidden = true; });
+  v.addEventListener('loadeddata', () => { b.hidden = false; });
+  v.src = 'example.webm';                 // committed site-wide example (404 => banner stays hidden)
+}
+
 function bindUI(){
   el('reroll').onclick = () => { state.seed = (Math.random()*1e9)|0; el('seed').value = state.seed; regen(); };
+  el('recExample').onclick = () => recordExample(30);
   el('seed').onchange = e => { state.seed = parseInt(e.target.value)||0; regen(); };
   el('copySeed').onclick = () => { navigator.clipboard?.writeText(String(state.seed)); };
 
@@ -1640,6 +1715,7 @@ async function init(){
 
   updateLightsRun();               // start the LED blink loop
   updateGlowBlend();               // apply the spotlight blend mode
+  loadCommittedExample();          // show the site-wide example at top if one is committed
 
   // restore the caustics video (stored in IndexedDB) and start its overlay
   updateCausticsStyle();

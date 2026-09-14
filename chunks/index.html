@@ -7,6 +7,12 @@
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+<!-- ==================== EXAMPLE (top of page) ==================== -->
+<div id="exampleBanner" hidden>
+  <video id="exampleVid" autoplay loop muted playsinline></video>
+  <span id="exampleCap" class="cap">example</span>
+</div>
+
 <div id="app">
   <!-- ==================== STAGE ==================== -->
   <main id="stage">
@@ -23,11 +29,17 @@
       <span id="hudSeed">–</span>
       <span id="hudSprites">–</span>
     </div>
+    <div id="recOverlay" hidden><span class="dot">●</span> <span id="recText">Recording…</span></div>
   </main>
 
   <!-- ==================== CONTROLS ==================== -->
   <aside id="panel">
     <h1>Gnominium <span>Chunk Viewer</span></h1>
+
+    <section>
+      <div class="row"><button id="recExample" class="primary" style="flex:1">● Record 30s example (WebM)</button></div>
+      <p class="hint">Records the live scene (all layers) for 30s, downloads a WebM, and shows it at the very top of the page. Keep this tab in front while it records. Make one you like and I can bake it in as the site-wide example.</p>
+    </section>
 
     <section>
       <div class="row"><button id="reroll" class="primary">⟳ Reroll (space)</button></div>
