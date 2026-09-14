@@ -755,32 +755,43 @@ function clearUploads(){
 const SETTINGS_KEY = 'gnom_settings_v1';
 let _saveTimer = null;
 function scheduleSave(){ clearTimeout(_saveTimer); _saveTimer = setTimeout(saveSettings, 300); }
+function snapshotSettings(){
+  const s = {
+    v: 1,
+    seed: state.seed, size: state.size, zoom: state.zoom,
+    glassOn: state.glassOn, glassOp: state.glassOp,
+    wallSource: state.wallSource, wallDensity: state.wallDensity, edgeOpen: state.edgeOpen,
+    spriteDensity: state.spriteDensity,
+    showBoxes: state.showBoxes, lockSprites: state.lockSprites,
+    showGrid: state.showGrid, showWallGrid: state.showWallGrid,
+    tilesetName: A.tilesets[state.tilesetIdx]?.name,
+    wallsetName: A.wallsets[state.wallsetIdx]?.name,
+    glassName:   A.glass[state.glassIdx]?.name,
+    caustics: { ...state.caustics },
+    lightsCfg: { ...state.lightsCfg },
+    glows: state.glows.map(g => ({ ...g })),
+    glowDefaults: { ...state.glowDefaults },
+    glowBlend: state.glowBlend,
+    spriteCfg: {},
+  };
+  A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
+  // a hand-made arrangement isn't reproducible from the seed, so store it
+  if (state.lockSprites)
+    s.placements = state.placements.map(p => ({ name: A.sprites[p.i]?.name, dx: p.dx, dy: p.dy, fullLit: !!p.fullLit })).filter(p => p.name);
+  return s;
+}
 function saveSettings(){
-  try {
-    const s = {
-      v: 1,
-      seed: state.seed, size: state.size, zoom: state.zoom,
-      glassOn: state.glassOn, glassOp: state.glassOp,
-      wallSource: state.wallSource, wallDensity: state.wallDensity, edgeOpen: state.edgeOpen,
-      spriteDensity: state.spriteDensity,
-      showBoxes: state.showBoxes, lockSprites: state.lockSprites,
-      showGrid: state.showGrid, showWallGrid: state.showWallGrid,
-      tilesetName: A.tilesets[state.tilesetIdx]?.name,
-      wallsetName: A.wallsets[state.wallsetIdx]?.name,
-      glassName:   A.glass[state.glassIdx]?.name,
-      caustics: { ...state.caustics },
-      lightsCfg: { ...state.lightsCfg },
-      glows: state.glows.map(g => ({ ...g })),
-      glowDefaults: { ...state.glowDefaults },
-      glowBlend: state.glowBlend,
-      spriteCfg: {},
-    };
-    A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
-    // a hand-made arrangement isn't reproducible from the seed, so store it
-    if (state.lockSprites)
-      s.placements = state.placements.map(p => ({ name: A.sprites[p.i]?.name, dx: p.dx, dy: p.dy, fullLit: !!p.fullLit })).filter(p => p.name);
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify(s));
-  } catch (e) { /* storage full or blocked: settings just won't persist */ }
+  try { localStorage.setItem(SETTINGS_KEY, JSON.stringify(snapshotSettings())); }
+  catch (e) { /* storage full or blocked: settings just won't persist */ }
+}
+// apply a full settings object to the live viewer (used when clicking an example)
+function loadSceneFrom(obj){
+  if (!obj) return;
+  applySettings(obj);
+  buildSelects(); syncControls(); refreshTplAvailability(); updateBrushUI();
+  regen(); applyZoom();
+  updateLightsRun(); updateGlowBlend();
+  scheduleSave();
 }
 function loadSettings(){
   try { return JSON.parse(localStorage.getItem(SETTINGS_KEY) || 'null'); } catch (e) { return null; }
@@ -1470,6 +1481,7 @@ function updateGlowBlend(){ if (glowCanvas) glowCanvas.style.mixBlendMode = stat
 
 /* ================= record example (WebM) =========================== */
 let recording = false;
+let sessionExampleSettings = null, committedExampleSettings = null;
 // flatten every live layer into one buffer, reproducing the CSS blend stack
 function compositeScene(rctx, size){
   rctx.imageSmoothingEnabled = false;
@@ -1499,9 +1511,14 @@ function finishExample(blob){
   const url = URL.createObjectURL(blob);
   const v = el('exampleVid');
   v.src = url; el('exampleBanner').hidden = false;
-  el('exampleCap').textContent = `example · ${(blob.size/1048576).toFixed(1)} MB`;
+  el('exampleCap').textContent = `example · ${(blob.size/1048576).toFixed(1)} MB · click to load`;
   v.play?.().catch(() => {});
   const a = document.createElement('a'); a.href = url; a.download = 'gnominium_example.webm'; a.click();
+  // also save the scene settings so clicking the example loads it (and so it can be committed site-wide)
+  if (sessionExampleSettings){
+    const jb = new Blob([JSON.stringify(sessionExampleSettings)], { type: 'application/json' });
+    const ja = document.createElement('a'); ja.href = URL.createObjectURL(jb); ja.download = 'gnominium_example.json'; ja.click();
+  }
 }
 function recordExample(durationSec, onDone){
   if (recording) return;
@@ -1520,6 +1537,7 @@ function recordExample(durationSec, onDone){
   const parts = [];
   mr.ondataavailable = e => { if (e.data && e.data.size) parts.push(e.data); };
   mr.onstop = () => { recording = false; setRecUI(false, ''); const blob = new Blob(parts, { type: 'video/webm' }); finishExample(blob); if (onDone) onDone(blob); };
+  sessionExampleSettings = snapshotSettings();          // the scene as recorded, for click-to-load
   recording = true;
   const start = performance.now();
   function tick(){
@@ -1538,8 +1556,20 @@ function loadCommittedExample(){
   const v = el('exampleVid'), b = el('exampleBanner');
   if (!v) return;
   v.addEventListener('error', () => { if ((v.currentSrc || '').indexOf('example.webm') >= 0) b.hidden = true; });
-  v.addEventListener('loadeddata', () => { b.hidden = false; });
+  v.addEventListener('loadeddata', () => {
+    b.hidden = false;
+    if ((v.currentSrc || '').indexOf('example.webm') >= 0) el('exampleCap').textContent = 'example · click to load';
+  });
   v.src = 'example.webm';                 // committed site-wide example (404 => banner stays hidden)
+  // its scene settings, so clicking the example loads it into the viewer
+  fetch('example.json').then(r => r.ok ? r.json() : null).then(j => { if (j) committedExampleSettings = j; }).catch(() => {});
+  // click the example -> load that scene into the viewer
+  b.addEventListener('click', () => {
+    const obj = sessionExampleSettings || committedExampleSettings;
+    if (!obj) return;
+    loadSceneFrom(obj);
+    el('stageInner')?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  });
 }
 
 function bindUI(){

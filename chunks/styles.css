@@ -16,7 +16,10 @@ body{
 #exampleBanner{
   flex:0 0 auto; display:flex; align-items:center; justify-content:center; gap:14px;
   background:#0c0e08; border-bottom:1px solid var(--line); padding:12px;
+  cursor:pointer;
 }
+#exampleBanner:hover{background:#12160d}
+#exampleBanner:hover #exampleVid{border-color:var(--accent2)}
 #exampleVid{
   height:200px; max-width:70vw; border:1px solid var(--line); border-radius:6px;
   background:#000; image-rendering:pixelated; box-shadow:0 6px 22px rgba(0,0,0,.5);
