@@ -94,6 +94,9 @@ const state = {
   lightsCfg: { enabled: true, speed: 1, jitter: 0.5, glow: 1, vibrant: false },
   lightList: [],
   lightPalette: [],
+  // placeable elliptical glow lights: {x,y,rx,ry,rot(rad),intensity,temp}
+  glows: [],
+  glowDefaults: { rx: 70, ry: 70, rot: 0, intensity: 1, temp: 0.5 },
 };
 
 let canvas, ctx;
@@ -112,6 +115,10 @@ let cxVideo = null, cxURL = null, overlay = null, octx = null, cxBuf = null, cxB
 
 // panel-lights overlay: animated LED pixels on their own top canvas + rAF loop.
 let lightsCanvas = null, lightsCtx = null, lightsRAF = 0;
+
+// glow-lights overlay (top, screen-blended): static radial gradients, re-rendered
+// only when they change. selGlow = selected glow index, dragGlow while moving one.
+let glowCanvas = null, glowCtx = null, selGlow = -1, dragGlow = -1;
 let _lbuckets = null, _lbucketsN = 0;   // reused per-frame draw buckets (color × brightness)
 const LX_LEVELS = 14;
 
@@ -358,6 +365,7 @@ function draw(){
     ctx.strokeRect(p.dx - 1.5, p.dy - 1.5, p.w + 3, p.h + 3);
   }
 
+  renderGlows();
   updateHud();
   applyZoom();
 }
@@ -760,6 +768,8 @@ function saveSettings(){
       glassName:   A.glass[state.glassIdx]?.name,
       caustics: { ...state.caustics },
       lightsCfg: { ...state.lightsCfg },
+      glows: state.glows.map(g => ({ ...g })),
+      glowDefaults: { ...state.glowDefaults },
       spriteCfg: {},
     };
     A.sprites.forEach((sp, i) => { const c = state.spriteCfg[i]; if (c) s.spriteCfg[sp.name] = { enabled: c.enabled, freq: c.freq, boxScale: c.boxScale }; });
@@ -811,6 +821,17 @@ function applySettings(s){
     lc.glow = num(c.glow, lc.glow);
     lc.vibrant = !!c.vibrant;
   }
+  if (Array.isArray(s.glows)){
+    state.glows = s.glows.filter(g => g && typeof g === 'object').map(g => ({
+      x: num(g.x, 0), y: num(g.y, 0), rx: num(g.rx, 70), ry: num(g.ry, 70),
+      rot: num(g.rot, 0), intensity: num(g.intensity, 1), temp: num(g.temp, 0.5),
+    }));
+  }
+  if (s.glowDefaults && typeof s.glowDefaults === 'object'){
+    const d = s.glowDefaults, gd = state.glowDefaults;
+    gd.rx = num(d.rx, gd.rx); gd.ry = num(d.ry, gd.ry); gd.rot = num(d.rot, gd.rot);
+    gd.intensity = num(d.intensity, gd.intensity); gd.temp = num(d.temp, gd.temp);
+  }
   if (s.spriteCfg) A.sprites.forEach((sp, i) => {
     const c = s.spriteCfg[sp.name];
     if (c) state.spriteCfg[i] = { enabled: c.enabled !== false, freq: num(c.freq, 2), boxScale: num(c.boxScale, 0.7) };
@@ -858,6 +879,7 @@ function syncControls(){                            // push restored state into 
   el('lxSpeed').value = lc.speed; el('lxSpeedOut').textContent = lc.speed.toFixed(1) + '×';
   el('lxJitter').value = lc.jitter; el('lxJitterOut').textContent = lc.jitter.toFixed(2);
   el('lxGlow').value = lc.glow; el('lxGlowOut').textContent = lc.glow.toFixed(2);
+  syncGlowEditor();
 }
 
 function refreshTplAvailability(){
@@ -937,6 +959,20 @@ function bindCanvasDrag(){
     if (state.showMaskTest) return;
     const { x, y } = canvasPos(e);
 
+    // glow lights are the top editable layer — they take priority
+    if (e.button === 2){ const gi = hitGlow(x, y); if (gi >= 0){ deleteGlowAt(gi); e.preventDefault(); return; } }
+    else if (e.button === 0){
+      const gi = hitGlow(x, y);
+      if (gi >= 0){
+        selGlow = gi; dragGlow = gi;
+        const gl = state.glows[gi]; glowDragOff = { x: x - gl.x, y: y - gl.y };
+        syncGlowEditor(); renderGlows();
+        try { canvas.setPointerCapture?.(e.pointerId); } catch (_) {}
+        canvas.style.cursor = 'grabbing';
+        e.preventDefault(); return;
+      }
+    }
+
     if (e.button === 2){                             // right-click: delete the sprite under cursor
       const k = pickSprite(x, y);
       if (k >= 0) deletePlacement(k);
@@ -953,7 +989,7 @@ function bindCanvasDrag(){
       k = state.placements.length - 1;
       markManual();
     }
-    if (k < 0) return;
+    if (k < 0){ if (selGlow >= 0){ selGlow = -1; syncGlowEditor(); renderGlows(); } return; }   // click empty = deselect glow
 
     selK = k; dragK = k;                             // begin dragging (also lets you fine-tune a just-placed one)
     dragOff = { x: x - state.placements[k].dx, y: y - state.placements[k].dy };
@@ -970,15 +1006,24 @@ function bindCanvasDrag(){
 
   canvas.addEventListener('pointermove', e => {
     const { x, y } = canvasPos(e);
+    if (dragGlow >= 0){
+      const gl = state.glows[dragGlow], px = state.N * TILE;
+      gl.x = Math.max(0, Math.min(px, x - glowDragOff.x));
+      gl.y = Math.max(0, Math.min(px, y - glowDragOff.y));
+      renderGlows(); return;
+    }
     if (dragK < 0){
-      const over = pickSprite(x, y) >= 0;
-      canvas.style.cursor = over ? 'grab' : (brushType >= 0 ? 'copy' : 'default');
+      const cursor = hitGlow(x, y) >= 0 ? 'move' : (pickSprite(x, y) >= 0 ? 'grab' : (brushType >= 0 ? 'copy' : 'default'));
+      canvas.style.cursor = cursor;
       return;
     }
     paintDrag(x, y);
   });
 
-  const end = () => { if (dragK < 0) return; dragK = -1; dragBG = null; canvas.style.cursor = brushType >= 0 ? 'copy' : 'default'; draw(); };
+  const end = () => {
+    if (dragGlow >= 0){ dragGlow = -1; canvas.style.cursor = 'default'; scheduleSave(); return; }
+    if (dragK < 0) return; dragK = -1; dragBG = null; canvas.style.cursor = brushType >= 0 ? 'copy' : 'default'; draw();
+  };
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
 
@@ -1255,6 +1300,91 @@ function updateLightsRun(){
   else { if (lightsRAF){ cancelAnimationFrame(lightsRAF); lightsRAF = 0; } lightsCtx && lightsCtx.clearRect(0, 0, lightsCanvas.width, lightsCanvas.height); }
 }
 
+/* ================= placeable glow lights =========================== */
+let glowDragOff = { x: 0, y: 0 };
+// colour temperature: 0 = cool blue-white, 0.5 = warm white, 1 = edison amber
+function glowTempColor(t){
+  t = Math.max(0, Math.min(1, t));
+  const cool = [190, 214, 255], white = [255, 248, 240], warm = [255, 168, 70];
+  const a = t < 0.5 ? cool : white, b = t < 0.5 ? white : warm, f = t < 0.5 ? t / 0.5 : (t - 0.5) / 0.5;
+  return [Math.round(a[0]+(b[0]-a[0])*f), Math.round(a[1]+(b[1]-a[1])*f), Math.round(a[2]+(b[2]-a[2])*f)];
+}
+// flat spotlight: a hard-edged (integer-scanline) ellipse filled uniformly, so
+// the border is pixelated and it just lifts the scene brightness (screen blend).
+function fillEllipseScanline(g, cx, cy, rx, ry, rot, px){
+  const cos = Math.cos(rot), sin = Math.sin(rot);
+  const hy = Math.sqrt(rx*rx*sin*sin + ry*ry*cos*cos);         // rotated y half-extent
+  const y0 = Math.max(0, Math.floor(cy - hy)), y1 = Math.min(px - 1, Math.ceil(cy + hy));
+  const A = (cos*cos)/(rx*rx) + (sin*sin)/(ry*ry);
+  for (let y = y0; y <= y1; y++){
+    const dy = y + 0.5 - cy;
+    const B = 2*dy*cos*sin*(1/(rx*rx) - 1/(ry*ry));
+    const C = dy*dy*((sin*sin)/(rx*rx) + (cos*cos)/(ry*ry));
+    const disc = B*B - 4*A*(C - 1);
+    if (disc < 0) continue;
+    const sq = Math.sqrt(disc), d1 = (-B - sq)/(2*A), d2 = (-B + sq)/(2*A);
+    let xs = Math.max(0, Math.round(cx + Math.min(d1, d2)));
+    let xe = Math.min(px - 1, Math.round(cx + Math.max(d1, d2)));
+    if (xe >= xs) g.fillRect(xs, y, xe - xs + 1, 1);
+  }
+}
+function renderGlows(){
+  const o = glowCanvas, g = glowCtx; if (!o) return;
+  const px = state.N * TILE; if (o.width !== px){ o.width = px; o.height = px; }
+  g.imageSmoothingEnabled = false;
+  g.clearRect(0, 0, px, px);
+  for (const gl of state.glows){
+    let col = glowTempColor(gl.temp);
+    const a = Math.min(1, gl.intensity);
+    if (gl.intensity > 1){ const w = Math.min(1, gl.intensity - 1);   // >1 whitens for extra lift
+      col = [Math.round(col[0]+(255-col[0])*w), Math.round(col[1]+(255-col[1])*w), Math.round(col[2]+(255-col[2])*w)]; }
+    g.fillStyle = `rgba(${col[0]},${col[1]},${col[2]},${a})`;
+    fillEllipseScanline(g, gl.x, gl.y, Math.max(1, gl.rx), Math.max(1, gl.ry), gl.rot || 0, px);
+  }
+  if (selGlow >= 0 && state.glows[selGlow]){           // dashed selection outline (editing only)
+    const gl = state.glows[selGlow];
+    g.save(); g.translate(gl.x, gl.y); g.rotate(gl.rot || 0);
+    g.strokeStyle = 'rgba(255,255,255,0.9)'; g.lineWidth = 1.5; g.setLineDash([6, 4]);
+    g.beginPath(); g.ellipse(0, 0, Math.max(1, gl.rx), Math.max(1, gl.ry), 0, 0, 6.2832); g.stroke();
+    g.restore();
+  }
+}
+function hitGlow(x, y){                                  // topmost glow whose ellipse contains the point
+  for (let i = state.glows.length - 1; i >= 0; i--){
+    const gl = state.glows[i], dx = x - gl.x, dy = y - gl.y;
+    const cos = Math.cos(gl.rot || 0), sin = Math.sin(gl.rot || 0);
+    const lx = dx * cos + dy * sin, ly = -dx * sin + dy * cos;
+    const rx = Math.max(1, gl.rx), ry = Math.max(1, gl.ry);
+    if ((lx*lx)/(rx*rx) + (ly*ly)/(ry*ry) <= 1) return i;
+  }
+  return -1;
+}
+function glowEditTarget(){ return (selGlow >= 0 && state.glows[selGlow]) ? state.glows[selGlow] : state.glowDefaults; }
+function syncGlowEditor(){
+  const g = glowEditTarget();
+  el('glRx').value = g.rx; el('glRxOut').textContent = Math.round(g.rx);
+  el('glRy').value = g.ry; el('glRyOut').textContent = Math.round(g.ry);
+  const deg = Math.round((g.rot || 0) * 180 / Math.PI);
+  el('glRot').value = deg; el('glRotOut').textContent = deg + '°';
+  el('glInt').value = g.intensity; el('glIntOut').textContent = g.intensity.toFixed(2);
+  el('glTemp').value = g.temp;
+  el('glCount').textContent = state.glows.length ? `· ${state.glows.length}${selGlow >= 0 ? ' (1 selected)' : ''}` : '';
+}
+function addGlow(){
+  const px = state.N * TILE, d = state.glowDefaults;
+  state.glows.push({ x: px/2, y: px/2, rx: d.rx, ry: d.ry, rot: d.rot, intensity: d.intensity, temp: d.temp });
+  selGlow = state.glows.length - 1;
+  syncGlowEditor(); renderGlows(); scheduleSave();
+}
+function deleteGlowAt(i){
+  if (i < 0 || i >= state.glows.length) return;
+  state.glows.splice(i, 1);
+  if (selGlow === i) selGlow = -1; else if (selGlow > i) selGlow--;
+  if (dragGlow === i) dragGlow = -1; else if (dragGlow > i) dragGlow--;
+  syncGlowEditor(); renderGlows(); scheduleSave();
+}
+function deleteSelectedGlow(){ if (selGlow >= 0) deleteGlowAt(selGlow); }
+
 function bindUI(){
   el('reroll').onclick = () => { state.seed = (Math.random()*1e9)|0; el('seed').value = state.seed; regen(); };
   el('seed').onchange = e => { state.seed = parseInt(e.target.value)||0; regen(); };
@@ -1332,6 +1462,15 @@ function bindUI(){
   el('lxJitter').oninput = e => { state.lightsCfg.jitter = +e.target.value; el('lxJitterOut').textContent = (+e.target.value).toFixed(2); scheduleSave(); };
   el('lxGlow').oninput = e => { state.lightsCfg.glow = +e.target.value; el('lxGlowOut').textContent = (+e.target.value).toFixed(2); scheduleSave(); };
   el('lxVibrant').onchange = e => { state.lightsCfg.vibrant = e.target.checked; renderLights(); scheduleSave(); };
+
+  // glow lights
+  el('glAdd').onclick = addGlow;
+  el('glDelete').onclick = deleteSelectedGlow;
+  el('glRx').oninput = e => { glowEditTarget().rx = +e.target.value; el('glRxOut').textContent = e.target.value; renderGlows(); scheduleSave(); };
+  el('glRy').oninput = e => { glowEditTarget().ry = +e.target.value; el('glRyOut').textContent = e.target.value; renderGlows(); scheduleSave(); };
+  el('glRot').oninput = e => { glowEditTarget().rot = (+e.target.value) * Math.PI / 180; el('glRotOut').textContent = e.target.value + '°'; renderGlows(); scheduleSave(); };
+  el('glInt').oninput = e => { glowEditTarget().intensity = +e.target.value; el('glIntOut').textContent = (+e.target.value).toFixed(2); renderGlows(); scheduleSave(); };
+  el('glTemp').oninput = e => { glowEditTarget().temp = +e.target.value; renderGlows(); scheduleSave(); };
   // drag & drop image files anywhere on the tool
   const dz = document.getElementById('app');
   dz.addEventListener('dragover', e => { e.preventDefault(); dz.classList.add('drag'); });
@@ -1372,6 +1511,7 @@ async function init(){
   overlay = el('caustics'); octx = overlay.getContext('2d');
   cxBuf = document.createElement('canvas'); cxBufCtx = cxBuf.getContext('2d', { willReadFrequently: true });
   lightsCanvas = el('lights'); lightsCtx = lightsCanvas.getContext('2d');
+  glowCanvas = el('glow'); glowCtx = glowCanvas.getContext('2d');
 
   // decode every embedded png into an <img> once
   const jobs = [];

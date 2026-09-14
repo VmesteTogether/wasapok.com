@@ -15,6 +15,7 @@
         <canvas id="chunk"></canvas>
         <canvas id="caustics" hidden></canvas>
         <canvas id="lights"></canvas>
+        <canvas id="glow"></canvas>
       </div>
     </div>
     <div id="hud">
@@ -138,6 +139,40 @@
       <div id="brushStatus" class="brushbar" hidden></div>
       <div id="spriteList"></div>
       <p class="hint">Sliders scatter sprites randomly (clear of walls). For exact control: <b>drag</b> a sprite to move it, <b>right-click</b> (or select + <b>Delete</b>) to remove one, and hit <b>place</b> on a row then <b>click the map</b> to add that type anywhere — even types set to 0. Editing turns on “Keep on reroll” so your arrangement sticks; Export PNG saves it.</p>
+    </section>
+
+    <section>
+      <h2>Glow lights <small id="glCount"></small></h2>
+      <div class="row">
+        <button id="glAdd" class="primary" style="flex:1">＋ Add glow</button>
+        <button id="glDelete" title="delete the selected glow">delete</button>
+      </div>
+      <p class="hint">Click a glow on the map to select/move it; right-click deletes one. The sliders below shape the selected glow (or the next one you add).</p>
+      <div class="row">
+        <label>Size X</label>
+        <input type="range" id="glRx" min="8" max="480" step="2" value="70">
+        <output id="glRxOut">70</output>
+      </div>
+      <div class="row">
+        <label>Size Y</label>
+        <input type="range" id="glRy" min="8" max="480" step="2" value="70">
+        <output id="glRyOut">70</output>
+      </div>
+      <div class="row">
+        <label>Rotation</label>
+        <input type="range" id="glRot" min="0" max="180" step="1" value="0">
+        <output id="glRotOut">0°</output>
+      </div>
+      <div class="row">
+        <label>Intensity</label>
+        <input type="range" id="glInt" min="0" max="2" step="0.05" value="1">
+        <output id="glIntOut">1.00</output>
+      </div>
+      <div class="row">
+        <label>Colour</label>
+        <input type="range" id="glTemp" min="0" max="1" step="0.02" value="0.5">
+        <span class="hint" style="margin:0">cool ↔ warm</span>
+      </div>
     </section>
 
     <section>
