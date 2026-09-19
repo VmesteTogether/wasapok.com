@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>neorbeo</title>
+
+<!-- Installable web-app: Safari -> Share -> Add to Home Screen. Launched from the
+     Home Screen (standalone) it fills the device edge-to-edge; iOS supplies the real
+     status bar over the cobalt field. black-translucent keeps the status glyphs white
+     so they stay legible on the #2243ee drafting-blue field. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="neorbeo">
+<meta name="theme-color" content="#2243ee">
+<meta name="description" content="Encircle empty space; a low-poly chrome solid is drawn out of the loop. The truer the circle, the truer the sphere.">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+
+<style>
+  :root{
+    --field:#2243ee;              /* sampled straight from the reference video */
+    --yellow:#ffe000;             /* utility accent, reserved for the trinket cube */
+    --hair:rgba(233,240,255,.72); /* pale drafting hairline */
+    --ink:rgba(233,240,255,.55);  /* faint monospace HUD text */
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    height:100%; width:100%;
+    background:var(--field);
+    overflow:hidden;
+    overscroll-behavior:none;
+    touch-action:none;                       /* we own every gesture */
+    -webkit-user-select:none; user-select:none;
+    font-family:ui-monospace,"SF Mono",Menlo,"Cascadia Mono","Roboto Mono",monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* the WebGL field (chrome solid, dust, cube) */
+  #gl{ position:fixed; inset:0; display:block; }
+  /* the crisp 2D lasso line rides above the 3D so the drawn stroke stays razor sharp */
+  #ink{ position:fixed; inset:0; display:block; pointer-events:none; }
+
+  /* nearly-bare HUD ------------------------------------------------------ */
+  .hud{ position:fixed; z-index:3; color:var(--ink);
+        font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+        pointer-events:none; }
+  #mark{ top:calc(env(safe-area-inset-top,0px) + 16px); left:16px;
+         letter-spacing:.32em; color:var(--hair); opacity:.5; }
+  #hint{ left:0; right:0; text-align:center;
+         bottom:calc(env(safe-area-inset-bottom,0px) + 26px);
+         transition:opacity .6s ease; }
+  #hint.gone{ opacity:0; }
+  #read{ right:16px; top:calc(env(safe-area-inset-top,0px) + 16px);
+         text-align:right; opacity:0; transition:opacity .5s ease; line-height:1.5em; }
+  #read.show{ opacity:.6; }
+
+  /* faint boot flash so the field never appears as a dead blue rectangle */
+  #boot{ position:fixed; inset:0; z-index:4; background:var(--field);
+         display:flex; align-items:center; justify-content:center;
+         color:var(--hair); font-size:11px; letter-spacing:.34em;
+         transition:opacity .8s ease; }
+  #boot.gone{ opacity:0; pointer-events:none; }
+</style>
+</head>
+<body>
+  <canvas id="gl"></canvas>
+  <canvas id="ink"></canvas>
+
+  <div id="mark" class="hud">NEORBEO</div>
+  <div id="read" class="hud"></div>
+  <div id="hint" class="hud">draw a loop</div>
+  <div id="boot">NEORBEO</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module" src="neorbeo.js"></script>
+</body>
+</html>

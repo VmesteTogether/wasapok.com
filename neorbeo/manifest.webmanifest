@@ -1,0 +1,12 @@
+{
+  "name": "neorbeo",
+  "short_name": "neorbeo",
+  "description": "Encircle empty space; a low-poly chrome solid is drawn out of the loop.",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#2243ee",
+  "theme_color": "#2243ee",
+  "icons": [
+    { "src": "apple-touch-icon.png", "sizes": "180x180", "type": "image/png", "purpose": "any" }
+  ]
+}
