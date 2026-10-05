@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>neorbeo</title>
+
+<!-- Installable web-app: Safari -> Share -> Add to Home Screen. On desktop the app
+     renders inside a simulated phone (the #phone body + #device screen); on an actual
+     phone or once installed (standalone / narrow viewport) the mock is shed and the
+     screen fills the display edge-to-edge. black-translucent keeps the real iOS status
+     glyphs white/legible over the #2243ee field. -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="neorbeo">
+<meta name="theme-color" content="#2243ee">
+<meta name="description" content="Encircle empty space; a low-poly chrome solid is drawn out of the loop. The truer the circle, the truer the sphere.">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="apple-touch-icon.png">
+<link rel="manifest" href="manifest.webmanifest">
+
+<style>
+  :root{
+    --field:#2243ee;              /* sampled straight from the reference video */
+    --yellow:#ffe000;             /* utility accent, reserved for the trinket cube */
+    --hair:rgba(233,240,255,.72); /* pale drafting hairline */
+    --ink:rgba(233,240,255,.55);  /* faint monospace HUD text */
+  }
+  *{ margin:0; padding:0; box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body{
+    height:100%; width:100%;
+    overflow:hidden; overscroll-behavior:none;
+    touch-action:none;                       /* we own every gesture */
+    -webkit-user-select:none; user-select:none;
+    font-family:ui-monospace,"SF Mono",Menlo,"Cascadia Mono","Roboto Mono",monospace;
+    -webkit-font-smoothing:antialiased;
+  }
+  /* desktop: a dark "desk" the phone sits on */
+  body{
+    display:flex; align-items:center; justify-content:center; min-height:100vh;
+    min-height:100svh;
+    background:radial-gradient(130% 110% at 50% -10%, #141a35 0%, #0a0d1c 55%, #05060e 100%);
+  }
+
+  /* the phone body (bezel) */
+  #phone{
+    position:relative; padding:14px; border-radius:60px;
+    background:linear-gradient(#12142400, #0a0b13);
+    background-color:#0c0e18;
+    box-shadow:
+      0 50px 130px rgba(0,0,0,.60),
+      0 8px 26px rgba(0,0,0,.55),
+      inset 0 0 0 1.5px #2a2e46;
+  }
+  /* the phone screen — the WebGL field is clipped to this rounded rect */
+  #device{
+    position:relative; overflow:hidden;
+    height:min(860px, calc(100vh - 46px));
+    height:min(860px, calc(100svh - 46px));
+    aspect-ratio:402 / 874;
+    border-radius:46px;
+    background:var(--field);
+  }
+  #gl, #ink{ position:absolute; inset:0; width:100%; height:100%; display:block; }
+  #ink{ pointer-events:none; }   /* the crisp 2D lasso rides above the 3D */
+
+  /* nearly-bare HUD, pinned inside the screen -------------------------------- */
+  .hud{ position:absolute; z-index:3; color:var(--ink);
+        font-size:11px; letter-spacing:.14em; text-transform:uppercase;
+        pointer-events:none; }
+  #hint{ left:0; right:0; text-align:center;
+         bottom:calc(env(safe-area-inset-bottom,0px) + 26px);
+         transition:opacity .6s ease; }
+  #hint.gone{ opacity:0; }
+  #read{ right:16px; top:calc(env(safe-area-inset-top,0px) + 16px);
+         text-align:right; opacity:0; transition:opacity .5s ease; line-height:1.5em; }
+  #read.show{ opacity:.6; }
+
+  /* faint boot flash so the field never appears as a dead blue rectangle */
+  #boot{ position:absolute; inset:0; z-index:4; background:var(--field);
+         display:flex; align-items:center; justify-content:center;
+         color:var(--hair); font-size:11px; letter-spacing:.34em;
+         transition:opacity .8s ease; }
+  #boot.gone{ opacity:0; pointer-events:none; }
+
+  /* faux home-indicator — desktop mock only */
+  #indicator{ position:absolute; z-index:5; left:50%; bottom:9px;
+              transform:translateX(-50%); width:36%; height:5px; border-radius:3px;
+              background:rgba(233,240,255,.5); pointer-events:none; }
+
+  /* real phone or installed app: shed the mock, fill the display ------------- */
+  @media (max-width:640px){
+    body{ display:block; background:var(--field); }
+    #phone{ padding:0; border-radius:0; background:none; box-shadow:none; }
+    #device{ height:100vh; height:100svh; width:100vw; aspect-ratio:auto; border-radius:0; }
+    #indicator{ display:none; }
+  }
+  body.standalone{ display:block; background:var(--field); }
+  body.standalone #phone{ padding:0; border-radius:0; background:none; box-shadow:none; }
+  body.standalone #device{ height:100vh; height:100svh; width:100vw; aspect-ratio:auto; border-radius:0; }
+  body.standalone #indicator{ display:none; }
+</style>
+</head>
+<body>
+  <div id="phone">
+    <div id="device">
+      <canvas id="gl"></canvas>
+      <canvas id="ink"></canvas>
+      <div id="read" class="hud"></div>
+      <div id="hint" class="hud">draw a loop</div>
+      <div id="boot">NEORBEO</div>
+      <div id="indicator"></div>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/",
+      "cannon-es": "https://unpkg.com/cannon-es@0.20.0/dist/cannon-es.js"
+    }
+  }
+  </script>
+  <script type="module" src="neorbeo.js"></script>
+</body>
+</html>
