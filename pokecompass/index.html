@@ -181,13 +181,14 @@ body{
 
 /* ---------- right: model screen ---------- */
 .screen{
-  position:relative;aspect-ratio:1/1.05;border-radius:20px;
+  position:relative;aspect-ratio:1/1.34;border-radius:20px;
   background:
      radial-gradient(120% 90% at 50% 18%, #eafff9 0%, #bfeee4 46%, #8fd3c6 100%);
   box-shadow:0 8px 16px rgba(30,70,64,.3),
              inset 0 3px 5px rgba(255,255,255,.85), inset 0 -8px 16px rgba(40,110,100,.4),
              inset 0 0 0 3px rgba(255,255,255,.4);
-  overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  overflow:hidden;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;
+  padding-bottom:18%;
   transition:transform .08s;
 }
 .screen:active{transform:scale(.97);}
