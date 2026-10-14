@@ -120,18 +120,18 @@ body{
 .list-col{position:relative;width:56%;height:100%;}
 .right-col{position:relative;width:44%;height:100%;padding:0 14px 0 2px;
   display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:14px;
-  transform:translateY(-8%);}
+  transform:translateY(5%);}
 
 /* ---------- scrolling capsule list ---------- */
 .scroller{
   position:absolute;inset:0;overflow-y:scroll;overflow-x:hidden;
   scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
-  scroll-padding:0 0 16% 0;
+  scroll-padding:10% 0 0 0;
   padding:0 6px env(safe-area-inset-bottom) 16px;scrollbar-width:none;
 }
 .scroller::-webkit-scrollbar{display:none;}
-.spacer.top{height:calc(42% - 26px);}
-.spacer.bot{height:calc(58% - 26px);}
+.spacer.top{height:calc(55% - 26px);}
+.spacer.bot{height:calc(45% - 26px);}
 .cap{
   scroll-snap-align:center;
   position:relative;height:38px;margin:4px 0;border-radius:19px;
@@ -167,7 +167,7 @@ body{
 
 /* ---------- glass lens over the selected slot ---------- */
 .glass{
-  position:absolute;left:8px;right:4px;top:42%;height:74px;transform:translateY(-50%);
+  position:absolute;left:8px;right:4px;top:55%;height:74px;transform:translateY(-50%);
   z-index:20;pointer-events:none;border-radius:22px;
   background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.12) 34%, rgba(255,255,255,.04) 60%, rgba(255,255,255,.22) 100%);
   border:1px solid rgba(255,255,255,.65);
@@ -312,7 +312,7 @@ let ticking=false;
 function onScroll(){
   if(ticking)return;ticking=true;
   requestAnimationFrame(()=>{
-    const mid=scroller.scrollTop+scroller.clientHeight*0.42;
+    const mid=scroller.scrollTop+scroller.clientHeight*0.55;
     // each cap ~46px tall incl margins; find nearest by measuring
     let best=0,bd=1e9;
     for(let k=0;k<capEls.length;k++){
