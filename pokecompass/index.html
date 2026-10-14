@@ -57,10 +57,10 @@ body{
 }
 @media (max-width:460px){
   html,body{background:var(--bg);}
-  /* size to the SMALL viewport so content never hides under Safari's bottom toolbar;
-     in an installed PWA (no toolbar) 100svh == full screen */
+  /* dynamic viewport: fills the whole screen as an installed app,
+     and tracks Safari's toolbar in-browser so content never hides under it */
   .phone{position:fixed;top:0;left:0;right:0;width:auto;
-    height:100vh;height:100svh;border-radius:0;box-shadow:none;}
+    height:100vh;height:100dvh;border-radius:0;box-shadow:none;}
 }
 /* soft paper grain over everything */
 .phone::after{
