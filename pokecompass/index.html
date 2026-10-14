@@ -57,7 +57,10 @@ body{
 }
 @media (max-width:460px){
   html,body{background:var(--bg);}
-  .phone{position:fixed;inset:0;width:auto;height:auto;border-radius:0;box-shadow:none;}
+  /* size to the SMALL viewport so content never hides under Safari's bottom toolbar;
+     in an installed PWA (no toolbar) 100svh == full screen */
+  .phone{position:fixed;top:0;left:0;right:0;width:auto;
+    height:100vh;height:100svh;border-radius:0;box-shadow:none;}
 }
 /* soft paper grain over everything */
 .phone::after{
@@ -106,14 +109,14 @@ body{
   position:absolute;top:calc(18px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));z-index:30;
   width:46px;height:46px;border:0;border-radius:15px;cursor:pointer;
   font-family:inherit;color:#fff;font-size:30px;font-weight:600;line-height:1;
-  background:radial-gradient(circle at 36% 30%, #ff6b5e 0%, var(--poke-red) 55%, var(--poke-red-deep) 100%);
-  box-shadow:0 7px 0 var(--poke-red-deep), 0 10px 16px rgba(120,20,10,.4),
-             inset 0 2px 3px rgba(255,255,255,.55);
+  background:radial-gradient(circle at 36% 30%, #ddd2f5 0%, #ab90d8 55%, #8a6fc2 100%);
+  box-shadow:0 7px 0 #7a5fb0, 0 10px 16px rgba(80,50,130,.4),
+             inset 0 2px 3px rgba(255,255,255,.6);
   display:flex;align-items:center;justify-content:center;
   transition:transform .08s, box-shadow .08s;
 }
-.plus span{margin-top:-3px;text-shadow:0 1px 1px rgba(120,20,10,.6);}
-.plus:active{transform:translateY(5px);box-shadow:0 2px 0 var(--poke-red-deep),0 4px 8px rgba(120,20,10,.4),inset 0 2px 3px rgba(255,255,255,.5);}
+.plus span{margin-top:-3px;text-shadow:0 1px 1px rgba(70,45,120,.6);}
+.plus:active{transform:translateY(5px);box-shadow:0 2px 0 #7a5fb0,0 4px 8px rgba(80,50,130,.4),inset 0 2px 3px rgba(255,255,255,.5);}
 
 /* ---------- main layout ---------- */
 .stage{position:absolute;inset:0;display:flex;z-index:10;}
@@ -145,15 +148,13 @@ body{
 .cap .num{
   font-family:'Jost',sans-serif;font-weight:700;font-size:11px;letter-spacing:.3px;
   min-width:34px;height:26px;border-radius:13px;display:flex;align-items:center;justify-content:center;
-  color:#fff;background:linear-gradient(var(--lavender),#a99cd6);
-  box-shadow:inset 0 2px 2px rgba(255,255,255,.5), inset 0 -2px 3px rgba(90,70,140,.5),0 1px 1px rgba(0,0,0,.12);
-  text-shadow:0 1px 1px rgba(80,60,130,.5);
+  color:#fff;overflow:hidden;
+  box-shadow:inset 0 2px 2px rgba(255,255,255,.4), inset 0 -2px 3px rgba(0,0,0,.3),0 1px 1px rgba(0,0,0,.16);
+  text-shadow:0 1px 1px rgba(0,0,0,.55);
 }
 .cap .nm{font-weight:600;font-size:15px;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
   text-shadow:0 1px 0 rgba(255,255,255,.6);}
-/* alternate capsule tints for packed liveliness */
-.cap:nth-child(3n) .num{background:linear-gradient(var(--marigold),#e0ab3f);box-shadow:inset 0 2px 2px rgba(255,255,255,.55),inset 0 -2px 3px rgba(150,110,30,.5),0 1px 1px rgba(0,0,0,.12);}
-.cap:nth-child(3n+1) .num{background:linear-gradient(var(--orange),var(--orange-deep));box-shadow:inset 0 2px 2px rgba(255,255,255,.5),inset 0 -2px 3px rgba(170,90,40,.5),0 1px 1px rgba(0,0,0,.12);}
+/* number badges are colored per Pokémon typing (set inline in JS) */
 
 /* selected capsule: floats with space around it (honored), under the glass */
 .cap.sel{
@@ -268,6 +269,9 @@ body{
 <script>
 const NAMES=["Bulbasaur","Ivysaur","Venusaur","Charmander","Charmeleon","Charizard","Squirtle","Wartortle","Blastoise","Caterpie","Metapod","Butterfree","Weedle","Kakuna","Beedrill","Pidgey","Pidgeotto","Pidgeot","Rattata","Raticate","Spearow","Fearow","Ekans","Arbok","Pikachu","Raichu","Sandshrew","Sandslash","Nidoran♀","Nidorina","Nidoqueen","Nidoran♂","Nidorino","Nidoking","Clefairy","Clefable","Vulpix","Ninetales","Jigglypuff","Wigglytuff","Zubat","Golbat","Oddish","Gloom","Vileplume","Paras","Parasect","Venonat","Venomoth","Diglett","Dugtrio","Meowth","Persian","Psyduck","Golduck","Mankey","Primeape","Growlithe","Arcanine","Poliwag","Poliwhirl","Poliwrath","Abra","Kadabra","Alakazam","Machop","Machoke","Machamp","Bellsprout","Weepinbell","Victreebel","Tentacool","Tentacruel","Geodude","Graveler","Golem","Ponyta","Rapidash","Slowpoke","Slowbro","Magnemite","Magneton","Farfetch'd","Doduo","Dodrio","Seel","Dewgong","Grimer","Muk","Shellder","Cloyster","Gastly","Haunter","Gengar","Onix","Drowzee","Hypno","Krabby","Kingler","Voltorb","Electrode","Exeggcute","Exeggutor","Cubone","Marowak","Hitmonlee","Hitmonchan","Lickitung","Koffing","Weezing","Rhyhorn","Rhydon","Chansey","Tangela","Kangaskhan","Horsea","Seadra","Goldeen","Seaking","Staryu","Starmie","Mr. Mime","Scyther","Jynx","Electabuzz","Magmar","Pinsir","Tauros","Magikarp","Gyarados","Lapras","Ditto","Eevee","Vaporeon","Jolteon","Flareon","Porygon","Omanyte","Omastar","Kabuto","Kabutops","Aerodactyl","Snorlax","Articuno","Zapdos","Moltres","Dratini","Dragonair","Dragonite","Mewtwo","Mew"];
 
+const TYPES=["Grass,Poison","Grass,Poison","Grass,Poison","Fire","Fire","Fire,Flying","Water","Water","Water","Bug","Bug","Bug,Flying","Bug,Poison","Bug,Poison","Bug,Poison","Normal,Flying","Normal,Flying","Normal,Flying","Normal","Normal","Normal,Flying","Normal,Flying","Poison","Poison","Electric","Electric","Ground","Ground","Poison","Poison","Poison,Ground","Poison","Poison","Poison,Ground","Fairy","Fairy","Fire","Fire","Normal,Fairy","Normal,Fairy","Poison,Flying","Poison,Flying","Grass,Poison","Grass,Poison","Grass,Poison","Bug,Grass","Bug,Grass","Bug,Poison","Bug,Poison","Ground","Ground","Normal","Normal","Water","Water","Fighting","Fighting","Fire","Fire","Water","Water","Water,Fighting","Psychic","Psychic","Psychic","Fighting","Fighting","Fighting","Grass,Poison","Grass,Poison","Grass,Poison","Water,Poison","Water,Poison","Rock,Ground","Rock,Ground","Rock,Ground","Fire","Fire","Water,Psychic","Water,Psychic","Electric,Steel","Electric,Steel","Normal,Flying","Normal,Flying","Normal,Flying","Water","Water,Ice","Poison","Poison","Water","Water,Ice","Ghost,Poison","Ghost,Poison","Ghost,Poison","Rock,Ground","Psychic","Psychic","Water","Water","Electric","Electric","Grass,Psychic","Grass,Psychic","Ground","Ground","Fighting","Fighting","Normal","Poison","Poison","Ground,Rock","Ground,Rock","Normal","Grass","Normal","Water","Water","Water","Water","Water","Water,Psychic","Psychic,Fairy","Bug,Flying","Ice,Psychic","Electric","Fire","Bug","Normal","Water","Water,Flying","Water,Ice","Normal","Normal","Water","Electric","Fire","Normal","Rock,Water","Rock,Water","Rock,Water","Rock,Water","Rock,Flying","Normal","Ice,Flying","Electric,Flying","Fire,Flying","Dragon","Dragon","Dragon,Flying","Psychic","Psychic"];
+const TCOL={Normal:"#a0a083",Fire:"#f05438",Water:"#5c92e8",Electric:"#f2cb3b",Grass:"#6cc24a",Ice:"#86d0d8",Fighting:"#c53a2e",Poison:"#a24ba6",Ground:"#e0c26a",Flying:"#9fb0f2",Psychic:"#f55f8d",Bug:"#a7b821",Rock:"#b8a54a",Ghost:"#6e5896",Dragon:"#6f45ec",Dark:"#5f5248",Steel:"#a1a9bd",Fairy:"#f09bb6"};
+
 const S="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/";
 // sprite variation cycle: label, url(id), pixelated?
 const VARS=[
@@ -282,10 +286,18 @@ const VARS=[
 
 const caps=document.getElementById('caps');
 const pad=n=>String(n).padStart(3,'0');
+function numBg(i){
+  const ts=TYPES[i].split(',');
+  const c1=TCOL[ts[0]]||'#a0a083';
+  if(ts.length<2) return c1;
+  const c2=TCOL[ts[1]]||c1;
+  // left = type1, right = type2, with a diagonal "/" slash (top-right -> bottom-left)
+  return `linear-gradient(135deg, ${c1} 0 46%, rgba(255,255,255,.88) 46% 54%, ${c2} 54% 100%)`;
+}
 NAMES.forEach((nm,i)=>{
   const d=document.createElement('div');
   d.className='cap';d.dataset.i=i;
-  d.innerHTML=`<span class="num">#${pad(i+1)}</span><span class="nm">${nm}</span>`;
+  d.innerHTML=`<span class="num" style="background:${numBg(i)}">#${pad(i+1)}</span><span class="nm">${nm}</span>`;
   caps.appendChild(d);
 });
 
