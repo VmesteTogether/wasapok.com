@@ -157,8 +157,8 @@ body{
 
 /* selected capsule: floats with space around it (honored), under the glass */
 .cap.sel{
-  transform:scale(1.14);
-  margin:16px 0;
+  transform:scale(1.05);
+  margin:28px 0;
   background:linear-gradient(#ffffff,#f6ecd2);
   box-shadow:0 6px 14px rgba(70,55,20,.3), inset 0 2px 3px rgba(255,255,255,.9);
   z-index:2;
@@ -167,28 +167,36 @@ body{
 
 /* ---------- glass lens over the selected slot ---------- */
 .glass{
-  position:absolute;left:8px;right:4px;top:55%;height:74px;transform:translateY(-50%);
-  z-index:20;pointer-events:none;border-radius:22px;
-  background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.12) 34%, rgba(255,255,255,.04) 60%, rgba(255,255,255,.22) 100%);
-  border:1px solid rgba(255,255,255,.65);
-  box-shadow:0 10px 22px rgba(30,70,64,.28), inset 0 1px 2px rgba(255,255,255,.9),
-             inset 0 -10px 18px rgba(255,255,255,.25), 0 1px 0 rgba(255,255,255,.4);
+  position:absolute;left:6px;right:2px;top:55%;height:92px;transform:translateY(-50%);
+  z-index:20;pointer-events:none;border-radius:28px;
+  background:linear-gradient(180deg, rgba(255,255,255,.6) 0%, rgba(255,255,255,.14) 28%, rgba(255,255,255,.05) 56%, rgba(255,255,255,.32) 100%);
+  border:2px solid rgba(255,255,255,.78);
+  box-shadow:
+     0 16px 30px rgba(30,70,64,.3),
+     inset 0 2px 3px rgba(255,255,255,.98),
+     inset 0 -16px 24px rgba(255,255,255,.32),
+     inset 0 0 0 1px rgba(175,222,214,.4),
+     0 2px 1px rgba(255,255,255,.55);
 }
-.glass::before{content:"";position:absolute;left:9px;right:30%;top:7px;height:20px;border-radius:14px;
-  background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.1) 80%, rgba(255,255,255,0));filter:blur(.2px);}
-.glass::after{content:"";position:absolute;left:0;right:0;top:0;bottom:0;border-radius:inherit;
-  box-shadow:inset 0 0 0 2px rgba(120,190,180,.25);}
+/* bright specular streak across the top of the glass */
+.glass::before{content:"";position:absolute;left:11px;right:30%;top:9px;height:24px;border-radius:16px;
+  background:linear-gradient(180deg, rgba(255,255,255,1), rgba(255,255,255,.12) 78%, rgba(255,255,255,0));filter:blur(.2px);}
+/* inner bevel so the slab reads as thick glass */
+.glass::after{content:"";position:absolute;inset:6px;border-radius:22px;
+  box-shadow:
+     inset 0 0 0 2px rgba(255,255,255,.38),
+     inset 0 4px 7px rgba(130,195,185,.22),
+     inset 0 -5px 9px rgba(255,255,255,.3);}
 
 /* ---------- right: model screen ---------- */
 .screen{
-  position:relative;aspect-ratio:1/1.34;border-radius:20px;
+  position:relative;aspect-ratio:1/1;border-radius:20px;
   background:
      radial-gradient(120% 90% at 50% 18%, #eafff9 0%, #bfeee4 46%, #8fd3c6 100%);
   box-shadow:0 8px 16px rgba(30,70,64,.3),
              inset 0 3px 5px rgba(255,255,255,.85), inset 0 -8px 16px rgba(40,110,100,.4),
              inset 0 0 0 3px rgba(255,255,255,.4);
-  overflow:hidden;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;
-  padding-bottom:18%;
+  overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;
   transition:transform .08s;
 }
 .screen:active{transform:scale(.97);}
