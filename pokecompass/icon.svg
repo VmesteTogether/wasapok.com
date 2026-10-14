@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="180" height="180" viewBox="0 0 180 180">
+<defs>
+  <radialGradient id="bg" cx="34%" cy="28%" r="90%">
+    <stop offset="0%" stop-color="#a8e0d6"/><stop offset="55%" stop-color="#8ed4c8"/><stop offset="100%" stop-color="#5fa89c"/>
+  </radialGradient>
+  <radialGradient id="gear" cx="38%" cy="34%" r="80%">
+    <stop offset="0%" stop-color="#ffd4ac"/><stop offset="48%" stop-color="#f4b183"/><stop offset="100%" stop-color="#e58f55"/>
+  </radialGradient>
+  <radialGradient id="hub" cx="40%" cy="36%" r="80%">
+    <stop offset="0%" stop-color="#bfe9e0"/><stop offset="55%" stop-color="#4f9f93"/><stop offset="100%" stop-color="#3b7d73"/>
+  </radialGradient>
+  <filter id="emb" x="-20%" y="-20%" width="140%" height="140%">
+    <feDropShadow dx="0" dy="3" stdDeviation="3" flood-color="#2d5a52" flood-opacity="0.35"/>
+  </filter>
+</defs>
+<rect width="180" height="180" rx="40" fill="url(#bg)"/>
+<!-- gear disc -->
+<g filter="url(#emb)">
+  <circle cx="90" cy="90" r="60" fill="url(#gear)"/>
+</g>
+<!-- embossed spokes -->
+<g stroke="#c9763f" stroke-width="2" opacity="0.35">
+  <line x1="90" y1="34" x2="90" y2="146"/>
+  <line x1="34" y1="90" x2="146" y2="90"/>
+  <line x1="50" y1="50" x2="130" y2="130"/>
+  <line x1="130" y1="50" x2="50" y2="130"/>
+</g>
+<circle cx="90" cy="90" r="60" fill="none" stroke="#fff" stroke-opacity="0.35" stroke-width="2"/>
+<circle cx="90" cy="90" r="53" fill="none" stroke="#b86a34" stroke-opacity="0.3" stroke-width="2"/>
+<!-- pokeball hub (teal, embossed, non-canonical) -->
+<g filter="url(#emb)">
+  <circle cx="90" cy="90" r="30" fill="url(#hub)"/>
+</g>
+<rect x="60" y="87" width="60" height="6" fill="#20534b"/>
+<circle cx="90" cy="90" r="10" fill="#eafaf6" stroke="#20534b" stroke-width="4"/>
+<circle cx="86" cy="86" r="3" fill="#ffffff" opacity="0.9"/>
+</svg>

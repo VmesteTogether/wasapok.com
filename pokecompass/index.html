@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="PokéCompass">
+<meta name="theme-color" content="#8ed4c8">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="manifest" href="manifest.webmanifest">
+<title>PokéCompass</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600;700&family=Jost:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  /* base pastels */
+  --teal:#8ed4c8;
+  --teal-deep:#4f9f93;
+  --teal-dark:#3b7d73;
+  --orange:#f4b183;
+  --orange-deep:#e58f55;
+  --lavender:#c7bce9;
+  --marigold:#f3c969;
+  --daffodil:#fdedb0;
+  --cream:#fbf6e9;
+  --ink:#2f4a45;
+  --poke-red:#e23b2e;
+  --poke-red-deep:#b5261c;
+  /* theming: app background is TEAL, so the gear + emblem go complementary ORANGE */
+  --bg:var(--teal);
+  --bg-hi:#a8e0d6;
+  --bg-lo:#6cb6ab;
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+html,body{margin:0;height:100%;}
+body{
+  font-family:'Fredoka',system-ui,sans-serif;
+  background:#2a3b38;
+  display:flex;align-items:center;justify-content:center;
+  min-height:100dvh;overflow:hidden;
+}
+/* ---------- device shell ---------- */
+.phone{
+  position:relative;
+  width:min(100vw,402px);
+  height:min(100dvh,872px);
+  overflow:hidden;
+  background:
+    radial-gradient(130% 90% at 18% 6%, var(--bg-hi) 0%, var(--bg) 42%, var(--bg-lo) 100%);
+  border-radius:38px;
+  box-shadow:0 30px 70px rgba(0,0,0,.55), inset 0 2px 3px rgba(255,255,255,.5);
+  isolation:isolate;
+  user-select:none;
+}
+@media (max-width:420px){ .phone{border-radius:0;height:100dvh;} }
+/* soft paper grain over everything */
+.phone::after{
+  content:"";position:absolute;inset:0;pointer-events:none;z-index:40;
+  background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.5'/%3E%3C/svg%3E");
+  opacity:.045;border-radius:inherit;
+}
+
+/* ---------- top-left rotating gear ---------- */
+.gear-wrap{
+  position:absolute;left:-118px;top:-118px;width:300px;height:300px;z-index:15;
+  pointer-events:none;
+}
+.gear{
+  position:absolute;inset:0;border-radius:50%;
+  background:
+    radial-gradient(circle at 38% 34%, #ffd4ac 0%, var(--orange) 46%, var(--orange-deep) 100%);
+  box-shadow:
+    0 10px 24px rgba(60,40,20,.33),
+    inset 0 6px 10px rgba(255,255,255,.55),
+    inset 0 -14px 22px rgba(150,80,30,.38);
+}
+/* embossed radial spokes */
+.gear .spokes{position:absolute;inset:16px;border-radius:50%;
+  background:repeating-conic-gradient(from 0deg,
+     rgba(255,255,255,.22) 0deg 5deg,
+     rgba(150,80,30,.18) 5deg 10deg);
+  -webkit-mask:radial-gradient(circle, transparent 30%, #000 31% 92%, transparent 93%);
+          mask:radial-gradient(circle, transparent 30%, #000 31% 92%, transparent 93%);
+  opacity:.5;
+}
+.gear .ring{position:absolute;inset:10px;border-radius:50%;
+  box-shadow:inset 0 0 0 4px rgba(255,255,255,.18), inset 0 0 0 7px rgba(140,74,28,.22);}
+/* embossed pokeball hub (complementary teal, not poke-colored) */
+.hub{position:absolute;left:50%;top:50%;width:92px;height:92px;transform:translate(-50%,-50%);
+  border-radius:50%;
+  background:radial-gradient(circle at 40% 36%, #bfe9e0 0%, var(--teal-deep) 55%, var(--teal-dark) 100%);
+  box-shadow:0 4px 8px rgba(30,60,55,.4), inset 0 3px 5px rgba(255,255,255,.5), inset 0 -6px 10px rgba(20,60,55,.5);
+  overflow:hidden;}
+.hub::before{content:"";position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;
+  background:linear-gradient(var(--teal-dark),#20534b);box-shadow:0 1px 1px rgba(255,255,255,.25);}
+.hub::after{content:"";position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);
+  border-radius:50%;background:radial-gradient(circle at 40% 36%,#eafaf6,#9fd6cc 60%,var(--teal-dark));
+  box-shadow:0 0 0 5px rgba(20,60,55,.55), inset 0 2px 3px rgba(255,255,255,.7), inset 0 -3px 4px rgba(20,60,55,.5);}
+
+/* ---------- top bar ---------- */
+.plus{
+  position:absolute;top:18px;right:16px;z-index:30;
+  width:46px;height:46px;border:0;border-radius:15px;cursor:pointer;
+  font-family:inherit;color:#fff;font-size:30px;font-weight:600;line-height:1;
+  background:radial-gradient(circle at 36% 30%, #ff6b5e 0%, var(--poke-red) 55%, var(--poke-red-deep) 100%);
+  box-shadow:0 7px 0 var(--poke-red-deep), 0 10px 16px rgba(120,20,10,.4),
+             inset 0 2px 3px rgba(255,255,255,.55);
+  display:flex;align-items:center;justify-content:center;
+  transition:transform .08s, box-shadow .08s;
+}
+.plus span{margin-top:-3px;text-shadow:0 1px 1px rgba(120,20,10,.6);}
+.plus:active{transform:translateY(5px);box-shadow:0 2px 0 var(--poke-red-deep),0 4px 8px rgba(120,20,10,.4),inset 0 2px 3px rgba(255,255,255,.5);}
+
+/* ---------- main layout ---------- */
+.stage{position:absolute;inset:0;display:flex;z-index:10;}
+.list-col{position:relative;width:56%;height:100%;}
+.right-col{position:relative;width:44%;height:100%;padding:0 14px 0 2px;
+  display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:14px;
+  transform:translateY(-8%);}
+
+/* ---------- scrolling capsule list ---------- */
+.scroller{
+  position:absolute;inset:0;overflow-y:scroll;overflow-x:hidden;
+  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
+  scroll-padding:0 0 16% 0;
+  padding:0 6px 0 16px;scrollbar-width:none;
+}
+.scroller::-webkit-scrollbar{display:none;}
+.spacer.top{height:calc(42% - 26px);}
+.spacer.bot{height:calc(58% - 26px);}
+.cap{
+  scroll-snap-align:center;
+  position:relative;height:38px;margin:4px 0;border-radius:19px;
+  display:flex;align-items:center;gap:7px;padding:0 10px 0 6px;
+  background:linear-gradient(#fcf8ee,#ecdfbf);
+  box-shadow:0 2px 3px rgba(70,55,20,.22), inset 0 2px 2px rgba(255,255,255,.75), inset 0 -3px 4px rgba(150,120,60,.3);
+  color:var(--ink);
+  transition:transform .22s cubic-bezier(.3,1.3,.5,1), margin .22s, box-shadow .22s, opacity .22s, filter .22s;
+  transform-origin:left center;will-change:transform;
+}
+.cap .num{
+  font-family:'Jost',sans-serif;font-weight:700;font-size:11px;letter-spacing:.3px;
+  min-width:34px;height:26px;border-radius:13px;display:flex;align-items:center;justify-content:center;
+  color:#fff;background:linear-gradient(var(--lavender),#a99cd6);
+  box-shadow:inset 0 2px 2px rgba(255,255,255,.5), inset 0 -2px 3px rgba(90,70,140,.5),0 1px 1px rgba(0,0,0,.12);
+  text-shadow:0 1px 1px rgba(80,60,130,.5);
+}
+.cap .nm{font-weight:600;font-size:15px;letter-spacing:.2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  text-shadow:0 1px 0 rgba(255,255,255,.6);}
+/* alternate capsule tints for packed liveliness */
+.cap:nth-child(3n) .num{background:linear-gradient(var(--marigold),#e0ab3f);box-shadow:inset 0 2px 2px rgba(255,255,255,.55),inset 0 -2px 3px rgba(150,110,30,.5),0 1px 1px rgba(0,0,0,.12);}
+.cap:nth-child(3n+1) .num{background:linear-gradient(var(--orange),var(--orange-deep));box-shadow:inset 0 2px 2px rgba(255,255,255,.5),inset 0 -2px 3px rgba(170,90,40,.5),0 1px 1px rgba(0,0,0,.12);}
+
+/* selected capsule: floats with space around it (honored), under the glass */
+.cap.sel{
+  transform:scale(1.14);
+  margin:16px 0;
+  background:linear-gradient(#ffffff,#f6ecd2);
+  box-shadow:0 6px 14px rgba(70,55,20,.3), inset 0 2px 3px rgba(255,255,255,.9);
+  z-index:2;
+}
+.cap:not(.sel){opacity:.92;}
+
+/* ---------- glass lens over the selected slot ---------- */
+.glass{
+  position:absolute;left:8px;right:4px;top:42%;height:74px;transform:translateY(-50%);
+  z-index:20;pointer-events:none;border-radius:22px;
+  background:linear-gradient(180deg, rgba(255,255,255,.55) 0%, rgba(255,255,255,.12) 34%, rgba(255,255,255,.04) 60%, rgba(255,255,255,.22) 100%);
+  border:1px solid rgba(255,255,255,.65);
+  box-shadow:0 10px 22px rgba(30,70,64,.28), inset 0 1px 2px rgba(255,255,255,.9),
+             inset 0 -10px 18px rgba(255,255,255,.25), 0 1px 0 rgba(255,255,255,.4);
+}
+.glass::before{content:"";position:absolute;left:9px;right:30%;top:7px;height:20px;border-radius:14px;
+  background:linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.1) 80%, rgba(255,255,255,0));filter:blur(.2px);}
+.glass::after{content:"";position:absolute;left:0;right:0;top:0;bottom:0;border-radius:inherit;
+  box-shadow:inset 0 0 0 2px rgba(120,190,180,.25);}
+
+/* ---------- right: model screen ---------- */
+.screen{
+  position:relative;aspect-ratio:1/1.05;border-radius:20px;
+  background:
+     radial-gradient(120% 90% at 50% 18%, #eafff9 0%, #bfeee4 46%, #8fd3c6 100%);
+  box-shadow:0 8px 16px rgba(30,70,64,.3),
+             inset 0 3px 5px rgba(255,255,255,.85), inset 0 -8px 16px rgba(40,110,100,.4),
+             inset 0 0 0 3px rgba(255,255,255,.4);
+  overflow:hidden;cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:transform .08s;
+}
+.screen:active{transform:scale(.97);}
+/* screen vignette + scanlines for the era feel */
+.screen::before{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;
+  background:repeating-linear-gradient(0deg, rgba(20,80,72,.06) 0 2px, transparent 2px 4px);
+  mix-blend-mode:multiply;}
+.screen::after{content:"";position:absolute;inset:0;pointer-events:none;z-index:3;border-radius:inherit;
+  box-shadow:inset 0 0 26px rgba(30,90,80,.4);}
+.sprite{max-width:84%;max-height:84%;object-fit:contain;z-index:2;
+  filter:drop-shadow(0 6px 5px rgba(20,70,60,.3));transition:opacity .12s;}
+.sprite.px{image-rendering:pixelated;max-width:70%;max-height:70%;}
+.vtag{position:absolute;left:8px;bottom:7px;z-index:4;font-family:'Jost';font-weight:700;font-size:9px;
+  letter-spacing:.6px;text-transform:uppercase;color:#1f5c53;opacity:.8;
+  background:rgba(255,255,255,.5);padding:2px 7px;border-radius:9px;box-shadow:inset 0 1px 1px rgba(255,255,255,.8);}
+.taphint{position:absolute;right:8px;bottom:7px;z-index:4;font-size:12px;opacity:.5;}
+.nowcap{text-align:center;font-weight:600;color:var(--ink);font-size:13px;margin:-4px 2px 0;
+  text-shadow:0 1px 0 rgba(255,255,255,.6);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.nowcap b{font-family:'Jost';color:var(--teal-dark);}
+
+/* ---------- OPEN button ---------- */
+.open{
+  border:0;cursor:pointer;font-family:inherit;color:#fff;font-weight:700;font-size:21px;letter-spacing:3px;
+  height:52px;border-radius:17px;
+  background:radial-gradient(130% 90% at 40% 26%, #ff6b5e 0%, var(--poke-red) 52%, var(--poke-red-deep) 100%);
+  box-shadow:0 8px 0 var(--poke-red-deep), 0 12px 18px rgba(120,20,10,.4), inset 0 2px 3px rgba(255,255,255,.55);
+  text-shadow:0 2px 2px rgba(120,20,10,.55);
+  transition:transform .08s, box-shadow .08s;
+}
+.open:active{transform:translateY(6px);box-shadow:0 2px 0 var(--poke-red-deep),0 5px 10px rgba(120,20,10,.4),inset 0 2px 3px rgba(255,255,255,.5);}
+</style>
+</head>
+<body>
+<div class="phone" id="phone">
+
+  <!-- top-left scroll-driven gear -->
+  <div class="gear-wrap"><div class="gear" id="gear">
+    <div class="spokes"></div><div class="ring"></div><div class="hub"></div>
+  </div></div>
+
+  <!-- add-team button (visual only) -->
+  <button class="plus" id="plus" aria-label="Add team"><span>+</span></button>
+
+  <div class="stage">
+    <!-- LEFT: scrolling capsule list -->
+    <div class="list-col">
+      <div class="scroller" id="scroller">
+        <div class="spacer top"></div>
+        <div id="caps"></div>
+        <div class="spacer bot"></div>
+      </div>
+      <div class="glass"></div>
+    </div>
+
+    <!-- RIGHT: model screen + OPEN -->
+    <div class="right-col">
+      <div class="screen" id="screen">
+        <img class="sprite" id="sprite" alt="" draggable="false">
+        <div class="vtag" id="vtag">3D</div>
+        <div class="taphint">↻</div>
+      </div>
+      <div class="nowcap" id="nowcap"><b>#001</b> Bulbasaur</div>
+      <button class="open" id="open">OPEN</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const NAMES=["Bulbasaur","Ivysaur","Venusaur","Charmander","Charmeleon","Charizard","Squirtle","Wartortle","Blastoise","Caterpie","Metapod","Butterfree","Weedle","Kakuna","Beedrill","Pidgey","Pidgeotto","Pidgeot","Rattata","Raticate","Spearow","Fearow","Ekans","Arbok","Pikachu","Raichu","Sandshrew","Sandslash","Nidoran♀","Nidorina","Nidoqueen","Nidoran♂","Nidorino","Nidoking","Clefairy","Clefable","Vulpix","Ninetales","Jigglypuff","Wigglytuff","Zubat","Golbat","Oddish","Gloom","Vileplume","Paras","Parasect","Venonat","Venomoth","Diglett","Dugtrio","Meowth","Persian","Psyduck","Golduck","Mankey","Primeape","Growlithe","Arcanine","Poliwag","Poliwhirl","Poliwrath","Abra","Kadabra","Alakazam","Machop","Machoke","Machamp","Bellsprout","Weepinbell","Victreebel","Tentacool","Tentacruel","Geodude","Graveler","Golem","Ponyta","Rapidash","Slowpoke","Slowbro","Magnemite","Magneton","Farfetch'd","Doduo","Dodrio","Seel","Dewgong","Grimer","Muk","Shellder","Cloyster","Gastly","Haunter","Gengar","Onix","Drowzee","Hypno","Krabby","Kingler","Voltorb","Electrode","Exeggcute","Exeggutor","Cubone","Marowak","Hitmonlee","Hitmonchan","Lickitung","Koffing","Weezing","Rhyhorn","Rhydon","Chansey","Tangela","Kangaskhan","Horsea","Seadra","Goldeen","Seaking","Staryu","Starmie","Mr. Mime","Scyther","Jynx","Electabuzz","Magmar","Pinsir","Tauros","Magikarp","Gyarados","Lapras","Ditto","Eevee","Vaporeon","Jolteon","Flareon","Porygon","Omanyte","Omastar","Kabuto","Kabutops","Aerodactyl","Snorlax","Articuno","Zapdos","Moltres","Dratini","Dragonair","Dragonite","Mewtwo","Mew"];
+
+const S="https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/";
+// sprite variation cycle: label, url(id), pixelated?
+const VARS=[
+  {t:"3D",   u:id=>`${S}other/home/${id}.png`,            px:false},
+  {t:"ART",  u:id=>`${S}other/official-artwork/${id}.png`,px:false},
+  {t:"ANIM", u:id=>`${S}other/showdown/${id}.gif`,        px:false},
+  {t:"2D",   u:id=>`${S}${id}.png`,                        px:true},
+  {t:"SHINY",u:id=>`${S}other/home/shiny/${id}.png`,      px:false},
+  {t:"2D✦",  u:id=>`${S}shiny/${id}.png`,                 px:true},
+  {t:"BACK", u:id=>`${S}back/${id}.png`,                   px:true},
+];
+
+const caps=document.getElementById('caps');
+const pad=n=>String(n).padStart(3,'0');
+NAMES.forEach((nm,i)=>{
+  const d=document.createElement('div');
+  d.className='cap';d.dataset.i=i;
+  d.innerHTML=`<span class="num">#${pad(i+1)}</span><span class="nm">${nm}</span>`;
+  caps.appendChild(d);
+});
+
+const scroller=document.getElementById('scroller');
+const capEls=[...caps.children];
+const gear=document.getElementById('gear');
+const sprite=document.getElementById('sprite');
+const vtag=document.getElementById('vtag');
+const nowcap=document.getElementById('nowcap');
+
+let cur=-1, varIx=0;
+
+function loadSprite(){
+  const v=VARS[varIx];
+  sprite.className='sprite'+(v.px?' px':'');
+  sprite.src=v.u(cur+1);
+  vtag.textContent=v.t;
+}
+function select(i){
+  if(i===cur)return;
+  if(capEls[cur]) capEls[cur].classList.remove('sel');
+  cur=i;
+  capEls[cur].classList.add('sel');
+  varIx=0;
+  nowcap.innerHTML=`<b>#${pad(i+1)}</b> ${NAMES[i]}`;
+  loadSprite();
+}
+sprite.onerror=()=>{ sprite.style.opacity=.15; };
+sprite.onload=()=>{ sprite.style.opacity=1; };
+
+// scroll → nearest capsule to center = selected; also spin gear
+let ticking=false;
+function onScroll(){
+  if(ticking)return;ticking=true;
+  requestAnimationFrame(()=>{
+    const mid=scroller.scrollTop+scroller.clientHeight*0.42;
+    // each cap ~46px tall incl margins; find nearest by measuring
+    let best=0,bd=1e9;
+    for(let k=0;k<capEls.length;k++){
+      const el=capEls[k];
+      const c=el.offsetTop+el.offsetHeight/2;
+      const dd=Math.abs(c-mid);
+      if(dd<bd){bd=dd;best=k;}
+    }
+    select(best);
+    gear.style.transform=`rotate(${scroller.scrollTop*0.6}deg)`;
+    ticking=false;
+  });
+}
+scroller.addEventListener('scroll',onScroll,{passive:true});
+
+// tap model → cycle sprite variation
+document.getElementById('screen').addEventListener('click',()=>{
+  varIx=(varIx+1)%VARS.length;loadSprite();
+});
+
+// red buttons: animation only, no behavior yet
+document.getElementById('open').addEventListener('click',e=>e.preventDefault());
+document.getElementById('plus').addEventListener('click',e=>e.preventDefault());
+
+// init
+requestAnimationFrame(()=>{ onScroll(); select(0); });
+</script>
+</body>
+</html>
