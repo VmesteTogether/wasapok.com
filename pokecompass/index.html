@@ -55,7 +55,10 @@ body{
   isolation:isolate;
   user-select:none;
 }
-@media (max-width:420px){ .phone{border-radius:0;height:100dvh;} }
+@media (max-width:460px){
+  html,body{background:var(--bg);}
+  .phone{position:fixed;inset:0;width:auto;height:auto;border-radius:0;box-shadow:none;}
+}
 /* soft paper grain over everything */
 .phone::after{
   content:"";position:absolute;inset:0;pointer-events:none;z-index:40;
@@ -63,46 +66,44 @@ body{
   opacity:.045;border-radius:inherit;
 }
 
-/* ---------- top-left rotating gear ---------- */
+/* ---------- top-left spinning EMBOSSED ORANGE PLATE (Poké Ball etched in) ---------- */
+/* lighting lives on a FIXED overlay so only the etching spins, not the shadows */
 .gear-wrap{
-  position:absolute;left:-118px;top:-118px;width:300px;height:300px;z-index:15;
+  position:absolute;left:-177px;top:-177px;width:450px;height:450px;z-index:15;
   pointer-events:none;
+  filter:drop-shadow(0 14px 24px rgba(60,40,20,.28));
 }
-.gear{
-  position:absolute;inset:0;border-radius:50%;
+.gear{ /* the spinning plate — rotation-invariant fills so it reads as a turning tablet */
+  position:absolute;inset:0;border-radius:50%;overflow:hidden;
+  background:radial-gradient(circle at 50% 50%, #f6bc8d 0%, var(--orange) 56%, #e79a62 100%);
+}
+/* etched centre band (seam) — soft symmetric groove, no directional pop */
+.gear .pb-seam{position:absolute;left:0;right:0;top:calc(50% - 11px);height:22px;
+  background:rgba(150,80,30,.12);
+  border-top:2px solid rgba(120,60,20,.26);
+  border-bottom:2px solid rgba(120,60,20,.26);
+  box-shadow:inset 0 0 9px rgba(120,60,20,.16);}
+/* etched centre button + ring — soft symmetric, carved look */
+.gear .pb-btn{position:absolute;left:50%;top:50%;width:104px;height:104px;transform:translate(-50%,-50%);
+  border-radius:50%;z-index:2;
+  background:radial-gradient(circle at 50% 50%, #f6bc8d 0%, var(--orange) 56%, #e79a62 100%);
+  border:2px solid rgba(120,60,20,.26);
+  box-shadow:inset 0 0 11px rgba(120,60,20,.15);}
+.gear .pb-btn::after{content:"";position:absolute;inset:22px;border-radius:50%;
+  background:radial-gradient(circle, rgba(255,232,205,.16), rgba(150,80,30,.06));
+  border:2px solid rgba(120,60,20,.24);
+  box-shadow:inset 0 0 6px rgba(120,60,20,.13);}
+/* FIXED dome lighting (does NOT rotate) — soft, non-baked */
+.gear-wrap .plate-light{
+  position:absolute;inset:0;border-radius:50%;pointer-events:none;z-index:3;
   background:
-    radial-gradient(circle at 38% 34%, #ffd4ac 0%, var(--orange) 46%, var(--orange-deep) 100%);
-  box-shadow:
-    0 10px 24px rgba(60,40,20,.33),
-    inset 0 6px 10px rgba(255,255,255,.55),
-    inset 0 -14px 22px rgba(150,80,30,.38);
-}
-/* embossed radial spokes */
-.gear .spokes{position:absolute;inset:16px;border-radius:50%;
-  background:repeating-conic-gradient(from 0deg,
-     rgba(255,255,255,.22) 0deg 5deg,
-     rgba(150,80,30,.18) 5deg 10deg);
-  -webkit-mask:radial-gradient(circle, transparent 30%, #000 31% 92%, transparent 93%);
-          mask:radial-gradient(circle, transparent 30%, #000 31% 92%, transparent 93%);
-  opacity:.5;
-}
-.gear .ring{position:absolute;inset:10px;border-radius:50%;
-  box-shadow:inset 0 0 0 4px rgba(255,255,255,.18), inset 0 0 0 7px rgba(140,74,28,.22);}
-/* embossed pokeball hub (complementary teal, not poke-colored) */
-.hub{position:absolute;left:50%;top:50%;width:92px;height:92px;transform:translate(-50%,-50%);
-  border-radius:50%;
-  background:radial-gradient(circle at 40% 36%, #bfe9e0 0%, var(--teal-deep) 55%, var(--teal-dark) 100%);
-  box-shadow:0 4px 8px rgba(30,60,55,.4), inset 0 3px 5px rgba(255,255,255,.5), inset 0 -6px 10px rgba(20,60,55,.5);
-  overflow:hidden;}
-.hub::before{content:"";position:absolute;left:0;right:0;top:calc(50% - 3px);height:6px;
-  background:linear-gradient(var(--teal-dark),#20534b);box-shadow:0 1px 1px rgba(255,255,255,.25);}
-.hub::after{content:"";position:absolute;left:50%;top:50%;width:26px;height:26px;transform:translate(-50%,-50%);
-  border-radius:50%;background:radial-gradient(circle at 40% 36%,#eafaf6,#9fd6cc 60%,var(--teal-dark));
-  box-shadow:0 0 0 5px rgba(20,60,55,.55), inset 0 2px 3px rgba(255,255,255,.7), inset 0 -3px 4px rgba(20,60,55,.5);}
+    radial-gradient(circle at 34% 28%, rgba(255,246,232,.5) 0%, rgba(255,246,232,0) 44%),
+    radial-gradient(circle at 72% 76%, rgba(120,60,20,.3) 0%, rgba(120,60,20,0) 56%);
+  box-shadow:inset 0 3px 6px rgba(255,246,232,.35), inset 0 -6px 14px rgba(120,60,20,.22);}
 
 /* ---------- top bar ---------- */
 .plus{
-  position:absolute;top:18px;right:16px;z-index:30;
+  position:absolute;top:calc(18px + env(safe-area-inset-top));right:calc(16px + env(safe-area-inset-right));z-index:30;
   width:46px;height:46px;border:0;border-radius:15px;cursor:pointer;
   font-family:inherit;color:#fff;font-size:30px;font-weight:600;line-height:1;
   background:radial-gradient(circle at 36% 30%, #ff6b5e 0%, var(--poke-red) 55%, var(--poke-red-deep) 100%);
@@ -126,7 +127,7 @@ body{
   position:absolute;inset:0;overflow-y:scroll;overflow-x:hidden;
   scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
   scroll-padding:0 0 16% 0;
-  padding:0 6px 0 16px;scrollbar-width:none;
+  padding:0 6px env(safe-area-inset-bottom) 16px;scrollbar-width:none;
 }
 .scroller::-webkit-scrollbar{display:none;}
 .spacer.top{height:calc(42% - 26px);}
@@ -223,9 +224,10 @@ body{
 <div class="phone" id="phone">
 
   <!-- top-left scroll-driven gear -->
-  <div class="gear-wrap"><div class="gear" id="gear">
-    <div class="spokes"></div><div class="ring"></div><div class="hub"></div>
-  </div></div>
+  <div class="gear-wrap">
+    <div class="gear" id="gear"><div class="pb-seam"></div><div class="pb-btn"></div></div>
+    <div class="plate-light"></div>
+  </div>
 
   <!-- add-team button (visual only) -->
   <button class="plus" id="plus" aria-label="Add team"><span>+</span></button>
