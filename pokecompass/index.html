@@ -123,27 +123,28 @@ body{
 .list-col{position:relative;width:56%;height:100%;}
 .right-col{position:relative;width:44%;height:100%;padding:0 14px 0 2px;
   display:flex;flex-direction:column;align-items:stretch;justify-content:center;gap:14px;
-  transform:translateY(5%);}
+  transform:translateY(10.6%);}
 
 /* ---------- scrolling capsule list ---------- */
 .scroller{
   position:absolute;inset:0;overflow-y:scroll;overflow-x:hidden;
-  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;
+  scroll-snap-type:y mandatory;-webkit-overflow-scrolling:touch;overscroll-behavior-y:contain;
   scroll-padding:10% 0 0 0;
   padding:0 6px env(safe-area-inset-bottom) 16px;scrollbar-width:none;
 }
 .scroller::-webkit-scrollbar{display:none;}
-.spacer.top{height:calc(55% - 26px);}
-.spacer.bot{height:calc(45% - 26px);}
+.spacer.top{height:calc(55% - 19px);}
+.spacer.bot{height:calc(45% - 19px);}
+#caps{display:flex;flex-direction:column;gap:54px;}
 .cap{
   scroll-snap-align:center;
-  position:relative;height:38px;margin:4px 0;border-radius:19px;
+  position:relative;height:38px;margin:0;border-radius:19px;
   display:flex;align-items:center;gap:7px;padding:0 10px 0 6px;
   background:linear-gradient(#fcf8ee,#ecdfbf);
   box-shadow:0 2px 3px rgba(70,55,20,.22), inset 0 2px 2px rgba(255,255,255,.75), inset 0 -3px 4px rgba(150,120,60,.3);
   color:var(--ink);
-  transition:transform .22s cubic-bezier(.3,1.3,.5,1), margin .22s, box-shadow .22s, opacity .22s, filter .22s;
-  transform-origin:left center;will-change:transform;
+  transition:background .16s ease, box-shadow .16s ease;
+  transform-origin:center center;
 }
 .cap .num{
   font-family:'Jost',sans-serif;font-weight:700;font-size:11px;letter-spacing:.3px;
@@ -158,13 +159,10 @@ body{
 
 /* selected capsule: floats with space around it (honored), under the glass */
 .cap.sel{
-  transform:scale(1.05);
-  margin:56px 0;
   background:linear-gradient(#ffffff,#f6ecd2);
   box-shadow:0 6px 14px rgba(70,55,20,.3), inset 0 2px 3px rgba(255,255,255,.9);
   z-index:2;
 }
-.cap:not(.sel){opacity:.92;}
 
 /* ---------- glass lens over the selected slot ---------- */
 .glass{
@@ -308,7 +306,15 @@ const sprite=document.getElementById('sprite');
 const vtag=document.getElementById('vtag');
 const nowcap=document.getElementById('nowcap');
 
-let cur=-1, varIx=0;
+// ---- bulletproof iOS-style snap list -------------------------------------
+// Rows are evenly spaced with a fixed layout and native mandatory scroll-snap,
+// so it always settles exactly one capsule on the centre line and can never
+// rest between two. NO transforms on the rows during scroll => nothing moves
+// or ghosts; only the centred row gets a (non-moving) highlight.
+let centers=[];
+function measure(){ centers=capEls.map(el=>el.offsetTop+el.offsetHeight/2); }
+
+let cur=-1, varIx=0, raf=0, settle=0;
 
 function loadSprite(){
   const v=VARS[varIx];
@@ -317,37 +323,34 @@ function loadSprite(){
   vtag.textContent=v.t;
 }
 function select(i){
-  if(i===cur)return;
+  if(i===cur||i<0)return;
   if(capEls[cur]) capEls[cur].classList.remove('sel');
   cur=i;
   capEls[cur].classList.add('sel');
   varIx=0;
   nowcap.innerHTML=`<b>#${pad(i+1)}</b> ${NAMES[i]}`;
-  loadSprite();
 }
 sprite.onerror=()=>{ sprite.style.opacity=.15; };
 sprite.onload=()=>{ sprite.style.opacity=1; };
 
-// scroll → nearest capsule to center = selected; also spin gear
-let ticking=false;
+function frame(){
+  raf=0;
+  const line=scroller.scrollTop+scroller.clientHeight*0.55;   // centre / glass line
+  let best=0, bd=Infinity;
+  for(let k=0;k<centers.length;k++){
+    const d=centers[k]-line, ad=d<0?-d:d;
+    if(ad<bd){bd=ad;best=k;}
+    else if(d>0) break;                         // centres ascending: once past the line, stop
+  }
+  if(best!==cur) select(best);
+  gear.style.transform=`rotate(${(scroller.scrollTop*0.6).toFixed(1)}deg)`;
+}
 function onScroll(){
-  if(ticking)return;ticking=true;
-  requestAnimationFrame(()=>{
-    const mid=scroller.scrollTop+scroller.clientHeight*0.55;
-    // each cap ~46px tall incl margins; find nearest by measuring
-    let best=0,bd=1e9;
-    for(let k=0;k<capEls.length;k++){
-      const el=capEls[k];
-      const c=el.offsetTop+el.offsetHeight/2;
-      const dd=Math.abs(c-mid);
-      if(dd<bd){bd=dd;best=k;}
-    }
-    select(best);
-    gear.style.transform=`rotate(${scroller.scrollTop*0.6}deg)`;
-    ticking=false;
-  });
+  if(!raf) raf=requestAnimationFrame(frame);
+  clearTimeout(settle); settle=setTimeout(loadSprite,120);  // fetch the model only once scrolling settles
 }
 scroller.addEventListener('scroll',onScroll,{passive:true});
+addEventListener('resize',()=>{ measure(); frame(); });
 
 // tap model → cycle sprite variation
 document.getElementById('screen').addEventListener('click',()=>{
@@ -359,7 +362,9 @@ document.getElementById('open').addEventListener('click',e=>e.preventDefault());
 document.getElementById('plus').addEventListener('click',e=>e.preventDefault());
 
 // init
-requestAnimationFrame(()=>{ onScroll(); select(0); });
+function init(){ measure(); select(0); frame(); loadSprite(); }
+requestAnimationFrame(init);
+if(document.fonts&&document.fonts.ready) document.fonts.ready.then(()=>{ measure(); frame(); });
 </script>
 </body>
 </html>
