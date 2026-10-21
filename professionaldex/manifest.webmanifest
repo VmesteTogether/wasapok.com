@@ -1,0 +1,16 @@
+{
+  "name": "professionaldex",
+  "short_name": "prodex",
+  "description": "A Kindle-paper national Pokédex: typing, matchups, every learnable move and game location, and a versus mode.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#e9e5db",
+  "theme_color": "#e9e5db",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
