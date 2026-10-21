@@ -1,7 +1,7 @@
 /* professionaldex service worker — installs the paper shell, then keeps PokéAPI +
    sprite responses in a runtime cache so places you've visited open offline. */
-const SHELL = 'professionaldex-shell-v1';
-const RUNTIME = 'professionaldex-rt-v1';
+const SHELL = 'professionaldex-shell-v2';
+const RUNTIME = 'professionaldex-rt-v2';
 const ASSETS = ['./', 'index.html', 'app.js', 'manifest.webmanifest',
   'data/dex.json', 'data/typechart.js', 'data/natures.js',
   'icons/icon-192.png', 'icons/apple-touch-icon.png'];
