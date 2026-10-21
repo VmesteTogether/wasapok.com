@@ -15,6 +15,8 @@
   let DEX = [], byId = new Map();
   const versus = { a: null, b: null };
   let lastMoveMap = null;           // moveName -> [version groups] for current pokemon (for move pages)
+  let gameSet = null, gameLabel = '';  // "filter by game" — Set of species/dex ids, or null = all
+  const gameCache = new Map();
 
   /* ---------- names ---------- */
   const NAME_FIX = {
@@ -52,16 +54,52 @@
     q = (q || '').trim().toLowerCase();
     const digits = q.replace(/[^0-9]/g, '');
     const rows = DEX.filter(p => {
+      if (gameSet && !gameSet.has(p.id)) return false;
       if (!q) return true;
       if (digits && String(p.id).padStart(4, '0').includes(digits)) return true;
       if (pretty(p.name).toLowerCase().includes(q)) return true;
       return p.types.some(t => t.startsWith(q));
     });
-    listEl.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<div class="loading">nothing in these pages</div>';
+    listEl.innerHTML = rows.length ? rows.map(rowHtml).join('') : '<div class="loading">no pokémon match</div>';
+    barSub.textContent = gameSet ? `${gameLabel} · ${rows.length}` : 'national pokédex';
   }
   listEl.addEventListener('click', e => {
     const r = e.target.closest('.row'); if (r) go('#/p/' + r.dataset.id);
   });
+
+  // ---- filter by game (version group → its regional Pokédex species) ----
+  const GAMES = [
+    ['red-blue', 'Red · Blue'], ['yellow', 'Yellow'], ['gold-silver', 'Gold · Silver'], ['crystal', 'Crystal'],
+    ['ruby-sapphire', 'Ruby · Sapphire'], ['emerald', 'Emerald'], ['firered-leafgreen', 'FireRed · LeafGreen'],
+    ['diamond-pearl', 'Diamond · Pearl'], ['platinum', 'Platinum'], ['heartgold-soulsilver', 'HeartGold · SoulSilver'],
+    ['black-white', 'Black · White'], ['black-2-white-2', 'Black 2 · White 2'], ['x-y', 'X · Y'],
+    ['omega-ruby-alpha-sapphire', 'Omega Ruby · Alpha Sapphire'], ['sun-moon', 'Sun · Moon'],
+    ['ultra-sun-ultra-moon', 'Ultra Sun · Ultra Moon'], ['lets-go-pikachu-lets-go-eevee', "Let's Go Pikachu · Eevee"],
+    ['sword-shield', 'Sword · Shield'], ['brilliant-diamond-and-shining-pearl', 'Brilliant Diamond · Shining Pearl'],
+    ['legends-arceus', 'Legends: Arceus'], ['scarlet-violet', 'Scarlet · Violet'],
+  ];
+  // version groups PokéAPI has no regional dex for → point at the right dex by hand
+  const DEX_OVERRIDE = { 'brilliant-diamond-and-shining-pearl': ['original-sinnoh'] };
+
+  async function gameMembers(vg) {
+    if (gameCache.has(vg)) return gameCache.get(vg);
+    let urls = [];
+    try { const d = await j(`${API}/version-group/${vg}`); urls = (d.pokedexes || []).map(p => p.url); } catch {}
+    if (!urls.length && DEX_OVERRIDE[vg]) urls = DEX_OVERRIDE[vg].map(n => `${API}/pokedex/${n}`);
+    const set = new Set();
+    await Promise.all(urls.map(u => j(u).then(pd => {
+      for (const e of pd.pokemon_entries) { const m = e.pokemon_species.url.match(/\/(\d+)\/$/); if (m) set.add(+m[1]); }
+    }).catch(() => {})));
+    gameCache.set(vg, set); return set;
+  }
+  async function onGameChange() {
+    const vg = document.getElementById('gameFilter').value;
+    if (!vg) { gameSet = null; gameLabel = ''; renderList(document.getElementById('search').value); return; }
+    gameLabel = (GAMES.find(g => g[0] === vg) || [])[1] || '';
+    listEl.innerHTML = `<div class="loading">gathering the ${gameLabel} dex…</div>`;
+    try { gameSet = await gameMembers(vg); if (!gameSet.size) gameSet = null; } catch { gameSet = null; }
+    renderList(document.getElementById('search').value);
+  }
 
   /* ======================================================================
      MATCHUPS (instant, from local types)
@@ -301,7 +339,7 @@
     for (const [v, el] of [['list', $('#listView')], ['detail', detailEl], ['versus', versusEl]]) el.classList.toggle('hidden', v !== name);
     backBtn.style.display = name === 'list' ? 'none' : 'inline';
     toolRow.style.display = name === 'list' ? 'flex' : 'none';
-    if (name === 'list') barSub.textContent = 'national pokédex';
+    if (name === 'list') barSub.textContent = gameSet ? `${gameLabel} · ${DEX.filter(p => gameSet.has(p.id)).length}` : 'national pokédex';
     window.scrollTo(0, name === 'list' ? scrollMemory : 0);
   }
   let scrollMemory = 0;
@@ -336,12 +374,20 @@
     document.querySelectorAll('.dtabs .pill').forEach(x => x.classList.toggle('on', x === b));
     renderChart(b.dataset.chart);
   });
+  // full, vivid colours for the reference charts (distinct from the app's muted ink stamps)
+  const TYPE_COLORS = { normal:'#A8A77A', fire:'#EE8130', water:'#6390F0', electric:'#F7D02C', grass:'#7AC74C',
+    ice:'#96D9D6', fighting:'#C22E28', poison:'#A33EA1', ground:'#E2BF65', flying:'#A98FF3', psychic:'#F95587',
+    bug:'#A6B91A', rock:'#B6A136', ghost:'#735797', dragon:'#6F35FC', dark:'#705746', steel:'#B7B7CE', fairy:'#D685AD' };
+  const LIGHT_TYPES = new Set(['normal','electric','grass','ice','ground','bug','rock','steel','fairy']);
+  const tfg = t => LIGHT_TYPES.has(t) ? '#23201a' : '#fff';
+  const STAT_COLORS = { atk:'#F0683C', def:'#F6C244', spa:'#5B8DEF', spd:'#6FC06A', spe:'#F06CA6' };
+  const sfg = s => s === 'def' ? '#23201a' : '#fff';
+
   function renderChart(which) {
     const body = $('#chartBody');
     if (which === 'nature') { body.innerHTML = natureChartHtml(); return; }
-    // type grid
-    const head = `<tr><th></th>${TYPES.map(t => `<th class="colh"><span>${t}</span></th>`).join('')}</tr>`;
-    const rows = TYPES.map(atk => `<tr><th class="rowh">${atk} ↦</th>${TYPES.map(def => {
+    const head = `<tr><th class="corner"></th>${TYPES.map(t => `<th class="colh" style="background:${TYPE_COLORS[t]}"><span style="color:${tfg(t)}">${t}</span></th>`).join('')}</tr>`;
+    const rows = TYPES.map(atk => `<tr><th class="rowh" style="background:${TYPE_COLORS[atk]};color:${tfg(atk)}">${atk} ↦</th>${TYPES.map(def => {
       const m = TC.pair(atk, def);
       const cls = m === 0 ? 'm0' : m === 2 ? 'm2' : m === 0.5 ? 'm05' : 'm1';
       const label = m === 0 ? '0' : m === 2 ? '2' : m === 0.5 ? '½' : '';
@@ -349,21 +395,20 @@
     }).join('')}</tr>`).join('');
     body.innerHTML = `<p class="muted mono" style="font-size:10px;margin:0 0 8px">rows attack · columns defend</p>
       <div style="overflow:auto"><table class="tg">${head}${rows}</table></div>
-      <div class="tgKey"><span><i style="background:#8f8a5a"></i>×2</span><span><i style="background:#cfcabb"></i>×½</span><span><i style="background:#3a362e"></i>×0</span><span><i style="background:transparent;border:1px solid var(--line)"></i>×1</span></div>`;
+      <div class="tgKey"><span><i style="background:#46a35a"></i>×2</span><span><i style="background:#d35f4e"></i>×½</span><span><i style="background:#2b2824"></i>×0</span><span><i style="background:#faf7ef;border:1px solid var(--line)"></i>×1</span></div>`;
   }
   function natureChartHtml() {
-    const order = NATURE_ORDER; // atk,def,spa,spd,spe
-    const L = NATURE_STATS;
+    const order = NATURE_ORDER, L = NATURE_STATS;
     const dirLookup = {}; NATURES.forEach(n => { if (n.up && n.down) dirLookup[n.up + '>' + n.down] = n.name; });
     const neutralByStat = { atk: 'Hardy', def: 'Docile', spa: 'Bashful', spd: 'Quirky', spe: 'Serious' };
     let rows = '';
     for (const up of order) {
-      rows += `<tr><th>+${L[up]}</th>` + order.map(down => {
+      rows += `<tr><th style="background:${STAT_COLORS[up]};color:${sfg(up)}">+${L[up]}</th>` + order.map(down => {
         if (up === down) return `<td class="neu">${neutralByStat[up]}</td>`;
-        return `<td>${dirLookup[up + '>' + down] || '—'}</td>`;
+        return `<td style="background:${STAT_COLORS[up]}26;color:#2d2a24">${dirLookup[up + '>' + down] || '—'}</td>`;
       }).join('') + '</tr>';
     }
-    const head = `<tr><th>＋ \\ −</th>${order.map(d => `<th>−${L[d]}</th>`).join('')}</tr>`;
+    const head = `<tr><th class="corner">＋ \\ −</th>${order.map(d => `<th style="background:${STAT_COLORS[d]};color:${sfg(d)}">−${L[d]}</th>`).join('')}</tr>`;
     return `<table class="ng"><caption>rows raise a stat · columns lower one · diagonal is neutral</caption>${head}${rows}</table>`;
   }
 
@@ -373,6 +418,11 @@
   fetch('data/dex.json').then(r => r.json()).then(d => {
     DEX = d; byId = new Map(d.map(p => [p.id, p]));
     renderList('');
+    const gf = document.getElementById('gameFilter');
+    gf.innerHTML = '<option value="">All games</option>' + GAMES.map(([v, l]) => `<option value="${v}">${l}</option>`).join('');
+    gf.addEventListener('change', onGameChange);
+    const qg = new URLSearchParams(location.search).get('game');
+    if (qg && GAMES.some(g => g[0] === qg)) { gf.value = qg; onGameChange(); }
     renderChart('type');
     route();
   }).catch(err => { listEl.innerHTML = '<div class="loading">could not load the dex index.<br>' + err + '</div>'; });
